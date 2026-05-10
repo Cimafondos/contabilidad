@@ -413,20 +413,31 @@ function showAssistant(){
 function handleAssistFile(file){
   if(!file)return;
   var info=$('aFileInfo');
-  info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="font-size:18px">📎</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB — Documento cargado</div></div></div>';
-  // Try to extract info from filename
+  var isImg=file.type.startsWith('image/');
+  // Show file info + image preview if applicable
+  if(isImg){
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">📎</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB</div></div></div><img src="'+ev.target.result+'" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid var(--bd);display:block;margin:0 auto"></div>';
+    };
+    reader.readAsDataURL(file);
+  }else{
+    info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="font-size:24px">📄</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB — PDF cargado</div></div></div>';
+  }
+  // Try to extract amount from filename (e.g. "factura_1200.50.jpg")
   var name=file.name.toUpperCase();
   var numMatch=name.match(/(\d+[.,]\d{2})/);
   if(numMatch){var amt=parseFloat(numMatch[1].replace(',','.'));if(amt>0){$('aAmt').value=amt;}}
-  // Extract possible concept from filename
-  var concept=file.name.replace(/\.[^.]+$/,'').replace(/[_-]/g,' ');
-  if(!$('aDesc').value)$('aDesc').value=concept;
-  toast('Documento cargado. OCR completo estará disponible próximamente','ok');
+  // Extract concept from filename cleaned up
+  var concept=file.name.replace(/\.[^.]+$/,'').replace(/[_\-]/g,' ').replace(/\d{8,}/g,'').replace(/\s+/g,' ').trim();
+  if(!$('aDesc').value&&concept)$('aDesc').value=concept;
+  toast('Documento cargado. Rellena el importe y pulsa Proponer.','ok');
 }
 
 function proposeEntry(){
   var desc=$('aDesc').value;var amt=parseFloat($('aAmt').value)||0;var ivaType=$('aIva').value;var date=$('aDate').value;var paidBy=$('aPaidBy').value;
   if(!desc&&!amt){toast('Escribe descripción o importe','error');return;}
+  if(!amt||amt<=0){toast('Introduce el importe de la factura/ticket','error');return;}
   var st=desc.toUpperCase();var acct='62900000',rn='Otros servicios',riv=null;
   for(var i=0;i<state.rules.length;i++){var r=state.rules[i];try{if(new RegExp(r.p,'i').test(st)){acct=r.a;rn=r.d;riv=r.iv;break;}}catch(e){}}
   var dp=paidBy;
