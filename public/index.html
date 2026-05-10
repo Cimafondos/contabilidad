@@ -12,7 +12,7 @@
 :root{--pri:#00854D;--priLt:#E8F5EE;--bg:#F0F2F5;--wh:#FFF;--bd:#DEE2E8;--tx:#1A1D21;--txS:#5F6672;--txM:#8C939E;--rd:#DC3545;--ok:#28A745;--bl:#0066CC;--am:#D4920A;--vi:#6F42C1;--or:#FF9800;--tabBg:#2E7D52;--sh:0 1px 3px rgba(0,0,0,0.07)}
 body{font-family:'Segoe UI','Open Sans',-apple-system,sans-serif;background:var(--bg);color:var(--tx);font-size:13px;line-height:1.5}
 .topbar{background:var(--tabBg);color:#fff;padding:6px 16px;display:flex;justify-content:space-between;align-items:center;font-size:12px}
-.topbar .logo{width:24px;height:24px;border-radius:5px;backgroundh:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
+.topbar .logo{width:24px;height:24px;border-radius:5px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
 .tabs{background:var(--tabBg);display:flex;padding-left:8px}
 .tab{padding:7px 16px;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.75);border-radius:6px 6px 0 0;border-bottom:2px solid transparent}
 .tab.active{font-weight:600;color:#fff;background:rgba(255,255,255,0.15);border-bottom-color:#fff}
@@ -431,42 +431,17 @@ function handleAssistFile(file){
   var reader=new FileReader();
   reader.onload=function(ev){
     var dataUrl=ev.target.result;
-    // Show preview
     if(isImg){
-      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">📎</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB</div></div></div><img src="'+dataUrl+'" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid var(--bd);display:block;margin:0 auto"><div id="ocrStatus" style="margin-top:8px;text-align:center;font-size:11px;color:var(--pri);font-weight:600">🔍 Leyendo factura con IA...</div></div>';
+      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">📎</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB</div></div></div><img src="'+dataUrl+'" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid var(--bd);display:block;margin:0 auto"><div style="margin-top:8px;text-align:center;font-size:10px;color:var(--ok);font-weight:600">✓ Imagen cargada — describe el gasto abajo</div></div>';
     }else{
-      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px 12px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:24px">📄</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB</div></div></div><div id="ocrStatus" style="margin-top:8px;font-size:11px;color:var(--pri);font-weight:600">🔍 Leyendo documento con IA...</div></div>';
+      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px 12px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:24px">📄</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB — Documento cargado</div></div></div></div>';
     }
-    // OCR with Claude Vision API
-    var base64=dataUrl.split(',')[1];
-    var mediaType=file.type||'image/jpeg';
-fetch('/api/ocr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageBase64:base64,mediaType:mediaType})}).then(function(r){return r.json();}).then(function(data){
-            var txt=data.result||'';
-            var clean=txt.replace(/```json```/g,'').trim();    
-  try{
-        var ocr=JSON.parse(clean);
-        var ocrEl=$('ocrStatus');
-        if(ocrEl){
-          var parts=[];
-          if(ocr.proveedor)parts.push('<strong>Proveedor:</strong> '+h(ocr.proveedor));
-          if(ocr.cif)parts.push('<strong>CIF:</strong> '+ocr.cif);
-          if(ocr.base)parts.push('<strong>Base:</strong> '+fmt(ocr.base)+'€');
-          if(ocr.iva_cuota)parts.push('<strong>IVA:</strong> '+fmt(ocr.iva_cuota)+'€');
-          if(ocr.total)parts.push('<strong>Total:</strong> '+fmt(ocr.total)+'€');
-          ocrEl.innerHTML='<div style="background:#E8F8ED;border-radius:4px;padding:6px 8px;text-align:left;font-size:10px"><div style="font-weight:700;color:var(--ok);margin-bottom:3px">✓ Datos extraídos:</div>'+parts.join(' · ')+'</div>';
-        }
-        if(ocr.concepto&&!$('aDesc').value)$('aDesc').value=(ocr.proveedor||'')+' — '+(ocr.concepto||'');
-        if(ocr.total&&!$('aAmt').value)$('aAmt').value=ocr.total;
-        if(ocr.fecha)$('aDate').value=ocr.fecha;
-        if(ocr.iva_pct===10)$('aIva').value='reducido';
-        else if(ocr.iva_pct===4)$('aIva').value='super';
-        else if(ocr.iva_pct===0)$('aIva').value='exento';
-      }catch(e){
-        var ocrEl=$('ocrStatus');if(ocrEl)ocrEl.innerHTML='<span style="color:var(--am)">⚠ No se pudieron extraer datos automáticamente</span>';
-      }
-    }).catch(function(e){
-      var ocrEl=$('ocrStatus');if(ocrEl)ocrEl.innerHTML='<span style="color:var(--am)">⚠ OCR no disponible — rellena manualmente</span>';
-    });
+    // Try extract amount from filename
+    var numMatch=file.name.toUpperCase().match(/(\d+[.,]\d{2})/);
+    if(numMatch){var amt=parseFloat(numMatch[1].replace(',','.'));if(amt>0&&!$('aAmt').value)$('aAmt').value=amt;}
+    // Extract concept from filename
+    var concept=file.name.replace(/\.[^.]+$/,'').replace(/[_\-]/g,' ').replace(/\d{8,}/g,'').replace(/\s+/g,' ').trim();
+    if(!$('aDesc').value&&concept)$('aDesc').value=concept;
   };
   reader.readAsDataURL(file);
 }
