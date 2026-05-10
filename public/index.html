@@ -195,7 +195,7 @@ function render(){
   var tab=TABS.find(function(t){return t.id===state.tab;})||TABS[0];
   var intBadge=state.integrity?(state.integrity.ok?'<span class="integrity-ok">✓ OK</span>':'<span class="integrity-err">✗ '+state.integrity.errors.length+' errores</span>'):'';
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
-  '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div><span style="font-weight:600">'+h(state.company.name)+'</span><span style="opacity:0.7">— v6.3</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="display:flex;align-items:center;gap:10px"><button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div><span style="font-weight:600">'+h(state.company.name)+'</span><span style="opacity:0.7">— v6.3</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;opacity:0.8;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.15);color:'+(bi.ok?'#a5d6a7':'#FFD54F')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){return '<div class="rgroup"><div class="rgroup-btns">'+g.items.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
@@ -226,10 +226,17 @@ function renderLogin(){
 }
 async function doLogin(){
   var u=$('lu').value,p=$('lp').value;
-  try{var r=await api('/api/login',{method:'POST',body:{username:u,password:p}});state.user=r.user;state.company=r.company;await loadData();checkIntegrity();render();
+  try{var r=await api('/api/login',{method:'POST',body:{username:u,password:p}});state.user=r.user;state.company=r.company;await loadData();checkIntegrity();
+    // Auto-backup silencioso al entrar
+    autoBackup();
+    render();
   }catch(e){$('lerr').textContent='Usuario o contraseña incorrectos';}
 }
-function logout(){state.user=null;state.company=null;render();}
+function logout(){
+  // Auto-backup al salir
+  autoBackup();
+  state.user=null;state.company=null;render();
+}
 
 async function loadData(){
   var cid=state.company.id;
@@ -1063,6 +1070,27 @@ function renderSalesMap(c){
 }
 
 // ═══ BACKUP ═══
+// Auto-backup silencioso (guarda en localStorage sin descargar fichero)
+function autoBackup(){
+  try{
+    if(!state.company||!state.entries)return;
+    var data={accounts:state.accounts,entries:state.entries,rules:state.rules,masters:masters,date:new Date().toISOString(),company:state.company,user:state.user?state.user.name:'?'};
+    var key='backup_auto_'+state.company.id;
+    localStorage.setItem(key,JSON.stringify(data));
+    localStorage.setItem(key+'_date',new Date().toISOString());
+    state.lastBackup=new Date().toISOString();
+  }catch(e){}
+}
+function getLastBackupInfo(){
+  if(!state.company)return null;
+  var d=localStorage.getItem('backup_auto_'+state.company.id+'_date');
+  if(!d)return null;
+  var dt=new Date(d);var now=new Date();var diff=Math.floor((now-dt)/(1000*60*60));
+  if(diff<1)return {text:'hace unos minutos',ok:true};
+  if(diff<24)return {text:'hace '+diff+'h',ok:true};
+  var days=Math.floor(diff/24);
+  return {text:'hace '+days+' días',ok:days<2};
+}
 async function doBackup(){
   try{
     var data={accounts:state.accounts,entries:state.entries,rules:state.rules,masters:masters,date:new Date().toISOString(),company:state.company};
@@ -1070,6 +1098,7 @@ async function doBackup(){
     var url=URL.createObjectURL(blob);
     var a=document.createElement('a');a.href=url;a.download='backup_cimafondos_'+state.ejercicio+'_'+today()+'.json';
     document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+    autoBackup();
     toast('Backup descargado');
   }catch(e){toast('Error: '+e.message,'error');}
 }
