@@ -157,10 +157,10 @@ function checkIntegrity(){
 
 // TABS & RIBBON
 var TABS=[
-{id:'inicio',label:'Inicio',groups:[{label:'General',items:[{id:'dash',icon:'📊',label:'Dashboard'},{id:'import',icon:'📂',label:'Importar'}]},{label:'Asientos',items:[{id:'newEntry',icon:'➕',label:'Nuevo gasto'},{id:'manualEntry',icon:'✏️',label:'Manual'},{id:'plantillas',icon:'📄',label:'Plantillas'}]}]},
-{id:'diario',label:'Diario',groups:[{label:'Consultas',items:[{id:'journal',icon:'📒',label:'Diario'},{id:'ledger',icon:'📖',label:'Mayor'},{id:'trial',icon:'⚖️',label:'Saldos'}]},{label:'Resultados',items:[{id:'pnl',icon:'📈',label:'PyG'},{id:'balance',icon:'🏛️',label:'Balance'},{id:'libroiva',icon:'📋',label:'Libro IVA'}]}]},
-{id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]},{label:'Posición',items:[{id:'posicion',icon:'🏦',label:'Posición'},{id:'prevision',icon:'📊',label:'Previsión'}]}]},
-{id:'maestros',label:'Maestros',groups:[{label:'Terceros',items:[{id:'clients',icon:'🏢',label:'Clientes'},{id:'suppliers',icon:'🏭',label:'Proveedores'}]},{label:'Tablas',items:[{id:'banks',icon:'🏦',label:'Bancos'}]}]},
+{id:'inicio',label:'Inicio',groups:[{label:'General',items:[{id:'dash',icon:'📊',label:'Dashboard'},{id:'import',icon:'📂',label:'Importar'}]},{label:'Asientos',items:[{id:'newEntry',icon:'➕',label:'Nuevo gasto'},{id:'manualEntry',icon:'✏️',label:'Manual'},{id:'plantillas',icon:'📄',label:'Plantillas'},{id:'borradores',icon:'📝',label:'Borradores'}]}]},
+{id:'diario',label:'Diario',groups:[{label:'Consultas',items:[{id:'journal',icon:'📒',label:'Diario'},{id:'ledger',icon:'📖',label:'Mayor'},{id:'trial',icon:'⚖️',label:'Saldos'}]},{label:'Resultados',items:[{id:'pnl',icon:'📈',label:'PyG'},{id:'balance',icon:'🏛️',label:'Balance'},{id:'libroiva',icon:'📋',label:'Libro IVA'}]},{label:'Facturas',items:[{id:'facturas',icon:'🧾',label:'Facturas'}]}]},
+{id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]},{label:'Posición',items:[{id:'posicion',icon:'🏦',label:'Posición'},{id:'prevision',icon:'📊',label:'Previsión'}]},{label:'Operaciones',items:[{id:'conciliacion',icon:'🔄',label:'Conciliación'},{id:'inmovilizado',icon:'🏗️',label:'Inmovilizado'}]}]},
+{id:'maestros',label:'Maestros',groups:[{label:'Terceros',items:[{id:'clients',icon:'🏢',label:'Clientes'},{id:'suppliers',icon:'🏭',label:'Proveedores'}]},{label:'Tablas',items:[{id:'banks',icon:'🏦',label:'Bancos'},{id:'articulos',icon:'📦',label:'Artículos'}]},{label:'Análisis',items:[{id:'analisis',icon:'📊',label:'Proveedores'}]}]},
 {id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'backups',icon:'💾',label:'Backups'},{id:'audit',icon:'📝',label:'Auditoría'},{id:'trash',icon:'🗑️',label:'Papelera'}]}]}
 ];
 
@@ -220,6 +220,8 @@ function renderView(){
   else if(v==='clients')renderMaster(c,'client','Clientes','🏢');
   else if(v==='suppliers')renderMaster(c,'supplier','Proveedores','🏭');
   else if(v==='banks')renderMaster(c,'bank','Bancos','🏦');
+  else if(v==='articulos')renderArticulos(c);
+  else if(v==='analisis')renderAnalisisProveedores(c);
   else if(v==='import')renderImport(c);
   else if(v==='trash')renderTrash(c);
   else if(v==='periods')renderPeriods(c);
@@ -228,8 +230,12 @@ function renderView(){
   else if(v==='backups')renderBackups(c);
   else if(v==='libroiva')renderLibroIVA(c);
   else if(v==='plantillas')renderPlantillas(c);
+  else if(v==='borradores')renderBorradores(c);
   else if(v==='posicion')renderPosicion(c);
   else if(v==='prevision')renderPrevision(c);
+  else if(v==='facturas')renderFacturas(c);
+  else if(v==='conciliacion')renderConciliacion(c);
+  else if(v==='inmovilizado')renderInmovilizado(c);
   else c.innerHTML='<div class="empty"><div style="font-size:40px;margin-bottom:10px">🚧</div>Próximamente</div>';
 }
 
@@ -287,6 +293,21 @@ function renderDash(c){
   var catGastoArr=Object.entries(catGasto).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
 
   c.innerHTML=dateFilterHTML()+
+  // Alertas proactivas
+  (function(){
+    var alerts=[];
+    // IVA a pagar
+    if(tiva>0){var now=new Date();var daysToQuarter=[0,0,0,20,20,20,20,20,20,20,20,20][now.getMonth()];alerts.push({type:'warning',msg:'📤 IVA a pagar este trimestre: <strong>'+fmt(tiva)+'€</strong>'});}
+    // Tesorería baja
+    if(tb<0)alerts.push({type:'danger',msg:'🏦 Tesorería negativa: <strong>'+fmt(tb)+'€</strong>. Revisa cobros pendientes.'});
+    else if(tb<1000)alerts.push({type:'warning',msg:'🏦 Tesorería baja: <strong>'+fmt(tb)+'€</strong>. Vigila la liquidez.'});
+    // Gastos > Ingresos
+    if(tg>ti&&ti>0)alerts.push({type:'danger',msg:'⚠️ Los gastos ('+fmt(tg)+'€) superan los ingresos ('+fmt(ti)+'€) en <strong>'+fmt(tg-ti)+'€</strong>'});
+    // Sin backup
+    var bi=getLastBackupInfo();if(bi&&!bi.ok)alerts.push({type:'warning',msg:'💾 '+bi.text+'. Haz un backup.'});
+    if(!alerts.length)return '';
+    return '<div style="margin-bottom:14px">'+alerts.map(function(a){return '<div style="background:'+(a.type==='danger'?'#FDF0F0;border:1px solid var(--rd);color:var(--rd)':'#FFF8E1;border:1px solid #FFD54F;color:#E65100')+';border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px">'+a.msg+'</div>';}).join('')+'</div>';
+  })()+
   '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(ti)+'€</div><div class="stat-l">📈 Ventas</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(tg)+'€</div><div class="stat-l">📉 Compras/Gastos</div></div><div class="stat"><div class="stat-v" style="color:'+(tr>=0?'var(--ok)':'var(--rd)')+'">'+fmt(tr)+'€</div><div class="stat-l">'+(tr>=0?'💰':'⚠️')+' Resultado</div></div><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(tb)+'€</div><div class="stat-l">🏦 Tesorería</div></div><div class="stat"><div class="stat-v" style="color:'+(tiva>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(tiva))+'€</div><div class="stat-l">'+(tiva>=0?'📤 IVA a pagar':'📥 IVA a devolver')+'</div></div></div>'+
   '<div class="grid-2"><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">📊 Ingresos vs Gastos mensuales</div><canvas id="chartIG"></canvas></div><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">🍩 Distribución de gastos</div><div style="display:flex;justify-content:center;align-items:center;height:210px"><canvas id="chartGasto"></canvas></div></div></div>'+
   '<div class="grid-2"><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">🏦 Evolución tesorería</div><canvas id="chartTes"></canvas></div><div class="card" style="min-height:260px"><div class="card-h">📒 Últimos asientos</div><div class="scr" style="max-height:220px"><table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
@@ -349,7 +370,7 @@ function showEntryModal(entry,mode){
   var dateVal=mode==='dup'?today():(entry?entry.date:today());
   var conceptVal=mode==='dup'?(entry?entry.concept:'')+' (copia)':(entry?entry.concept:'');
   var bg=document.createElement('div');bg.className='modal-bg';bg.id='entryModal';
-  bg.innerHTML='<div class="modal"><div class="card-h"><span>'+title+'</span><button class="btn btn-d" onclick="document.getElementById(\'entryModal\').remove()">✕</button></div><div class="card-b"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><div style="width:125px"><div class="lbl">Fecha</div><input type="date" class="inp" id="eDate" value="'+dateVal+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div><div style="flex:1;min-width:180px"><div class="lbl">Concepto</div><input class="inp" id="eConcept" value="'+h(conceptVal)+'"></div></div><div id="eLines"></div><div style="margin-top:8px"><button class="btn btn-d" onclick="addEntryLine()">+ Línea</button></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span id="eBalance"></span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="saveAsPlantilla()" title="Guardar como plantilla">📄 Plantilla</button><button class="btn btn-p" id="eSave" onclick="saveEntry()">💾 '+(mode==='edit'?'Guardar':'Crear')+'</button></div></div></div></div>';
+  bg.innerHTML='<div class="modal"><div class="card-h"><span>'+title+'</span><button class="btn btn-d" onclick="document.getElementById(\'entryModal\').remove()">✕</button></div><div class="card-b"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><div style="width:125px"><div class="lbl">Fecha</div><input type="date" class="inp" id="eDate" value="'+dateVal+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div><div style="flex:1;min-width:180px"><div class="lbl">Concepto</div><input class="inp" id="eConcept" value="'+h(conceptVal)+'"></div></div><div id="eLines"></div><div style="margin-top:8px"><button class="btn btn-d" onclick="addEntryLine()">+ Línea</button></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span id="eBalance"></span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="saveAsPlantilla()" title="Guardar como plantilla">📄 Plantilla</button><button class="btn btn-a" onclick="saveDraft()" title="Guardar borrador sin contabilizar">📝 Borrador</button><button class="btn btn-p" id="eSave" onclick="saveEntry()">💾 '+(mode==='edit'?'Guardar':'Crear')+'</button></div></div></div></div>';
   document.body.appendChild(bg);renderEntryLines();
 }
 
@@ -400,6 +421,22 @@ function updateBalance(){
   var eb=$('eBalance');if(eb)eb.innerHTML='<span class="badge '+(ok?'badge-g':'badge-r')+'">'+(ok?'✓ Cuadrado':'Descuadre: '+fmt(Math.abs(tD-tH)))+'</span>';
   var es=$('eSave');if(es)es.disabled=!ok;
 }
+// ═══ BORRADORES ═══
+var drafts=[];
+function loadDrafts(){try{drafts=JSON.parse(localStorage.getItem('cf_drafts_'+(state.company?state.company.id:''))||'[]');}catch(e){drafts=[];}}
+function saveDraftsStorage(){try{localStorage.setItem('cf_drafts_'+(state.company?state.company.id:''),JSON.stringify(drafts));}catch(e){}}
+
+function saveDraft(){
+  var date=$('eDate').value;var concept=$('eConcept').value;
+  var lines=entryLines.filter(function(l){return l.a;}).map(function(l){return {a:l.a,d:parseFloat(l.d)||0,h:parseFloat(l.h)||0};});
+  if(!concept){toast('Pon un concepto','error');return;}
+  loadDrafts();
+  drafts.push({id:'draft_'+uid(),date:date,concept:concept,lines:lines,created:new Date().toISOString()});
+  saveDraftsStorage();
+  $('entryModal').remove();
+  toast('📝 Borrador guardado: '+concept);
+}
+
 function saveAsPlantilla(){
   var concept=$('eConcept').value;
   var lines=entryLines.filter(function(l){return l.a;}).map(function(l){return {a:l.a,d:parseFloat(l.d)||0,h:parseFloat(l.h)||0};});
@@ -1293,6 +1330,314 @@ function exportPrevExcel(){
   loadPrevLines();
   var rows=prevLines.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}).map(function(l){return [l.date,l.tercero,l.desc,l.tipo,l.ingreso||'',l.gasto||''];});
   exportExcel(rows,['Fecha','Cliente/Proveedor','Descripción','Tipo','Ingreso','Gasto'],'prevision_tesoreria');
+}
+
+// ═══ ANÁLISIS PROVEEDORES ═══
+function renderAnalisisProveedores(c){
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  // Agrupar gastos por concepto (primera palabra como proveedor)
+  var provs={};
+  all.forEach(function(e){
+    e.lines.forEach(function(l){
+      var g=parseInt((l.a||'')[0])||0;
+      if(g===6&&l.d>0){
+        var key=(e.concept||'Otros').split(/\s+/)[0];
+        if(!provs[key])provs[key]={name:key,total:0,count:0,months:{},lastDate:'',cuenta:l.a};
+        provs[key].total+=l.d;provs[key].count++;
+        var ym=e.date.slice(0,7);if(!provs[key].months[ym])provs[key].months[ym]=0;
+        provs[key].months[ym]+=l.d;
+        if(e.date>provs[key].lastDate)provs[key].lastDate=e.date;
+      }
+    });
+  });
+  var lista=Object.values(provs).sort(function(a,b){return b.total-a.total;});
+  var totalGasto=lista.reduce(function(s,p){return s+p.total;},0);
+
+  c.innerHTML=dateFilterHTML()+
+  '<div class="card"><div class="card-h"><span>📊 Análisis de proveedores — '+lista.length+' proveedores</span><button class="btn btn-d" style="font-size:10px" onclick="exportAnalisisExcel()">📊 Excel</button></div>'+
+  '<div style="padding:8px 14px;font-size:12px;border-bottom:1px solid #EDF0F4">Gasto total: <strong style="color:var(--rd)">'+fmt(totalGasto)+'€</strong></div>'+
+  (lista.length?'<div class="scr"><table><thead><tr><th>Proveedor</th><th>Cuenta</th><th style="text-align:right">Total</th><th style="text-align:right">% del total</th><th style="text-align:right">Nº facturas</th><th style="text-align:right">Media/fra</th><th>Última fra</th><th>Tendencia</th></tr></thead><tbody>'+
+  lista.map(function(p,i){
+    var pct=totalGasto>0?Math.round(p.total/totalGasto*100):0;
+    var media=p.count>0?p.total/p.count:0;
+    var meses=Object.keys(p.months).sort();
+    var tendencia='—';
+    if(meses.length>=2){
+      var primero=p.months[meses[0]];var ultimo=p.months[meses[meses.length-1]];
+      var cambio=primero>0?Math.round((ultimo-primero)/primero*100):0;
+      tendencia=cambio>10?'<span style="color:var(--rd)">↑ +'+cambio+'%</span>':cambio<-10?'<span style="color:var(--ok)">↓ '+cambio+'%</span>':'<span style="color:var(--txM)">= estable</span>';
+    }
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(p.name)+'</td><td class="acct" style="font-size:10px">'+(am[p.cuenta]?am[p.cuenta].name:p.cuenta)+'</td><td style="text-align:right;font-weight:700;color:var(--rd)">'+fmt(p.total)+'€</td><td style="text-align:right"><div style="display:flex;align-items:center;gap:4px;justify-content:flex-end"><div style="width:'+Math.min(pct,100)+'px;height:8px;background:var(--rd);border-radius:4px;opacity:0.3"></div>'+pct+'%</div></td><td style="text-align:right">'+p.count+'</td><td style="text-align:right">'+fmt(media)+'€</td><td style="font-size:10px">'+fmtD(p.lastDate)+'</td><td style="font-size:10px">'+tendencia+'</td></tr>';
+  }).join('')+'</tbody></table></div>':'<div class="empty">Sin datos de proveedores</div>')+'</div>';
+}
+function exportAnalisisExcel(){
+  var all=filteredEntries();var provs={};
+  all.forEach(function(e){e.lines.forEach(function(l){var g=parseInt((l.a||'')[0])||0;if(g===6&&l.d>0){var key=(e.concept||'Otros').split(/\s+/)[0];if(!provs[key])provs[key]={t:0,c:0};provs[key].t+=l.d;provs[key].c++;}});});
+  var rows=Object.entries(provs).sort(function(a,b){return b[1].t-a[1].t;}).map(function(x){return [x[0],x[1].t,x[1].c,x[1].c>0?x[1].t/x[1].c:0];});
+  exportExcel(rows,['Proveedor','Total','Nº Facturas','Media'],'analisis_proveedores');
+}
+
+// ═══ ARTÍCULOS / PRODUCTOS ═══
+var articulos=[];
+function loadArticulos(){try{articulos=JSON.parse(localStorage.getItem('cf_articulos_'+(state.company?state.company.id:''))||'[]');}catch(e){articulos=[];}}
+function saveArticulos(){try{localStorage.setItem('cf_articulos_'+(state.company?state.company.id:''),JSON.stringify(articulos));}catch(e){}}
+
+function renderArticulos(c){
+  loadArticulos();
+  var totalStock=articulos.reduce(function(s,a){return s+(a.stock||0)*(a.coste||0);},0);
+  c.innerHTML='<div class="card"><div class="card-h"><span>📦 Artículos / Productos — '+articulos.length+'</span><div style="display:flex;gap:4px"><button class="btn btn-p" onclick="newArticulo()">+ Nuevo</button><button class="btn btn-d" style="font-size:10px" onclick="exportArticulosExcel()">📊 Excel</button></div></div>'+
+  '<div style="padding:8px 14px;font-size:12px;border-bottom:1px solid #EDF0F4">Valor stock: <strong style="color:var(--bl)">'+fmt(totalStock)+'€</strong></div>'+
+  (articulos.length?'<div class="scr"><table><thead><tr><th>Código</th><th>Descripción</th><th>Familia</th><th style="text-align:right">Coste</th><th style="text-align:right">PVP</th><th>IVA</th><th style="text-align:right">Stock</th><th>Unidad</th><th>Proveedor</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
+  articulos.map(function(a,i){
+    var margen=a.pvp&&a.coste?Math.round((a.pvp-a.coste)/a.pvp*100):0;
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:700;font-family:monospace;font-size:10px;color:var(--pri)">'+h(a.code||'')+'</td><td style="font-weight:600">'+h(a.name||'')+'</td><td style="font-size:10px"><span class="badge badge-b">'+h(a.familia||'')+'</span></td><td style="text-align:right">'+fmt(a.coste||0)+'€</td><td style="text-align:right;font-weight:600">'+fmt(a.pvp||0)+'€ <span style="font-size:9px;color:var(--ok)">('+margen+'%)</span></td><td style="font-size:10px">'+h(a.iva||'21')+'%</td><td style="text-align:right;font-weight:600;color:'+(a.stock>0?'var(--ok)':'var(--rd)')+'">'+((a.stock||0))+'</td><td style="font-size:10px">'+h(a.unidad||'ud')+'</td><td style="font-size:10px">'+h(a.proveedor||'')+'</td><td style="white-space:nowrap"><button class="abtn" onclick="editArticulo('+i+')">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteArticulo('+i+')">🗑</button></td></tr>';
+  }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:30px;margin-bottom:8px">📦</div><div style="font-weight:600;margin-bottom:4px">Sin artículos</div><div style="font-size:11px;color:var(--txM)">Registra tus productos y servicios con precios, stock y proveedor</div></div>')+'</div>';
+}
+
+function newArticulo(){showArticuloModal(-1);}
+function editArticulo(idx){showArticuloModal(idx);}
+
+function showArticuloModal(idx){
+  loadArticulos();
+  var isEdit=idx>=0;
+  var a=isEdit?articulos[idx]:{};
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='artModal';
+  var h2='<div class="modal" style="max-width:600px"><div class="card-h"><span>'+(isEdit?'✏️ Editar':'➕ Nuevo')+' artículo</span><button class="btn btn-d" onclick="$(\'artModal\').remove()">✕</button></div><div class="card-b">';
+  h2+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  h2+='<div><div class="lbl">Código *</div><input class="inp" id="artCode" value="'+h(a.code||'')+'" placeholder="ART-001"></div>';
+  h2+='<div><div class="lbl">Familia</div><input class="inp" id="artFamilia" value="'+h(a.familia||'')+'" placeholder="Informática, Papelería..."></div>';
+  h2+='<div style="grid-column:span 2"><div class="lbl">Descripción *</div><input class="inp" id="artName" value="'+h(a.name||'')+'" placeholder="Nombre del artículo o servicio"></div>';
+  h2+='<div><div class="lbl">Precio coste</div><input class="inp" id="artCoste" value="'+(a.coste||'')+'" style="text-align:right" placeholder="0"></div>';
+  h2+='<div><div class="lbl">PVP (sin IVA)</div><input class="inp" id="artPVP" value="'+(a.pvp||'')+'" style="text-align:right" placeholder="0"></div>';
+  h2+='<div><div class="lbl">% IVA</div><select class="sel" id="artIva" style="width:100%"><option value="21"'+(a.iva==='21'||!a.iva?' selected':'')+'>21%</option><option value="10"'+(a.iva==='10'?' selected':'')+'>10%</option><option value="4"'+(a.iva==='4'?' selected':'')+'>4%</option><option value="0"'+(a.iva==='0'?' selected':'')+'>Exento</option></select></div>';
+  h2+='<div><div class="lbl">Stock actual</div><input class="inp" id="artStock" value="'+(a.stock||0)+'" style="text-align:right"></div>';
+  h2+='<div><div class="lbl">Unidad</div><input class="inp" id="artUnidad" value="'+h(a.unidad||'ud')+'" placeholder="ud, kg, h, m..."></div>';
+  h2+='<div><div class="lbl">Stock mínimo</div><input class="inp" id="artStockMin" value="'+(a.stockMin||0)+'" style="text-align:right"></div>';
+  h2+='<div><div class="lbl">Cuenta contable venta</div><input class="inp" id="artCuentaV" value="'+h(a.cuentaV||'70000000')+'" maxlength="8"></div>';
+  h2+='<div><div class="lbl">Cuenta contable compra</div><input class="inp" id="artCuentaC" value="'+h(a.cuentaC||'60000000')+'" maxlength="8"></div>';
+  h2+='<div style="grid-column:span 2"><div class="lbl">Proveedor habitual</div><input class="inp" id="artProv" value="'+h(a.proveedor||'')+'" placeholder="Nombre proveedor"></div>';
+  h2+='<div style="grid-column:span 2"><div class="lbl">Notas</div><input class="inp" id="artNotas" value="'+h(a.notas||'')+'"></div>';
+  h2+='</div>';
+  h2+='<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-d" onclick="$(\'artModal\').remove()">Cancelar</button><button class="btn btn-p" onclick="saveArticulo('+idx+')">💾 Guardar</button></div></div></div>';
+  bg.innerHTML=h2;
+  document.body.appendChild(bg);
+}
+
+function saveArticulo(idx){
+  var code=$('artCode').value;var name=$('artName').value;
+  if(!code||!name){toast('Código y descripción obligatorios','error');return;}
+  var item={
+    code:code,name:name,familia:$('artFamilia').value,
+    coste:parseFloat($('artCoste').value)||0,pvp:parseFloat($('artPVP').value)||0,
+    iva:$('artIva').value,stock:parseInt($('artStock').value)||0,
+    unidad:$('artUnidad').value||'ud',stockMin:parseInt($('artStockMin').value)||0,
+    cuentaV:$('artCuentaV').value||'70000000',cuentaC:$('artCuentaC').value||'60000000',
+    proveedor:$('artProv').value,notas:$('artNotas').value
+  };
+  loadArticulos();
+  if(idx>=0)articulos[idx]=item;else articulos.push(item);
+  saveArticulos();$('artModal').remove();
+  auditLog(idx>=0?'editar_articulo':'nuevo_articulo',code+' '+name);
+  toast((idx>=0?'Artículo actualizado':'Artículo creado'));render();
+}
+
+function deleteArticulo(idx){
+  if(!confirm('¿Eliminar artículo?'))return;
+  loadArticulos();var a=articulos[idx];
+  articulos.splice(idx,1);saveArticulos();
+  auditLog('borrar_articulo',a?a.code+' '+a.name:'');
+  toast('Artículo eliminado');render();
+}
+
+function exportArticulosExcel(){
+  loadArticulos();
+  var rows=articulos.map(function(a){return [a.code,a.name,a.familia,a.coste,a.pvp,a.iva+'%',a.stock,a.unidad,a.proveedor,a.notas];});
+  exportExcel(rows,['Código','Descripción','Familia','Coste','PVP','IVA','Stock','Unidad','Proveedor','Notas'],'articulos');
+}
+
+// ═══ FACTURAS EMITIDAS/RECIBIDAS ═══
+var facturas={emitidas:[],recibidas:[]};
+function loadFacturas(){try{facturas=JSON.parse(localStorage.getItem('cf_facturas_'+(state.company?state.company.id:''))||'{"emitidas":[],"recibidas":[]}');}catch(e){facturas={emitidas:[],recibidas:[]};}}
+function saveFacturas(){try{localStorage.setItem('cf_facturas_'+(state.company?state.company.id:''),JSON.stringify(facturas));}catch(e){}}
+
+function renderFacturas(c){
+  loadFacturas();
+  c.innerHTML='<div class="card"><div class="card-h"><span>🧾 Facturas</span><div style="display:flex;gap:4px"><button class="btn btn-p" onclick="newFactura(1)">+ Emitida</button><button class="btn btn-r" onclick="newFactura(0)">+ Recibida</button></div></div>'+
+  '<div class="grid-2">'+
+  '<div class="card"><div class="card-h" style="color:var(--ok)">Emitidas — '+facturas.emitidas.length+'</div>'+
+  (facturas.emitidas.length?'<div class="scr"><table><thead><tr><th>Nº</th><th>Fecha</th><th>Cliente</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Estado</th><th style="width:30px"></th></tr></thead><tbody>'+
+  facturas.emitidas.map(function(f,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.num)+'</td><td style="font-size:10px">'+fmtD(f.date)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="text-align:right;font-size:11px">'+fmt(f.base)+'</td><td style="text-align:right;font-size:11px">'+fmt(f.iva)+'</td><td style="text-align:right;font-weight:600">'+fmt(f.total)+'</td><td><span class="badge '+(f.estado==='cobrada'?'badge-g':'badge-a')+'">'+(f.estado||'pendiente')+'</span></td><td><button class="abtn" style="color:var(--rd)" onclick="deleteFactura(1,'+i+')">✕</button></td></tr>';}).join('')+
+  '<tr class="total"><td colspan="3">TOTAL</td><td style="text-align:right">'+fmt(facturas.emitidas.reduce(function(s,f){return s+f.base;},0))+'</td><td style="text-align:right">'+fmt(facturas.emitidas.reduce(function(s,f){return s+f.iva;},0))+'</td><td style="text-align:right">'+fmt(facturas.emitidas.reduce(function(s,f){return s+f.total;},0))+'</td><td></td><td></td></tr></tbody></table></div>':'<div class="empty">Sin facturas emitidas</div>')+'</div>'+
+  '<div class="card"><div class="card-h" style="color:var(--rd)">Recibidas — '+facturas.recibidas.length+'</div>'+
+  (facturas.recibidas.length?'<div class="scr"><table><thead><tr><th>Nº</th><th>Fecha</th><th>Proveedor</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Estado</th><th style="width:30px"></th></tr></thead><tbody>'+
+  facturas.recibidas.map(function(f,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.num)+'</td><td style="font-size:10px">'+fmtD(f.date)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="text-align:right;font-size:11px">'+fmt(f.base)+'</td><td style="text-align:right;font-size:11px">'+fmt(f.iva)+'</td><td style="text-align:right;font-weight:600">'+fmt(f.total)+'</td><td><span class="badge '+(f.estado==='pagada'?'badge-g':'badge-r')+'">'+(f.estado||'pendiente')+'</span></td><td><button class="abtn" style="color:var(--rd)" onclick="deleteFactura(0,'+i+')">✕</button></td></tr>';}).join('')+
+  '<tr class="total"><td colspan="3">TOTAL</td><td style="text-align:right">'+fmt(facturas.recibidas.reduce(function(s,f){return s+f.base;},0))+'</td><td style="text-align:right">'+fmt(facturas.recibidas.reduce(function(s,f){return s+f.iva;},0))+'</td><td style="text-align:right">'+fmt(facturas.recibidas.reduce(function(s,f){return s+f.total;},0))+'</td><td></td><td></td></tr></tbody></table></div>':'<div class="empty">Sin facturas recibidas</div>')+'</div></div></div>';
+}
+function newFactura(tipo){
+  var esEmitida=tipo===1||tipo==='emitida';
+  var tipoStr=esEmitida?'emitida':'recibida';
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='factModal';
+  var h2='<div class="modal" style="max-width:550px"><div class="card-h"><span>'+(esEmitida?'🟢 Nueva factura emitida':'🔴 Nueva factura recibida')+'</span><button class="btn btn-d" onclick="$(\'factModal\').remove()">✕</button></div><div class="card-b">';
+  h2+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  h2+='<div><div class="lbl">Nº Factura *</div><input class="inp" id="fNum" placeholder="F-2026-001"></div>';
+  h2+='<div><div class="lbl">Fecha *</div><input type="date" class="inp" id="fDate" value="'+today()+'"></div>';
+  h2+='<div style="grid-column:span 2"><div class="lbl">'+(esEmitida?'Cliente':'Proveedor')+' *</div><input class="inp" id="fTercero"></div>';
+  h2+='<div><div class="lbl">CIF/NIF</div><input class="inp" id="fCif"></div>';
+  h2+='<div><div class="lbl">Base imponible *</div><input class="inp" id="fBase" style="text-align:right" oninput="calcFactTotal()"></div>';
+  h2+='<div><div class="lbl">% IVA</div><select class="sel" id="fIvaPct" style="width:100%" onchange="calcFactTotal()"><option value="21">21%</option><option value="10">10%</option><option value="4">4%</option><option value="0">Exento</option></select></div>';
+  h2+='<div><div class="lbl">Cuota IVA</div><input class="inp" id="fIva" style="text-align:right" readonly></div>';
+  h2+='<div><div class="lbl">Total</div><input class="inp" id="fTotal" style="text-align:right;font-weight:700" readonly></div>';
+  h2+='<div><div class="lbl">Estado</div><select class="sel" id="fEstado" style="width:100%"><option value="pendiente">Pendiente</option><option value="'+(esEmitida?'cobrada':'pagada')+'">'+(esEmitida?'Cobrada':'Pagada')+'</option></select></div>';
+  h2+='<div style="grid-column:span 2"><div class="lbl">Concepto</div><input class="inp" id="fConcepto"></div>';
+  h2+='</div>';
+  h2+='<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-d" onclick="$(\'factModal\').remove()">Cancelar</button><button class="btn btn-p" onclick="saveFactura('+tipo+')">💾 Guardar</button></div></div></div>';
+  bg.innerHTML=h2;
+  document.body.appendChild(bg);
+}
+
+function calcFactTotal(){
+  var base=parseFloat(document.getElementById('fBase')?document.getElementById('fBase').value:0)||0;
+  var pct=parseFloat(document.getElementById('fIvaPct')?document.getElementById('fIvaPct').value:21)||0;
+  var iva=Math.round(base*pct)/100;
+  if(document.getElementById('fIva'))document.getElementById('fIva').value=iva.toFixed(2);
+  if(document.getElementById('fTotal'))document.getElementById('fTotal').value=(base+iva).toFixed(2);
+}
+function saveFactura(tipo){
+  var tipoStr=(tipo===1||tipo==='emitida')?'emitida':'recibida';
+  var num=document.getElementById('fNum').value;var date=document.getElementById('fDate').value;
+  var tercero=document.getElementById('fTercero').value;var base=parseFloat(document.getElementById('fBase').value)||0;
+  var iva=parseFloat(document.getElementById('fIva').value)||0;var total=parseFloat(document.getElementById('fTotal').value)||0;
+  var estado=document.getElementById('fEstado').value;var concepto=document.getElementById('fConcepto').value;
+  var cif=document.getElementById('fCif').value;
+  if(!num||!tercero||!base){toast('Nº, tercero y base obligatorios','error');return;}
+  loadFacturas();
+  var arr=tipoStr==='emitida'?facturas.emitidas:facturas.recibidas;
+  arr.push({id:'f_'+uid(),num:num,date:date,tercero:tercero,cif:cif,base:base,iva:iva,total:total,estado:estado,concepto:concepto});
+  saveFacturas();$('factModal').remove();
+  auditLog('nueva_factura_'+tipoStr,num+' '+tercero);toast('Factura guardada');render();
+}
+function deleteFactura(tipo,idx){
+  var tipoStr=(tipo===1)?'emitida':'recibida';
+  if(!confirm('¿Eliminar factura?'))return;
+  loadFacturas();
+  if(tipoStr==='emitida')facturas.emitidas.splice(idx,1);else facturas.recibidas.splice(idx,1);
+  saveFacturas();toast('Factura eliminada');render();
+}
+
+// ═══ CONCILIACIÓN BANCARIA ═══
+function renderConciliacion(c){
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  // Get bank movements (572)
+  var movsBanco=[];
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(l.a&&l.a.startsWith('572')){
+      movsBanco.push({date:e.date,concept:e.concept||'',debe:l.d,haber:l.h,id:e.id,conciliado:e.conciliado||false});
+    }
+  });});
+  movsBanco.sort(function(a,b){return a.date.localeCompare(b.date);});
+  var totalConc=movsBanco.filter(function(m){return m.conciliado;}).length;
+  var totalPend=movsBanco.length-totalConc;
+  var saldo=0;
+
+  c.innerHTML='<div class="card"><div class="card-h"><span>🔄 Conciliación bancaria</span><div style="display:flex;gap:8px;align-items:center"><span class="badge badge-g">'+totalConc+' conciliados</span><span class="badge badge-r">'+totalPend+' pendientes</span></div></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Marca los movimientos bancarios que coinciden con tu extracto del banco. Los no marcados son partidas pendientes de conciliar.</div>'+
+  (movsBanco.length?'<div class="scr" style="max-height:500px"><table><thead><tr><th style="width:30px">✓</th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Entrada</th><th style="text-align:right">Salida</th><th style="text-align:right">Saldo</th></tr></thead><tbody>'+
+  movsBanco.map(function(m,i){saldo+=m.debe-m.haber;return '<tr class="'+(i%2?'alt':'')+'" style="'+(m.conciliado?'opacity:0.6':'')+'"><td><input type="checkbox" '+(m.conciliado?'checked':'')+' onchange="toggleConciliado(\''+m.id+'\',this.checked)"></td><td style="font-size:10px">'+fmtD(m.date)+'</td><td style="font-size:11px">'+h(m.concept)+'</td><td style="text-align:right;color:var(--ok)">'+(m.debe>0?fmt(m.debe):'')+'</td><td style="text-align:right;color:var(--rd)">'+(m.haber>0?fmt(m.haber):'')+'</td><td style="text-align:right;font-weight:600">'+fmt(saldo)+'</td></tr>';}).join('')+
+  '</tbody></table></div>':'<div class="empty">Sin movimientos bancarios</div>')+'</div>';
+}
+function toggleConciliado(entryId,checked){
+  var e=state.entries.find(function(x){return x.id===entryId;});
+  if(e){e.conciliado=checked;api('/api/entries/'+state.company.id,{method:'POST',body:e}).then(function(){loadData().then(function(){render();});});}
+}
+
+// ═══ INMOVILIZADO Y AMORTIZACIÓN ═══
+var inmovilizados=[];
+function loadInmovilizados(){try{inmovilizados=JSON.parse(localStorage.getItem('cf_inmov_'+(state.company?state.company.id:''))||'[]');}catch(e){inmovilizados=[];}}
+function saveInmovilizados(){try{localStorage.setItem('cf_inmov_'+(state.company?state.company.id:''),JSON.stringify(inmovilizados));}catch(e){}}
+
+function renderInmovilizado(c){
+  loadInmovilizados();
+  var totalCoste=inmovilizados.reduce(function(s,x){return s+x.coste;},0);
+  var totalAmort=inmovilizados.reduce(function(s,x){return s+(x.amortAcum||0);},0);
+  var totalNeto=totalCoste-totalAmort;
+
+  c.innerHTML='<div class="card"><div class="card-h"><span>🏗️ Inmovilizado — '+inmovilizados.length+' activos</span><button class="btn btn-p" onclick="newInmovilizado()">+ Nuevo activo</button></div>'+
+  '<div style="padding:8px 14px;display:flex;gap:20px;font-size:12px;border-bottom:1px solid #EDF0F4"><div>Coste: <strong>'+fmt(totalCoste)+'€</strong></div><div>Amort. acum: <strong style="color:var(--rd)">'+fmt(totalAmort)+'€</strong></div><div>Valor neto: <strong style="color:var(--ok)">'+fmt(totalNeto)+'€</strong></div></div>'+
+  (inmovilizados.length?'<div class="scr"><table><thead><tr><th>Descripción</th><th>Cuenta</th><th>Fecha alta</th><th style="text-align:right">Coste</th><th>Método</th><th>Años</th><th style="text-align:right">Amort/año</th><th style="text-align:right">Acumulada</th><th style="text-align:right">Neto</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
+  inmovilizados.map(function(inv,i){
+    var amortAnual=inv.metodo==='lineal'?Math.round(inv.coste/inv.vida*100)/100:0;
+    var neto=inv.coste-(inv.amortAcum||0);
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:11px">'+h(inv.desc)+'</td><td class="acct" style="font-size:10px">'+inv.cuenta+'</td><td style="font-size:10px">'+fmtD(inv.fechaAlta)+'</td><td style="text-align:right">'+fmt(inv.coste)+'</td><td style="font-size:10px"><span class="badge badge-b">'+inv.metodo+'</span></td><td style="text-align:center">'+inv.vida+'</td><td style="text-align:right;color:var(--am)">'+fmt(amortAnual)+'</td><td style="text-align:right;color:var(--rd)">'+fmt(inv.amortAcum||0)+'</td><td style="text-align:right;font-weight:600;color:var(--ok)">'+fmt(neto)+'</td><td style="white-space:nowrap"><button class="abtn" style="color:var(--rd)" onclick="deleteInmovilizado('+i+')">🗑</button></td></tr>';
+  }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:30px;margin-bottom:8px">🏗️</div>Sin activos de inmovilizado</div>')+'</div>';
+}
+function newInmovilizado(){
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='inmovModal';
+  var h2='<div class="modal" style="max-width:550px"><div class="card-h"><span>🏗️ Nuevo activo inmovilizado</span><button class="btn btn-d" onclick="$(\'inmovModal\').remove()">✕</button></div><div class="card-b">';
+  h2+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  h2+='<div style="grid-column:span 2"><div class="lbl">Descripción *</div><input class="inp" id="invDesc" placeholder="Ordenador portátil"></div>';
+  h2+='<div><div class="lbl">Cuenta contable</div><select class="sel" id="invCuenta" style="width:100%"><option value="21000000">210 - Terrenos</option><option value="21100000">211 - Construcciones</option><option value="21200000">212 - Inst. técnicas</option><option value="21300000">213 - Maquinaria</option><option value="21600000">216 - Mobiliario</option><option value="21700000" selected>217 - Eq. informáticos</option><option value="21800000">218 - Elem. transporte</option></select></div>';
+  h2+='<div><div class="lbl">Fecha alta *</div><input type="date" class="inp" id="invFecha" value="'+today()+'"></div>';
+  h2+='<div><div class="lbl">Coste adquisición *</div><input class="inp" id="invCoste" style="text-align:right" placeholder="0"></div>';
+  h2+='<div><div class="lbl">Método</div><select class="sel" id="invMetodo" style="width:100%"><option value="lineal">Lineal</option></select></div>';
+  h2+='<div><div class="lbl">Vida útil (años)</div><input class="inp" id="invVida" value="5" style="text-align:right"></div>';
+  h2+='<div><div class="lbl">Valor residual</div><input class="inp" id="invResidual" value="0" style="text-align:right"></div>';
+  h2+='</div>';
+  h2+='<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-d" onclick="$(\'inmovModal\').remove()">Cancelar</button><button class="btn btn-p" onclick="saveInmovilizado()">💾 Guardar</button></div></div></div>';
+  bg.innerHTML=h2;
+  document.body.appendChild(bg);
+}
+
+function saveInmovilizado(){
+  var desc=document.getElementById('invDesc').value;
+  var cuenta=document.getElementById('invCuenta').value;
+  var fecha=document.getElementById('invFecha').value;
+  var coste=parseFloat(document.getElementById('invCoste').value)||0;
+  var metodo=document.getElementById('invMetodo').value;
+  var vida=parseInt(document.getElementById('invVida').value)||5;
+  var residual=parseFloat(document.getElementById('invResidual').value)||0;
+  if(!desc||!coste){toast('Descripción y coste obligatorios','error');return;}
+  loadInmovilizados();
+  inmovilizados.push({id:'inv_'+uid(),desc:desc,cuenta:cuenta,fechaAlta:fecha,coste:coste,metodo:metodo,vida:vida,residual:residual,amortAcum:0});
+  saveInmovilizados();$('inmovModal').remove();
+  auditLog('nuevo_inmovilizado',desc+' '+fmt(coste));toast('Activo registrado');render();
+}
+function deleteInmovilizado(idx){
+  if(!confirm('¿Eliminar activo?'))return;
+  loadInmovilizados();inmovilizados.splice(idx,1);saveInmovilizados();toast('Activo eliminado');render();
+}
+
+// ═══ BORRADORES — Vista ═══
+function renderBorradores(c){
+  loadDrafts();
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  c.innerHTML='<div class="card"><div class="card-h"><span>📝 Borradores — '+drafts.length+' pendientes de contabilizar</span></div>'+
+  (drafts.length?'<div class="scr"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Líneas</th><th style="text-align:right">Importe</th><th>Creado</th><th style="width:130px">Acciones</th></tr></thead><tbody>'+
+  drafts.map(function(d,i){
+    var total=d.lines.reduce(function(s,l){return s+(l.d||0);},0);
+    var dt=new Date(d.created);var fh=String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px">'+fmtD(d.date)+'</td><td style="font-weight:600">'+h(d.concept)+'</td><td style="font-size:10px;color:var(--txM)">'+d.lines.length+'</td><td style="text-align:right;font-weight:600">'+fmt(total)+'€</td><td style="font-size:10px;color:var(--txM)">'+fh+'</td><td style="white-space:nowrap"><button class="btn btn-p" style="font-size:9px;padding:3px 8px" onclick="contabilizarDraft('+i+')">✓ Contabilizar</button> <button class="btn btn-d" style="font-size:9px;padding:3px 8px" onclick="editDraft('+i+')">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteDraft('+i+')">🗑</button></td></tr>';
+  }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:30px;margin-bottom:8px">📝</div><div style="font-weight:600;margin-bottom:4px">Sin borradores</div><div style="font-size:11px;color:var(--txM)">Los borradores son asientos guardados sin contabilizar. Úsalos cuando no estés seguro y quieras revisar antes.</div></div>')+'</div>';
+}
+async function contabilizarDraft(idx){
+  loadDrafts();var d=drafts[idx];if(!d)return;
+  if(isPeriodClosed(d.date)){toast('⛔ Periodo cerrado','error');return;}
+  var tD=d.lines.reduce(function(s,l){return s+(l.d||0);},0);
+  var tH=d.lines.reduce(function(s,l){return s+(l.h||0);},0);
+  if(Math.abs(tD-tH)>0.01){toast('El borrador no cuadra. Edítalo primero.','error');return;}
+  if(!confirm('¿Contabilizar borrador "'+d.concept+'"?'))return;
+  await api('/api/entries/'+state.company.id,{method:'POST',body:{id:'dr_'+uid(),date:d.date,concept:d.concept,type:'manual',lines:d.lines}});
+  drafts.splice(idx,1);saveDraftsStorage();
+  await loadData();checkIntegrity();auditLog('contabilizar_borrador',d.concept);toast('✓ Borrador contabilizado');render();
+}
+function editDraft(idx){
+  loadDrafts();var d=drafts[idx];if(!d)return;
+  // Open in entry modal, then delete draft
+  showEntryModal({date:d.date,concept:d.concept,lines:d.lines},'new');
+  drafts.splice(idx,1);saveDraftsStorage();
+}
+function deleteDraft(idx){
+  if(!confirm('¿Eliminar borrador?'))return;
+  loadDrafts();drafts.splice(idx,1);saveDraftsStorage();toast('Borrador eliminado');render();
 }
 
 // ═══ PLANTILLAS DE ASIENTOS REPETITIVOS ═══
