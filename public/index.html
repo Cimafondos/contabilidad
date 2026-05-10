@@ -161,8 +161,8 @@ var TABS=[
 {id:'diario',label:'Diario',groups:[{label:'Consultas',items:[{id:'journal',icon:'📒',label:'Diario'},{id:'ledger',icon:'📖',label:'Mayor'},{id:'trial',icon:'⚖️',label:'Saldos'}]},{label:'Resultados',items:[{id:'pnl',icon:'📈',label:'PyG'},{id:'balance',icon:'🏛️',label:'Balance'},{id:'libroiva',icon:'📋',label:'Libro IVA'}]},{label:'Facturas',items:[{id:'facturas',icon:'🧾',label:'Facturas'}]}]},
 {id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]},{label:'Posición',items:[{id:'posicion',icon:'🏦',label:'Posición'},{id:'prevision',icon:'📊',label:'Previsión'}]},{label:'Operaciones',items:[{id:'conciliacion',icon:'🔄',label:'Conciliación'},{id:'inmovilizado',icon:'🏗️',label:'Inmovilizado'}]}]},
 {id:'maestros',label:'Maestros',groups:[{label:'Terceros',items:[{id:'clients',icon:'🏢',label:'Clientes'},{id:'suppliers',icon:'🏭',label:'Proveedores'}]},{label:'Tablas',items:[{id:'banks',icon:'🏦',label:'Bancos'},{id:'articulos',icon:'📦',label:'Artículos'}]},{label:'Análisis',items:[{id:'analisis',icon:'📊',label:'Proveedores'}]}]},
-{id:'npl',label:'NPL',groups:[{label:'Gestión',items:[{id:'expedientes',icon:'📁',label:'Expedientes'},{id:'captacion',icon:'🤝',label:'Captación'}]}]},
-{id:'fiscal',label:'Fiscal',groups:[{label:'Modelos',items:[{id:'modelo303',icon:'📋',label:'Mod 303'}]},{label:'Informes',items:[{id:'pendientes',icon:'⏳',label:'Pendientes'}]}]},
+{id:'npl',label:'NPL',groups:[{label:'Gestión',items:[{id:'expedientes',icon:'📁',label:'Expedientes'},{id:'captacion',icon:'🤝',label:'Captación'}]},{label:'Seguimiento',items:[{id:'tareas',icon:'✅',label:'Tareas'},{id:'calendario',icon:'📅',label:'Calendario'}]}]},
+{id:'fiscal',label:'Fiscal',groups:[{label:'Modelos',items:[{id:'modelo303',icon:'📋',label:'303 IVA'},{id:'modelo390',icon:'📋',label:'390 Anual'},{id:'modelo111',icon:'📋',label:'111 IRPF'},{id:'modelo347',icon:'📋',label:'347 Terceros'}]},{label:'Informes',items:[{id:'pendientes',icon:'⏳',label:'Pendientes'}]}]},
 {id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'backups',icon:'💾',label:'Backups'},{id:'audit',icon:'📝',label:'Auditoría'},{id:'trash',icon:'🗑️',label:'Papelera'}]}]}
 ];
 
@@ -241,7 +241,12 @@ function renderView(){
   else if(v==='expedientes')renderExpedientes(c);
   else if(v==='captacion')renderCaptacion(c);
   else if(v==='modelo303')renderModelo303(c);
+  else if(v==='modelo390')renderModelo390(c);
+  else if(v==='modelo111')renderModelo111(c);
+  else if(v==='modelo347')renderModelo347(c);
   else if(v==='pendientes')renderPendientesCobro(c);
+  else if(v==='tareas')renderTareas(c);
+  else if(v==='calendario')renderCalendario(c);
   else c.innerHTML='<div class="empty"><div style="font-size:40px;margin-bottom:10px">🚧</div>Próximamente</div>';
 }
 
@@ -1558,6 +1563,147 @@ function renderPendientesCobro(c){
     var hoy=new Date();var fp=new Date(p.date);var dias=Math.floor((hoy-fp)/(1000*60*60*24));
     return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:11px">'+h(p.name)+'</td><td style="font-size:10px">'+fmtD(p.date)+' <span style="color:'+(dias>30?'var(--rd)':'var(--txM)')+';font-size:9px">('+dias+'d)</span></td><td style="text-align:right;font-weight:600;color:var(--rd)">'+fmt(p.saldo)+'€</td></tr>';}).join('')+
   '<tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">'+fmt(totalPago)+'€</td></tr></tbody></table>':'<div class="empty">Sin pendientes de pago</div>')+'</div></div>';
+}
+
+// ═══ MODELO 390 — RESUMEN ANUAL IVA ═══
+function renderModelo390(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var rep21=0,rep10=0,rep4=0,sop21=0,sop10=0,sop4=0,baseRep=0,baseSop=0;
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(l.a&&l.a.startsWith('477')){var iv=l.h-l.d;if(iv>0){rep21+=iv;}}
+    if(l.a&&l.a.startsWith('472')){var iv2=l.d-l.h;if(iv2>0){sop21+=iv2;}}
+    var g=parseInt((l.a||'')[0])||0;
+    if(g===7&&l.h>l.d)baseRep+=l.h-l.d;
+    if(g===6&&l.d>l.h)baseSop+=l.d-l.h;
+  });});
+  var totalRep=rep21+rep10+rep4,totalSop=sop21+sop10+sop4;
+  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 390 — Resumen anual IVA '+state.ejercicio+'</span></div>'+
+  '<table><thead><tr><th>Concepto</th><th style="text-align:right">Base imponible</th><th style="text-align:right">Cuota IVA</th></tr></thead><tbody>'+
+  '<tr><td colspan="3" style="font-weight:700;background:#E8F8ED;color:var(--ok)">IVA DEVENGADO (Repercutido)</td></tr>'+
+  '<tr><td style="padding-left:20px">Régimen general 21%</td><td style="text-align:right">'+fmt(baseRep)+'€</td><td style="text-align:right">'+fmt(totalRep)+'€</td></tr>'+
+  '<tr class="total"><td>Total IVA devengado</td><td style="text-align:right">'+fmt(baseRep)+'€</td><td style="text-align:right">'+fmt(totalRep)+'€</td></tr>'+
+  '<tr><td colspan="3" style="font-weight:700;background:#FDF0F0;color:var(--rd)">IVA DEDUCIBLE (Soportado)</td></tr>'+
+  '<tr><td style="padding-left:20px">Cuotas soportadas operaciones interiores</td><td style="text-align:right">'+fmt(baseSop)+'€</td><td style="text-align:right">'+fmt(totalSop)+'€</td></tr>'+
+  '<tr class="total"><td>Total IVA deducible</td><td style="text-align:right">'+fmt(baseSop)+'€</td><td style="text-align:right">'+fmt(totalSop)+'€</td></tr>'+
+  '<tr style="background:var(--priLt)"><td style="font-weight:700;font-size:14px">RESULTADO</td><td></td><td style="text-align:right;font-weight:700;font-size:14px;color:'+(totalRep-totalSop>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(totalRep-totalSop))+'€ '+(totalRep-totalSop>=0?'A INGRESAR':'A DEVOLVER')+'</td></tr>'+
+  '</tbody></table></div>';
+}
+
+// ═══ MODELO 111 — RETENCIONES IRPF ═══
+function renderModelo111(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var trimestres=[{name:'1T',from:'01',to:'03'},{name:'2T',from:'04',to:'06'},{name:'3T',from:'07',to:'09'},{name:'4T',from:'10',to:'12'}];
+  var datos=trimestres.map(function(t){
+    var from=state.ejercicio+'-'+t.from+'-01',to=state.ejercicio+'-'+t.to+'-31';
+    var retTrabajadores=0,retProfesionales=0,baseT=0,baseP=0;
+    all.forEach(function(e){
+      if(e.date>=from&&e.date<=to){e.lines.forEach(function(l){
+        if(l.a==='47510000'){retTrabajadores+=l.h-l.d;retProfesionales+=l.h-l.d;}
+        if(l.a==='64000000')baseT+=l.d-l.h;
+        if(l.a==='62300000')baseP+=l.d-l.h;
+      });}
+    });
+    return {name:t.name,baseT:baseT,retT:retTrabajadores>0?retTrabajadores*0.5:0,baseP:baseP,retP:retProfesionales>0?retProfesionales*0.5:0,total:retTrabajadores};
+  });
+  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 111 — Retenciones IRPF '+state.ejercicio+'</span></div>'+
+  '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Base trabajadores</th><th style="text-align:right">Retenc. trabajo</th><th style="text-align:right">Base profesionales</th><th style="text-align:right">Retenc. profes.</th><th style="text-align:right">Total retenciones</th></tr></thead><tbody>'+
+  datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+fmt(d.baseT)+'€</td><td style="text-align:right">'+fmt(d.retT)+'€</td><td style="text-align:right">'+fmt(d.baseP)+'€</td><td style="text-align:right">'+fmt(d.retP)+'€</td><td style="text-align:right;font-weight:700;color:var(--rd)">'+fmt(d.total)+'€</td></tr>';}).join('')+
+  '<tr class="total"><td>ANUAL</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.baseT;},0))+'€</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.retT;},0))+'€</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.baseP;},0))+'€</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.retP;},0))+'€</td><td style="text-align:right;font-size:14px">'+fmt(datos.reduce(function(s,d){return s+d.total;},0))+'€</td></tr></tbody></table></div>';
+}
+
+// ═══ MODELO 347 — TERCEROS >3.005,06€ ═══
+function renderModelo347(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var terceros={};
+  all.forEach(function(e){
+    e.lines.forEach(function(l){
+      var g=parseInt((l.a||'')[0])||0;
+      if((g===6||g===7)&&(l.d>0||l.h>0)){
+        var key=(e.concept||'Otros').split(/\s+/).slice(0,2).join(' ');
+        if(!terceros[key])terceros[key]={compras:0,ventas:0};
+        if(g===6)terceros[key].compras+=l.d;
+        if(g===7)terceros[key].ventas+=l.h;
+      }
+    });
+  });
+  var lista=Object.entries(terceros).filter(function(x){return (x[1].compras+x[1].ventas)>3005.06;}).sort(function(a,b){return (b[1].compras+b[1].ventas)-(a[1].compras+a[1].ventas);});
+  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 347 — Terceros >3.005,06€ — '+state.ejercicio+'</span><span class="badge badge-b">'+lista.length+' declarables</span></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Operaciones con terceros que superan 3.005,06€ anuales (IVA incluido). Presentación: febrero del año siguiente.</div>'+
+  (lista.length?'<table><thead><tr><th>Tercero</th><th style="text-align:right">Compras</th><th style="text-align:right">Ventas</th><th style="text-align:right">Total</th><th>Trimestres</th></tr></thead><tbody>'+
+  lista.map(function(x,i){var t=x[1].compras+x[1].ventas;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right;color:var(--rd)">'+fmt(x[1].compras)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(x[1].ventas)+'€</td><td style="text-align:right;font-weight:700">'+fmt(t)+'€</td><td style="font-size:10px">1T-4T</td></tr>';}).join('')+
+  '</tbody></table>':'<div class="empty">Ningún tercero supera los 3.005,06€</div>')+'</div>';
+}
+
+// ═══ TAREAS PENDIENTES POR EXPEDIENTE ═══
+var tareas=[];
+function loadTareas(){try{tareas=JSON.parse(localStorage.getItem('cf_tareas_'+(state.company?state.company.id:''))||'[]');}catch(e){tareas=[];}}
+function saveTareas(){try{localStorage.setItem('cf_tareas_'+(state.company?state.company.id:''),JSON.stringify(tareas));}catch(e){}}
+
+function renderTareas(c){
+  loadTareas();loadExpedientes();
+  var hoy=today();
+  var pendientes=tareas.filter(function(t){return !t.done;}).sort(function(a,b){return (a.fecha||'9999').localeCompare(b.fecha||'9999');});
+  var completadas=tareas.filter(function(t){return t.done;});
+  var vencidas=pendientes.filter(function(t){return t.fecha&&t.fecha<hoy;});
+
+  c.innerHTML='<div class="row"><div class="stat"><div class="stat-v" style="color:var(--am)">'+pendientes.length+'</div><div class="stat-l">📋 Pendientes</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+vencidas.length+'</div><div class="stat-l">⚠️ Vencidas</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+completadas.length+'</div><div class="stat-l">✅ Completadas</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>✅ Tareas — '+tareas.length+'</span><button class="btn btn-p" onclick="newTarea()">+ Nueva tarea</button></div>'+
+  (pendientes.length?'<table><thead><tr><th style="width:30px">✓</th><th>Tarea</th><th>Expediente</th><th>Fecha límite</th><th>Prioridad</th><th style="width:30px"></th></tr></thead><tbody>'+
+  pendientes.map(function(t,i){
+    var idx=tareas.indexOf(t);
+    var vencida=t.fecha&&t.fecha<hoy;
+    return '<tr class="'+(i%2?'alt':'')+'" style="'+(vencida?'background:#FDF0F0':'')+'"><td><input type="checkbox" onchange="toggleTarea('+idx+')"></td><td style="font-weight:600;font-size:11px">'+h(t.desc)+'</td><td style="font-size:10px"><span class="badge badge-b">'+h(t.expediente||'—')+'</span></td><td style="font-size:10px;'+(vencida?'color:var(--rd);font-weight:700':'')+'">'+fmtD(t.fecha||'')+(vencida?' ⚠':'')+'</td><td><span class="badge '+(t.prioridad==='alta'?'badge-r':t.prioridad==='media'?'badge-a':'badge-g')+'">'+h(t.prioridad||'normal')+'</span></td><td><button class="abtn" style="color:var(--rd)" onclick="deleteTarea('+idx+')">✕</button></td></tr>';
+  }).join('')+'</tbody></table>':'<div class="empty">Sin tareas pendientes 🎉</div>')+'</div>';
+}
+function newTarea(){
+  loadExpedientes();
+  var desc=prompt('Descripción de la tarea:');if(!desc)return;
+  var fecha=prompt('Fecha límite (YYYY-MM-DD):',today());
+  var prioridad=prompt('Prioridad (alta/media/baja):','media');
+  var expediente=prompt('Código expediente (opcional):','');
+  loadTareas();
+  tareas.push({id:'t_'+uid(),desc:desc,fecha:fecha||'',prioridad:prioridad||'media',expediente:expediente||'',done:false,created:new Date().toISOString()});
+  saveTareas();toast('Tarea creada');render();
+}
+function toggleTarea(idx){loadTareas();if(tareas[idx])tareas[idx].done=!tareas[idx].done;saveTareas();render();}
+function deleteTarea(idx){loadTareas();tareas.splice(idx,1);saveTareas();render();}
+
+// ═══ CALENDARIO DE FECHAS ═══
+function renderCalendario(c){
+  loadExpedientes();loadTareas();
+  var eventos=[];
+  // Fechas judiciales de expedientes
+  expedientes.forEach(function(e){
+    if(e.fDemanda)eventos.push({date:e.fDemanda,tipo:'judicial',desc:'Demanda — '+e.codigo+' '+e.deudor,color:'var(--am)'});
+    if(e.fVista)eventos.push({date:e.fVista,tipo:'judicial',desc:'Vista — '+e.codigo+' '+e.deudor,color:'var(--rd)'});
+    if(e.fSubasta)eventos.push({date:e.fSubasta,tipo:'judicial',desc:'Subasta — '+e.codigo+' '+e.deudor,color:'var(--vi)'});
+  });
+  // Tareas pendientes
+  tareas.filter(function(t){return !t.done&&t.fecha;}).forEach(function(t){
+    eventos.push({date:t.fecha,tipo:'tarea',desc:t.desc+(t.expediente?' ('+t.expediente+')':''),color:'var(--bl)'});
+  });
+  // Fechas fiscales fijas
+  var ej=state.ejercicio;
+  eventos.push({date:ej+'-01-20',tipo:'fiscal',desc:'Modelo 303 4T + Modelo 390',color:'var(--rd)'});
+  eventos.push({date:ej+'-04-20',tipo:'fiscal',desc:'Modelo 303 1T + Modelo 111 1T',color:'var(--rd)'});
+  eventos.push({date:ej+'-07-20',tipo:'fiscal',desc:'Modelo 303 2T + Modelo 111 2T',color:'var(--rd)'});
+  eventos.push({date:ej+'-10-20',tipo:'fiscal',desc:'Modelo 303 3T + Modelo 111 3T',color:'var(--rd)'});
+  eventos.push({date:ej+'-02-28',tipo:'fiscal',desc:'Modelo 347 — Declaración anual terceros',color:'var(--am)'});
+  eventos.push({date:ej+'-07-25',tipo:'fiscal',desc:'Modelo 200 — Impuesto Sociedades',color:'var(--rd)'});
+
+  eventos.sort(function(a,b){return a.date.localeCompare(b.date);});
+  var hoy=today();
+  var proximos=eventos.filter(function(e){return e.date>=hoy;});
+  var pasados=eventos.filter(function(e){return e.date<hoy;});
+
+  c.innerHTML='<div class="card"><div class="card-h"><span>📅 Calendario — '+eventos.length+' eventos</span></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Próximos: '+proximos.length+' · Pasados: '+pasados.length+'</div>'+
+  '<div class="scr" style="max-height:500px"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Estado</th></tr></thead><tbody>'+
+  eventos.map(function(e,i){
+    var pasado=e.date<hoy;var cercano=!pasado&&e.date<=hoy.slice(0,8)+'31';
+    return '<tr class="'+(i%2?'alt':'')+'" style="'+(pasado?'opacity:0.5':'')+(cercano&&!pasado?';background:#FFF8E1':'')+'"><td style="font-size:10px;font-weight:600;white-space:nowrap">'+fmtD(e.date)+'</td><td><span class="badge '+(e.tipo==='fiscal'?'badge-r':e.tipo==='judicial'?'badge-a':'badge-b')+'">'+e.tipo+'</span></td><td style="font-size:11px">'+h(e.desc)+'</td><td>'+(pasado?'<span style="color:var(--txM)">Pasado</span>':cercano?'<span style="color:var(--am);font-weight:600">⚠ Próximo</span>':'<span style="color:var(--ok)">Pendiente</span>')+'</td></tr>';
+  }).join('')+'</tbody></table></div></div>';
 }
 
 // ═══ ANÁLISIS PROVEEDORES ═══
