@@ -48,6 +48,12 @@ tr.total{background:var(--priLt);font-weight:700}
 .badge-b{background:#EBF5FF;color:var(--bl)}.badge-a{background:#FFF8E1;color:var(--am)}
 .badge-v{background:#F3EEFF;color:var(--vi)}.badge-o{background:#FFF3E0;color:var(--or)}
 .empty{text-align:center;padding:40px;color:var(--txM)}
+.dark{--bg:#1a1d21;--wh:#2d3139;--bd:#3d4350;--tx:#e4e6ea;--txS:#a0a5ae;--txM:#6b7280;--priLt:#1a3d2e;--sh:0 1px 3px rgba(0,0,0,0.3)}
+.dark .topbar,.dark .tabs{background:#1e3a2d}
+.dark input,.dark select,.dark textarea{background:#2d3139;color:#e4e6ea;border-color:#3d4350}
+.dark tr.alt{background:#252830}
+.dark th{background:#2d3139}
+@media(max-width:768px){.grid-2{grid-template-columns:1fr!important}.row{flex-direction:column}.stat{min-width:auto}.modal{margin:8px;max-width:calc(100vw - 16px)!important}.ribbon{flex-wrap:wrap}}
 .scr{max-height:500px;overflow-y:auto}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px}
 .modal{background:var(--wh);border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,0.1);width:100%;max-width:760px;max-height:88vh;overflow:auto}
@@ -158,11 +164,11 @@ function checkIntegrity(){
 // TABS & RIBBON
 var TABS=[
 {id:'inicio',label:'Inicio',groups:[{label:'General',items:[{id:'dash',icon:'📊',label:'Dashboard'},{id:'import',icon:'📂',label:'Importar'}]},{label:'Asientos',items:[{id:'newEntry',icon:'➕',label:'Nuevo gasto'},{id:'manualEntry',icon:'✏️',label:'Manual'},{id:'plantillas',icon:'📄',label:'Plantillas'},{id:'borradores',icon:'📝',label:'Borradores'}]}]},
-{id:'diario',label:'Diario',groups:[{label:'Consultas',items:[{id:'journal',icon:'📒',label:'Diario'},{id:'ledger',icon:'📖',label:'Mayor'},{id:'trial',icon:'⚖️',label:'Saldos'}]},{label:'Resultados',items:[{id:'pnl',icon:'📈',label:'PyG'},{id:'balance',icon:'🏛️',label:'Balance'},{id:'libroiva',icon:'📋',label:'Libro IVA'}]},{label:'Facturas',items:[{id:'facturas',icon:'🧾',label:'Facturas'}]}]},
+{id:'diario',label:'Diario',groups:[{label:'Consultas',items:[{id:'journal',icon:'📒',label:'Diario'},{id:'ledger',icon:'📖',label:'Mayor'},{id:'trial',icon:'⚖️',label:'Saldos'}]},{label:'Resultados',items:[{id:'pnl',icon:'📈',label:'PyG'},{id:'balance',icon:'🏛️',label:'Balance'},{id:'libroiva',icon:'📋',label:'Libro IVA'}]},{label:'Facturas',items:[{id:'facturas',icon:'🧾',label:'Facturas'},{id:'cuentasanuales',icon:'📚',label:'CC.AA.'}]}]},
 {id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]},{label:'Posición',items:[{id:'posicion',icon:'🏦',label:'Posición'},{id:'prevision',icon:'📊',label:'Previsión'}]},{label:'Operaciones',items:[{id:'conciliacion',icon:'🔄',label:'Conciliación'},{id:'infconc',icon:'📄',label:'Inf.Conc.'},{id:'inmovilizado',icon:'🏗️',label:'Inmovilizado'}]}]},
 {id:'maestros',label:'Maestros',groups:[{label:'Terceros',items:[{id:'clients',icon:'🏢',label:'Clientes'},{id:'suppliers',icon:'🏭',label:'Proveedores'}]},{label:'Tablas',items:[{id:'banks',icon:'🏦',label:'Bancos'},{id:'articulos',icon:'📦',label:'Artículos'}]},{label:'Análisis',items:[{id:'analisis',icon:'📊',label:'Proveedores'}]}]},
 {id:'npl',label:'NPL',groups:[{label:'Gestión',items:[{id:'expedientes',icon:'📁',label:'Expedientes'},{id:'captacion',icon:'🤝',label:'Captación'}]},{label:'Seguimiento',items:[{id:'tareas',icon:'✅',label:'Tareas'},{id:'calendario',icon:'📅',label:'Calendario'},{id:'cartera',icon:'📊',label:'Cartera'},{id:'rentabilidad',icon:'💰',label:'Rentabilidad'}]}]},
-{id:'fiscal',label:'Fiscal',groups:[{label:'Modelos',items:[{id:'modelo303',icon:'📋',label:'303 IVA'},{id:'modelo390',icon:'📋',label:'390 Anual'},{id:'modelo111',icon:'📋',label:'111 IRPF'},{id:'modelo347',icon:'📋',label:'347 Terceros'},{id:'modelo200',icon:'📋',label:'200 IS'}]},{label:'Informes',items:[{id:'pendientes',icon:'⏳',label:'Pendientes'},{id:'chatcontable',icon:'💬',label:'Chat'}]}]},
+{id:'fiscal',label:'Fiscal',groups:[{label:'Modelos',items:[{id:'modelo303',icon:'📋',label:'303 IVA'},{id:'modelo390',icon:'📋',label:'390 Anual'},{id:'modelo111',icon:'📋',label:'111 IRPF'},{id:'modelo347',icon:'📋',label:'347 Terceros'},{id:'modelo200',icon:'📋',label:'200 IS'},{id:'modelo115',icon:'📋',label:'115 Alq.'}]},{label:'Informes',items:[{id:'pendientes',icon:'⏳',label:'Pendientes'},{id:'chatcontable',icon:'💬',label:'Chat'}]}]},
 {id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'backups',icon:'💾',label:'Backups'},{id:'audit',icon:'📝',label:'Auditoría'},{id:'trash',icon:'🗑️',label:'Papelera'},{id:'admin',icon:'👤',label:'Admin'}]}]}
 ];
 
@@ -201,7 +207,7 @@ function render(){
   var tab=TABS.find(function(t){return t.id===state.tab;})||TABS[0];
   var intBadge=state.integrity?(state.integrity.ok?'<span class="integrity-ok">✓ OK</span>':'<span class="integrity-err">✗ '+state.integrity.errors.length+' errores</span>'):'';
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
-  '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div><span style="font-weight:600">'+h(state.company.name)+'</span><span style="opacity:0.7">— v6.3</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div><span style="font-weight:600">'+h(state.company.name)+'</span><span style="opacity:0.7">— v6.3</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){return '<div class="rgroup"><div class="rgroup-btns">'+g.items.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
@@ -253,6 +259,8 @@ function renderView(){
   else if(v==='cartera')renderCartera(c);
   else if(v==='rentabilidad')renderRentabilidad(c);
   else if(v==='infconc')renderInfConciliacion(c);
+  else if(v==='modelo115')renderModelo115(c);
+  else if(v==='cuentasanuales')renderCuentasAnuales(c);
   else c.innerHTML='<div class="empty"><div style="font-size:40px;margin-bottom:10px">🚧</div>Próximamente</div>';
 }
 
@@ -1907,6 +1915,117 @@ function renderInfConciliacion(c){
     '<tr class="total"><td colspan="2">TOTAL PENDIENTE</td><td style="text-align:right">'+fmt(pend.reduce(function(s,p){return s+p.debe;},0))+'€</td><td style="text-align:right">'+fmt(pend.reduce(function(s,p){return s+p.haber;},0))+'€</td></tr></tbody></table>';
   })()+'</div>';
 }
+
+// ═══ MODELO 115 — RETENCIONES ALQUILERES ═══
+function renderModelo115(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var trimestres=[{name:'1T',from:'01',to:'03'},{name:'2T',from:'04',to:'06'},{name:'3T',from:'07',to:'09'},{name:'4T',from:'10',to:'12'}];
+  var datos=trimestres.map(function(t){
+    var from=state.ejercicio+'-'+t.from+'-01',to=state.ejercicio+'-'+t.to+'-31';
+    var baseAlq=0;
+    all.forEach(function(e){if(e.date>=from&&e.date<=to){e.lines.forEach(function(l){if(l.a==='62100000')baseAlq+=l.d-l.h;});}});
+    var retencion=Math.round(baseAlq*0.19*100)/100;
+    return {name:t.name,base:baseAlq,retencion:retencion};
+  });
+  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 115 — Retenciones alquileres '+state.ejercicio+'</span></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Retención 19% sobre alquileres de locales de negocio. Presentación trimestral.</div>'+
+  '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Nº perceptores</th><th style="text-align:right">Base retenciones</th><th style="text-align:right">Retenciones (19%)</th><th style="text-align:right">A ingresar</th></tr></thead><tbody>'+
+  datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+(d.base>0?1:0)+'</td><td style="text-align:right">'+fmt(d.base)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.retencion)+'€</td><td style="text-align:right;font-weight:700">'+fmt(d.retencion)+'€</td></tr>';}).join('')+
+  '<tr class="total"><td>ANUAL</td><td></td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.base;},0))+'€</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.retencion;},0))+'€</td><td style="text-align:right;font-size:14px">'+fmt(datos.reduce(function(s,d){return s+d.retencion;},0))+'€</td></tr></tbody></table></div>';
+}
+
+// ═══ CUENTAS ANUALES ═══
+function renderCuentasAnuales(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var s={};all.forEach(function(e){e.lines.forEach(function(l){if(!s[l.a])s[l.a]=0;s[l.a]+=l.d-l.h;});});
+  var ingresos=0,gastos=0,activo=0,pasivo=0;
+  Object.entries(s).forEach(function(x){var g=parseInt(x[0][0])||0;
+    if(g===7)ingresos+=(-x[1]);if(g===6)gastos+=x[1];
+    if(g>=1&&g<=5){if(x[1]>0)activo+=x[1];else pasivo+=(-x[1]);}
+  });
+  var resultado=ingresos-gastos;
+  c.innerHTML='<div class="card"><div class="card-h"><span>📚 Cuentas Anuales — Registro Mercantil '+state.ejercicio+'</span></div><div class="card-b">'+
+  '<div style="font-size:12px;color:var(--txM);margin-bottom:14px">Las Cuentas Anuales comprenden el Balance, la Cuenta de PyG y la Memoria. Para PYMES se puede presentar en formato abreviado.</div>'+
+  '<div class="grid-2">'+
+  '<div class="card"><div class="card-h" style="color:var(--bl)">Balance de situación</div><div class="card-b">'+
+  '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><div><div class="lbl">ACTIVO</div><div style="font-size:18px;font-weight:700;color:var(--bl)">'+fmt(activo+resultado)+'€</div></div><div style="text-align:right"><div class="lbl">PASIVO + PN</div><div style="font-size:18px;font-weight:700;color:var(--vi)">'+fmt(pasivo+resultado)+'€</div></div></div>'+
+  '<button class="btn btn-p" style="width:100%" onclick="setView(\'balance\')">Ver Balance completo</button></div></div>'+
+  '<div class="card"><div class="card-h" style="color:var(--ok)">Cuenta de PyG</div><div class="card-b">'+
+  '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><div><div class="lbl">Ingresos</div><div style="font-size:18px;font-weight:700;color:var(--ok)">'+fmt(ingresos)+'€</div></div><div style="text-align:right"><div class="lbl">Resultado</div><div style="font-size:18px;font-weight:700;color:'+(resultado>=0?'var(--ok)':'var(--rd)')+'">'+fmt(resultado)+'€</div></div></div>'+
+  '<button class="btn btn-p" style="width:100%" onclick="setView(\'pnl\')">Ver PyG completo</button></div></div></div>'+
+  '<div class="card" style="margin-top:8px"><div class="card-h">📝 Memoria abreviada</div><div class="card-b" style="font-size:12px">'+
+  '<p><strong>1. Actividad de la empresa:</strong> '+h(state.company?state.company.name:'')+' — Inversión en activos non-performing (NPL)</p>'+
+  '<p><strong>2. Bases de presentación:</strong> Cuentas anuales formuladas de acuerdo con el PGC 2008 para PYMES.</p>'+
+  '<p><strong>3. Normas de valoración:</strong> Criterio del precio de adquisición. Amortización lineal según vida útil estimada.</p>'+
+  '<p><strong>4. Personal:</strong> Plantilla media: ver nóminas contabilizadas.</p>'+
+  '<p><strong>5. Resultado del ejercicio:</strong> '+(resultado>=0?'Beneficio':'Pérdida')+' de '+fmt(Math.abs(resultado))+'€</p>'+
+  '<div style="margin-top:12px"><button class="btn btn-d" onclick="exportCCAA()">📄 Descargar resumen</button></div></div></div></div></div>';
+}
+function exportCCAA(){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var s={};all.forEach(function(e){e.lines.forEach(function(l){if(!s[l.a])s[l.a]=0;s[l.a]+=l.d-l.h;});});
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var rows=[['CUENTAS ANUALES '+state.ejercicio+' — '+state.company.name],[''],['BALANCE DE SITUACIÓN'],['Cuenta','Nombre','Saldo']];
+  Object.entries(s).sort(function(a,b){return a[0].localeCompare(b[0]);}).forEach(function(x){if(Math.abs(x[1])>0.01)rows.push([x[0],am[x[0]]?am[x[0]].name:'',x[1]]);});
+  rows.push([''],['CUENTA DE PÉRDIDAS Y GANANCIAS']);
+  var ingresos=0,gastos=0;
+  Object.entries(s).forEach(function(x){var g=parseInt(x[0][0])||0;if(g===7){ingresos+=(-x[1]);rows.push([x[0],am[x[0]]?am[x[0]].name:'',-x[1]]);}});
+  Object.entries(s).forEach(function(x){var g=parseInt(x[0][0])||0;if(g===6){gastos+=x[1];rows.push([x[0],am[x[0]]?am[x[0]].name:'',-x[1]]);}});
+  rows.push(['','RESULTADO',ingresos-gastos]);
+  exportExcel(rows,['','',''],'cuentas_anuales_'+state.ejercicio);
+}
+
+// ═══ BÚSQUEDA GLOBAL ═══
+function globalSearch(query){
+  if(!query||query.length<2)return;
+  var q=query.toUpperCase();var results=[];
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  // Search entries
+  state.entries.forEach(function(e){
+    if((e.concept||'').toUpperCase().indexOf(q)>=0||e.date.indexOf(query)>=0){
+      var total=e.lines.reduce(function(s,l){return s+l.d;},0);
+      results.push({type:'asiento',date:e.date,text:e.concept,val:total,action:"setTab('diario');setView('journal');"});
+    }
+  });
+  // Search accounts
+  state.accounts.forEach(function(a){
+    if(a.code.indexOf(query)>=0||a.name.toUpperCase().indexOf(q)>=0){
+      results.push({type:'cuenta',text:a.code+' '+a.name,action:"setTab('config');setView('accounts');"});
+    }
+  });
+  // Search masters
+  loadMasters();
+  masters.client.forEach(function(m){if((m.name||'').toUpperCase().indexOf(q)>=0)results.push({type:'cliente',text:m.name,action:"setTab('maestros');setView('clients');"});});
+  masters.supplier.forEach(function(m){if((m.name||'').toUpperCase().indexOf(q)>=0)results.push({type:'proveedor',text:m.name,action:"setTab('maestros');setView('suppliers');"});});
+  // Show results in modal
+  if(!results.length){toast('Sin resultados para "'+query+'"');return;}
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='searchModal';bg.onclick=function(ev){if(ev.target===bg)bg.remove();};
+  bg.innerHTML='<div class="modal" style="max-width:600px"><div class="card-h"><span>🔍 Resultados: "'+h(query)+'" — '+results.length+'</span><button class="btn btn-d" onclick="$(\'searchModal\').remove()">✕</button></div><div class="scr" style="max-height:400px"><table><tbody>'+
+  results.slice(0,20).map(function(r,i){return '<tr class="'+(i%2?'alt':'')+'" style="cursor:pointer" onclick="$(\'searchModal\').remove();'+r.action+'"><td><span class="badge '+(r.type==='asiento'?'badge-g':r.type==='cuenta'?'badge-b':r.type==='cliente'?'badge-a':'badge-v')+'">'+r.type+'</span></td><td style="font-size:11px">'+(r.date?fmtD(r.date)+' — ':'')+h(r.text)+'</td><td style="text-align:right;font-size:11px">'+(r.val?fmt(r.val)+'€':'')+'</td></tr>';}).join('')+
+  '</tbody></table></div></div>';
+  document.body.appendChild(bg);
+}
+
+// ═══ MODO OSCURO ═══
+function toggleDarkMode(){
+  document.body.classList.toggle('dark');
+  try{localStorage.setItem('cf_dark',document.body.classList.contains('dark')?'1':'0');}catch(e){}
+}
+// Load dark mode preference
+try{if(localStorage.getItem('cf_dark')==='1')document.body.classList.add('dark');}catch(e){}
+
+// ═══ ATAJOS DE TECLADO ═══
+document.addEventListener('keydown',function(e){
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')return;
+  if(e.ctrlKey||e.metaKey){
+    if(e.key==='b'||e.key==='B'){e.preventDefault();doBackup();}
+    if(e.key==='n'||e.key==='N'){e.preventDefault();showAssistant();}
+    if(e.key==='m'||e.key==='M'){e.preventDefault();showEntryModal();}
+    if(e.key==='k'||e.key==='K'){e.preventDefault();var sb=document.querySelector('[placeholder="🔍 Buscar..."]');if(sb)sb.focus();}
+  }
+  if(e.key==='F2'){e.preventDefault();toggleDarkMode();}
+});
 
 // ═══ ANÁLISIS PROVEEDORES ═══
 function renderAnalisisProveedores(c){
