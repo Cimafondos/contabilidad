@@ -508,26 +508,60 @@ function handleAssistFile(file){
   reader.onload=function(ev){
     var dataUrl=ev.target.result;
     if(isImg){
-      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">📎</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB</div></div></div><img src="'+dataUrl+'" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid var(--bd);display:block;margin:0 auto"><div style="margin-top:8px;text-align:center;font-size:10px;color:var(--ok);font-weight:600">✓ Imagen cargada</div></div>';
+      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">📎</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB</div></div></div><img src="'+dataUrl+'" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid var(--bd);display:block;margin:0 auto"><div id="ocrStatus" style="margin-top:8px;text-align:center;font-size:11px;color:var(--pri);font-weight:600">🔍 Leyendo factura...</div></div>';
     }else{
-      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px 12px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:24px">📄</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB — Documento cargado</div></div></div></div>';
+      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px 12px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:24px">📄</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB</div></div></div><div id="ocrStatus" style="margin-top:8px;font-size:11px;color:var(--pri);font-weight:600">🔍 Leyendo documento...</div></div>';
     }
-    // Extract amount from filename only if it looks like a price (has decimals)
-    var numMatch=file.name.match(/(\d+[.,]\d{2})/);
-    if(numMatch){var amt=parseFloat(numMatch[1].replace(',','.'));if(amt>0&&amt<100000)$('aAmt').value=amt;}
-    // Extract concept from filename - remove extension, timestamps, long numbers
-    var concept=file.name.replace(/\.[^.]+$/,'').replace(/[_\-]/g,' ').replace(/\d{5,}/g,'').replace(/\(\d+\)/g,'').replace(/\s+/g,' ').trim();
-    if(concept&&concept.length>2)$('aDesc').value=concept;
-    // Only auto-propose if we found a real concept AND amount
-    if($('aDesc').value&&$('aAmt').value&&parseFloat($('aAmt').value)>0){
-      toast('Datos extraídos del fichero. Revisa y pulsa Contabilizar.','ok');
-      setTimeout(function(){proposeEntry();},200);
-    }else{
-      toast('Imagen cargada. Escribe qué es: "comida restaurante 35 euros pagado Pepe"','ok');
-      $('aDesc').focus();
-    }
+    // Try OCR via Claude API
+    var base64=dataUrl.split(',')[1];
+    var mediaType=file.type||'image/jpeg';
+    fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
+          {type:'text',text:'Lee esta imagen de factura/ticket. Responde SOLO con JSON puro sin backticks:\n{"proveedor":"nombre","total":0.00,"fecha":"YYYY-MM-DD","concepto":"descripcion breve","iva_pct":21}\nSi no ves algo pon null. Total con IVA incluido.'}
+        ]}]
+      })
+    }).then(function(r){return r.json();}).then(function(data){
+      var txt=(data.content||[]).map(function(c2){return c2.text||'';}).join('');
+      var clean=txt.replace(/```json|```/g,'').trim();
+      try{
+        var ocr=JSON.parse(clean);
+        var el=$('ocrStatus');
+        if(el){
+          var parts=[];
+          if(ocr.proveedor)parts.push('<b>'+h(ocr.proveedor)+'</b>');
+          if(ocr.total)parts.push('Total: '+fmt(ocr.total)+'€');
+          if(ocr.fecha)parts.push(fmtD(ocr.fecha));
+          el.innerHTML='<div style="background:#E8F8ED;border-radius:4px;padding:6px 8px;text-align:left;font-size:10px;color:var(--ok)">✓ '+parts.join(' · ')+'</div>';
+        }
+        if(ocr.proveedor)$('aDesc').value=(ocr.proveedor||'')+(ocr.concepto?' '+ocr.concepto:'');
+        if(ocr.total&&ocr.total>0)$('aAmt').value=ocr.total;
+        if(ocr.fecha)$('aDate').value=ocr.fecha;
+        if(ocr.iva_pct===10)$('aIva').value='reducido';
+        else if(ocr.iva_pct===4)$('aIva').value='super';
+        else if(ocr.iva_pct===0)$('aIva').value='exento';
+        // Auto match rule
+        if($('aDesc').value)extractFromDesc();
+      }catch(e){
+        var el2=$('ocrStatus');if(el2)el2.innerHTML='<span style="color:var(--am)">⚠ No se pudieron leer los datos — escribe la descripción</span>';
+        fallbackFileExtract(file);
+      }
+    }).catch(function(e){
+      var el3=$('ocrStatus');if(el3)el3.innerHTML='<span style="color:var(--am)">⚠ OCR no disponible — escribe la descripción</span>';
+      fallbackFileExtract(file);
+    });
   };
   reader.readAsDataURL(file);
+}
+function fallbackFileExtract(file){
+  var numMatch=file.name.match(/(\d+[.,]\d{2})/);
+  if(numMatch){var amt=parseFloat(numMatch[1].replace(',','.'));if(amt>0&&amt<100000)$('aAmt').value=amt;}
+  var concept=file.name.replace(/\.[^.]+$/,'').replace(/[_\-]/g,' ').replace(/\d{5,}/g,'').replace(/\(\d+\)/g,'').replace(/\s+/g,' ').trim();
+  if(concept&&concept.length>2&&!$('aDesc').value)$('aDesc').value=concept;
+  $('aDesc').focus();
 }
 
 // ═══ VOICE INPUT ═══
