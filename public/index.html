@@ -436,8 +436,7 @@ function handleAssistFile(file){
 
 function proposeEntry(){
   var desc=$('aDesc').value;var amt=parseFloat($('aAmt').value)||0;var ivaType=$('aIva').value;var date=$('aDate').value;var paidBy=$('aPaidBy').value;
-  if(!desc&&!amt){toast('Escribe descripción o importe','error');return;}
-  if(!amt||amt<=0){toast('⚠ Importe a 0 — rellena el campo Importe','error');return;}
+  if(!desc){toast('Escribe una descripción','error');return;}
   var st=desc.toUpperCase();var acct='62900000',rn='Otros servicios',riv=null;
   for(var i=0;i<state.rules.length;i++){var r=state.rules[i];try{if(new RegExp(r.p,'i').test(st)){acct=r.a;rn=r.d;riv=r.iv;break;}}catch(e){}}
   var dp=paidBy;
