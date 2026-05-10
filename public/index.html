@@ -312,7 +312,7 @@ function renderJournal(c){
   var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var td=0,th=0;all.forEach(function(e){e.lines.forEach(function(l){td+=l.d;th+=l.h;});});
   c.innerHTML=dateFilterHTML()+'<div class="card"><div class="card-h"><span>📒 Diario — '+all.length+' asientos</span><div style="display:flex;gap:4px"><button class="btn btn-d" style="font-size:10px" onclick="exportJournalExcel()">📊 Excel</button><button class="btn btn-d" style="font-size:10px" onclick="exportJournalPDF()">📄 PDF</button></div></div>'+
-  (all.length?'<div class="scr"><table><thead><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="width:90px">Acc.</th></tr></thead><tbody>'+
+  (all.length?'<table><thead><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="width:90px">Acc.</th></tr></thead><tbody><tr class="total"><td colspan="4">TOTALES ('+all.length+' asientos)</td><td style="text-align:right">'+fmt(td)+'</td><td style="text-align:right">'+fmt(th)+'</td><td><span class="badge '+(Math.abs(td-th)<1?'badge-g':'badge-r')+'">'+(Math.abs(td-th)<1?'✓':'✗')+'</span></td></tr></tbody></table><div class="scr"><table><thead><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="width:90px">Acc.</th></tr></thead><tbody>'+
   all.map(function(e,i){return e.lines.map(function(l,li){return '<tr class="'+(i%2?'alt':'')+'" style="'+(li===0?'border-top:2px solid var(--bd)':'')+'">'+
   (li===0?'<td style="font-weight:600;color:var(--txM)" rowspan="'+e.lines.length+'">'+(i+1)+'</td><td style="font-size:10px" rowspan="'+e.lines.length+'">'+fmtD(e.date)+'</td>':'')+
   '<td><span class="acct">'+l.a+'</span> <span style="color:var(--txM);font-size:10px">'+(am[l.a]?am[l.a].name:'')+'</span></td>'+
@@ -321,7 +321,7 @@ function renderJournal(c){
   '<td style="text-align:right" class="amt-neg">'+(l.h>0?fmt(l.h):'')+'</td>'+
   (li===0?'<td rowspan="'+e.lines.length+'" style="white-space:nowrap"><button class="abtn" onclick="editEntry(\''+e.id+'\')" title="Editar">✏️</button> <button class="abtn" onclick="dupEntry(\''+e.id+'\')" title="Duplicar">📋</button> <button class="abtn" style="color:var(--rd)" onclick="deleteEntry(\''+e.id+'\')" title="Borrar">🗑</button></td>':'')+
   '</tr>';}).join('');}).join('')+
-  '<tr class="total"><td colspan="4">TOTALES</td><td style="text-align:right">'+fmt(td)+'</td><td style="text-align:right">'+fmt(th)+'</td><td></td></tr></tbody></table></div>':'<div class="empty">Sin asientos en este periodo</div>')+'</div>';
+  '</tbody></table></div>':'<div class="empty">Sin asientos en este periodo</div>')+'</div>';
 }
 function exportJournalExcel(){
   var all=filteredEntries().sort(function(a,b){return a.date.localeCompare(b.date);});var am={};state.accounts.forEach(function(a){am[a.code]=a;});
@@ -453,18 +453,19 @@ function handleAssistFile(file){
     }else{
       info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px 12px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:24px">📄</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB — Documento cargado</div></div></div></div>';
     }
-    // Extract amount from filename (e.g. "factura_120.50.jpg" or "ticket_96,80.png")
+    // Extract amount from filename only if it looks like a price (has decimals)
     var numMatch=file.name.match(/(\d+[.,]\d{2})/);
-    if(numMatch){var amt=parseFloat(numMatch[1].replace(',','.'));if(amt>0)$('aAmt').value=amt;}
-    // Extract concept from filename cleaned
-    var concept=file.name.replace(/\.[^.]+$/,'').replace(/[_\-]/g,' ').replace(/\d{8,}/g,'').replace(/\s+/g,' ').trim();
-    if(concept)$('aDesc').value=concept;
-    // Auto-propose if we have a description
-    if($('aDesc').value){
-      toast('Documento cargado. Revisa la propuesta y pulsa Contabilizar.','ok');
+    if(numMatch){var amt=parseFloat(numMatch[1].replace(',','.'));if(amt>0&&amt<100000)$('aAmt').value=amt;}
+    // Extract concept from filename - remove extension, timestamps, long numbers
+    var concept=file.name.replace(/\.[^.]+$/,'').replace(/[_\-]/g,' ').replace(/\d{5,}/g,'').replace(/\(\d+\)/g,'').replace(/\s+/g,' ').trim();
+    if(concept&&concept.length>2)$('aDesc').value=concept;
+    // Only auto-propose if we found a real concept AND amount
+    if($('aDesc').value&&$('aAmt').value&&parseFloat($('aAmt').value)>0){
+      toast('Datos extraídos del fichero. Revisa y pulsa Contabilizar.','ok');
       setTimeout(function(){proposeEntry();},200);
     }else{
-      toast('Documento cargado. Escribe descripción y pulsa Proponer.','ok');
+      toast('Imagen cargada. Escribe qué es: "comida restaurante 35 euros pagado Pepe"','ok');
+      $('aDesc').focus();
     }
   };
   reader.readAsDataURL(file);
@@ -499,8 +500,8 @@ function proposeEntry(){
     if(p2){amt=parseFloat(p2[1].replace(',','.'));if(amt>0)$('aAmt').value=amt;}
   }
   if(!amt){
-    var p3=desc.match(/(\d{2,})/);
-    if(p3){var v3=parseFloat(p3[1]);if(v3>=5){amt=v3;$('aAmt').value=amt;}}
+    var p3=desc.match(/(\d{2,5})(?!\d)/);
+    if(p3){var v3=parseFloat(p3[1]);if(v3>=5&&v3<100000){amt=v3;$('aAmt').value=amt;}}
   }
   // 2. Extract payer: "pagado Pepe", "paga Santi", mention of socio name
   if(!paidBy){
@@ -585,9 +586,9 @@ function renderTrial(c){
   var bals=Object.entries(m).map(function(x){var code=x[0],v=x[1];return {code:code,name:am[code]?am[code].name:code,sd:v.d,sh:v.h,sdr:Math.max(v.d-v.h,0),scr:Math.max(v.h-v.d,0)};}).sort(function(a,b){return a.code.localeCompare(b.code);});
   var t=bals.reduce(function(a,b){return {sd:a.sd+b.sd,sh:a.sh+b.sh,sdr:a.sdr+b.sdr,scr:a.scr+b.scr};},{sd:0,sh:0,sdr:0,scr:0});
   c.innerHTML=dateFilterHTML()+'<div class="card"><div class="card-h"><span>⚖️ Sumas y saldos — '+bals.length+' cuentas</span><div style="display:flex;gap:8px;align-items:center"><span class="badge '+(Math.abs(t.sdr-t.scr)<1?'badge-g':'badge-r')+'">'+(Math.abs(t.sdr-t.scr)<1?'✓ Cuadrado':'✗ Descuadre')+'</span><button class="btn btn-d" style="font-size:10px" onclick="exportTrialExcel()">📊</button></div></div>'+
-  (bals.length?'<div class="scr"><table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody>'+
+  (bals.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody><tr class="total"><td colspan="2">TOTALES ('+bals.length+' cuentas)</td><td style="text-align:right">'+fmt(t.sd)+'</td><td style="text-align:right">'+fmt(t.sh)+'</td><td style="text-align:right">'+fmt(t.sdr)+'</td><td style="text-align:right">'+fmt(t.scr)+'</td></tr></tbody></table><div class="scr"><table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody>'+
   bals.map(function(b,i){return '<tr class="'+(i%2?'alt':'')+'"><td class="acct">'+b.code+'</td><td>'+h(b.name)+'</td><td style="text-align:right">'+fmt(b.sd)+'</td><td style="text-align:right">'+fmt(b.sh)+'</td><td style="text-align:right;font-weight:600">'+(b.sdr>0?fmt(b.sdr):'—')+'</td><td style="text-align:right;font-weight:600">'+(b.scr>0?fmt(b.scr):'—')+'</td></tr>';}).join('')+
-  '<tr class="total"><td colspan="2">TOTALES</td><td style="text-align:right">'+fmt(t.sd)+'</td><td style="text-align:right">'+fmt(t.sh)+'</td><td style="text-align:right">'+fmt(t.sdr)+'</td><td style="text-align:right">'+fmt(t.scr)+'</td></tr></tbody></table></div>':'<div class="empty">Sin datos</div>')+'</div>';
+  '</tbody></table></div>':'<div class="empty">Sin datos</div>')+'</div>';
 }
 function exportTrialExcel(){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});var m={};all.forEach(function(e){e.lines.forEach(function(l){if(!m[l.a])m[l.a]={d:0,h:0};m[l.a].d+=l.d;m[l.a].h+=l.h;});});
