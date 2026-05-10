@@ -488,17 +488,21 @@ function toggleVoice(){
 function proposeEntry(){
   var desc=$('aDesc').value;var amt=parseFloat($('aAmt').value)||0;var ivaType=$('aIva').value;var date=$('aDate').value;var paidBy=$('aPaidBy').value;
   if(!desc){toast('Escribe una descripción','error');return;}
+  // Try to extract amount from description if not set
+  if(!amt){var numMatch=desc.match(/(\d+[.,]?\d*)\s*(euro|€|eur)/i);if(numMatch){amt=parseFloat(numMatch[1].replace(',','.'));if(amt>0)$('aAmt').value=amt;}}
+  if(!amt){var numMatch2=desc.match(/(\d+[.,]\d{2})/);if(numMatch2){amt=parseFloat(numMatch2[1].replace(',','.'));if(amt>0)$('aAmt').value=amt;}}
+  if(!amt||amt<=0){toast('⚠ Pon el importe total (con IVA incluido)','error');$('aAmt').focus();return;}
   var st=desc.toUpperCase();var acct='62900000',rn='Otros servicios',riv=null;
   for(var i=0;i<state.rules.length;i++){var r=state.rules[i];try{if(new RegExp(r.p,'i').test(st)){acct=r.a;rn=r.d;riv=r.iv;break;}}catch(e){}}
   var dp=paidBy;
   if(!dp){var txt=desc.toLowerCase();for(var j=0;j<SOCIOS.length;j++){if(txt.indexOf(SOCIOS[j].n.toLowerCase())>=0){dp=SOCIOS[j].a;break;}}}
-  var eIva=riv==='nodeducible'?'nodeducible':ivaType;var ic=IVA.find(function(x){return x.id===eIva;});
+  var eIva=riv||ivaType;var ic=IVA.find(function(x){return x.id===eIva;});
   var ded=ic&&ic.r!==null&&ic.r>0&&eIva!=='nodeducible';
   var base=amt,iva=0;if(ded&&amt>0){base=Math.round((amt/(1+ic.r))*100)/100;iva=Math.round((amt-base)*100)/100;}
-  var cp=dp||'57200000';var ls=[{a:acct,d:ded?base:amt,h:0}];if(ded)ls.push({a:'47200000',d:iva,h:0});ls.push({a:cp,d:0,h:amt||base});
+  var cp=dp||'57200000';var ls=[{a:acct,d:ded?base:amt,h:0}];if(ded)ls.push({a:'47200000',d:iva,h:0});ls.push({a:cp,d:0,h:amt});
   var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var payer=dp?SOCIOS.find(function(s){return s.a===dp;}):null;
-  $('aProposal').innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:12px"><div class="card-h" style="background:var(--priLt);color:var(--pri)">Propuesta — '+h(rn)+'</div><div class="card-b"><div style="display:flex;gap:14px;margin-bottom:10px;font-size:12px;flex-wrap:wrap"><div>Fecha: <strong>'+fmtD(date)+'</strong></div><div>Base: <strong>'+fmt(ded?base:amt)+'€</strong></div>'+(iva>0?'<div>IVA: <strong>'+fmt(iva)+'€</strong></div>':'')+'<div>Total: <strong>'+fmt(amt)+'€</strong></div><div>Paga: <strong style="color:'+(dp?'var(--or)':'var(--bl)')+'">'+(payer?payer.n:'Banco')+'</strong></div></div>'+
+  $('aProposal').innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:12px"><div class="card-h" style="background:var(--priLt);color:var(--pri)">Propuesta — '+h(rn)+'</div><div class="card-b"><div style="display:flex;gap:14px;margin-bottom:10px;font-size:12px;flex-wrap:wrap"><div>Fecha: <strong>'+fmtD(date)+'</strong></div><div>Base: <strong>'+fmt(base)+'€</strong></div>'+(iva>0?'<div>IVA '+ic.l+': <strong>'+fmt(iva)+'€</strong></div>':'')+'<div>Total: <strong>'+fmt(amt)+'€</strong></div><div>Paga: <strong style="color:'+(dp?'var(--or)':'var(--bl)')+'">'+(payer?payer.n:'Banco')+'</strong></div></div>'+
   '<table><thead><tr><th>Cuenta</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th></tr></thead><tbody>'+ls.map(function(l){return '<tr><td><span class="acct">'+l.a+'</span> <span style="color:var(--txM)">'+(am[l.a]?am[l.a].name:'')+'</span></td><td style="text-align:right" class="amt-pos">'+(l.d>0?fmt(l.d):'')+'</td><td style="text-align:right" class="amt-neg">'+(l.h>0?fmt(l.h):'')+'</td></tr>';}).join('')+'</tbody></table>'+
   '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-d" onclick="$(\'aProposal\').innerHTML=\'\'">✗</button><button class="btn btn-p" onclick="saveAssistEntry()">✓ Contabilizar</button></div></div></div>';
   window._assistData={date:date,concept:desc,lines:ls};
@@ -1479,11 +1483,14 @@ async function loadDemo(){
     {code:'60000000',name:'Compra mercaderías',g:6,t:'G'},
     {code:'62100000',name:'Arrendamientos y cánones',g:6,t:'G'},
     {code:'62300000',name:'Servicios profesionales independientes',g:6,t:'G'},
+    {code:'62400000',name:'Transportes',g:6,t:'G'},
+    {code:'62500000',name:'Primas de seguros',g:6,t:'G'},
     {code:'62600000',name:'Servicios bancarios y similares',g:6,t:'G'},
     {code:'62800000',name:'Suministros',g:6,t:'G'},
     {code:'62900000',name:'Otros servicios',g:6,t:'G'},
     {code:'64000000',name:'Sueldos y salarios',g:6,t:'G'},
     {code:'64200000',name:'Seg Social a cargo empresa',g:6,t:'G'},
+    {code:'66200000',name:'Intereses de deudas',g:6,t:'G'},
     {code:'70000000',name:'Venta de mercaderías',g:7,t:'I'},
     {code:'70500000',name:'Prestaciones de servicios',g:7,t:'I'}
   ];
@@ -1584,8 +1591,27 @@ async function loadDemo(){
       {a:'47700000',d:903,h:0},{a:'47200000',d:0,h:581.70},{a:'47500000',d:0,h:321.30}]}
   ];
   for(var j=0;j<de.length;j++){await api('/api/entries/'+cid,{method:'POST',body:de[j]});}
+  // Demo rules
+  var demoRules=[
+    {id:'r_d1',p:'ALQUILER|ARRENDAMIENTO|RENTA',a:'62100000',d:'Alquiler',pr:1,iv:'general'},
+    {id:'r_d2',p:'SEGURO|MAPFRE|ALLIANZ|AXA',a:'62500000',d:'Seguros',pr:1,iv:'exento'},
+    {id:'r_d3',p:'NOMINA|SALARIO|SUELDO',a:'64000000',d:'Nóminas',pr:1,iv:'na'},
+    {id:'r_d4',p:'SEGURIDAD SOCIAL|TGSS',a:'64200000',d:'Seg. Social',pr:1,iv:'na'},
+    {id:'r_d5',p:'COMISION|COMISIÓN|MANTENIMIENTO CTA',a:'62600000',d:'Comisiones banco',pr:2,iv:'exento'},
+    {id:'r_d6',p:'INTERES|INTERÉS|PRÉSTAMO',a:'66200000',d:'Intereses',pr:2,iv:'exento'},
+    {id:'r_d7',p:'ENDESA|IBERDROLA|NATURGY|LUZ|ELECTRICIDAD',a:'62800000',d:'Suministros',pr:1,iv:'general'},
+    {id:'r_d8',p:'VODAFONE|MOVISTAR|ORANGE|TELEFON|INTERNET',a:'62900000',d:'Comunicaciones',pr:1,iv:'general'},
+    {id:'r_d9',p:'HACIENDA|AEAT|MODELO',a:'47500000',d:'Hacienda',pr:1,iv:'na'},
+    {id:'r_d10',p:'NOTARI|REGISTRO|ESCRITURA',a:'62300000',d:'Notaría/Registro',pr:1,iv:'general'},
+    {id:'r_d11',p:'ABOGADO|PROCURADOR|LETRADO',a:'62300000',d:'Abogado/Procurador',pr:1,iv:'general'},
+    {id:'r_d12',p:'RESTAURANTE|COMIDA|CENA|BAR|CAFETERIA|CATERING',a:'62900000',d:'Restaurante/Comida',pr:1,iv:'reducido'},
+    {id:'r_d13',p:'GASOLINA|GASOIL|CARBURANTE|REPSOL|CEPSA|BP',a:'62900000',d:'Carburante',pr:1,iv:'general'},
+    {id:'r_d14',p:'PARKING|APARCAMIENTO|GARAJE',a:'62900000',d:'Parking',pr:1,iv:'general'},
+    {id:'r_d15',p:'TAXI|UBER|CABIFY|TRANSPORTE',a:'62400000',d:'Transporte',pr:1,iv:'reducido'}
+  ];
+  for(var k=0;k<demoRules.length;k++){await api('/api/rules/'+cid,{method:'POST',body:demoRules[k]});}
   await loadData();checkIntegrity();state.ejercicio=2026;initDates();
-  toast('30 asientos demo cargados (mayo 2026)');render();
+  toast('30 asientos demo + 15 reglas cargados');render();
 }
 
 // ═══ PATCH: Add map to tabs and renderView ═══
