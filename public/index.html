@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cimafondos — Contabilidad</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2300854D'/><text x='50%' y='55%' text-anchor='middle' dominant-baseline='middle' font-size='16' font-weight='800' fill='white' font-family='sans-serif'>CF</text></svg>">
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #F0F2F5; }
+    #loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; flex-direction: column; gap: 12px; }
+    #loading .logo { width: 52px; height: 52px; border-radius: 12px; background: #00854D; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: #fff; }
+    #loading .text { font-size: 13px; color: #8C939E; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div id="loading">
+      <div class="logo">CF</div>
+      <div class="text">Cargando Cimafondos...</div>
+    </div>
+  </div>
+  <script>
+    // This will be replaced with the React build in production
+    // For now, redirect to the app
+    document.getElementById('loading').innerHTML = '<div class="logo">CF</div><div class="text">Servidor activo — Frontend pendiente de configurar</div>';
+  </script>
+</body>
+</html>
