@@ -437,7 +437,7 @@ function handleAssistFile(file){
 function proposeEntry(){
   var desc=$('aDesc').value;var amt=parseFloat($('aAmt').value)||0;var ivaType=$('aIva').value;var date=$('aDate').value;var paidBy=$('aPaidBy').value;
   if(!desc&&!amt){toast('Escribe descripción o importe','error');return;}
-  if(!amt||amt<=0){toast('Introduce el importe de la factura/ticket','error');return;}
+  if(!amt||amt<=0){toast('⚠ Importe a 0 — rellena el campo Importe','error');return;}
   var st=desc.toUpperCase();var acct='62900000',rn='Otros servicios',riv=null;
   for(var i=0;i<state.rules.length;i++){var r=state.rules[i];try{if(new RegExp(r.p,'i').test(st)){acct=r.a;rn=r.d;riv=r.iv;break;}}catch(e){}}
   var dp=paidBy;
@@ -502,22 +502,75 @@ function exportTrialExcel(){
   exportExcel(rows,['Cuenta','Nombre','Debe','Haber','Sdo.D','Sdo.A'],'sumas_saldos');
 }
 
-// ═══ P&L — FIXED signs ═══
+// ═══ P&L — PGC 2008 abreviado ═══
 function renderPnL(c){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  var g={},ing={};
-  all.forEach(function(e){e.lines.forEach(function(l){var a=am[l.a];var gr=a?a.g:parseInt((l.a||'')[0])||0;
-  if(gr===6){if(!g[l.a])g[l.a]={name:a?a.name:l.a,t:0};g[l.a].t+=l.d-l.h;}
-  if(gr===7){if(!ing[l.a])ing[l.a]={name:a?a.name:l.a,t:0};ing[l.a].t+=l.h-l.d;}});});
-  // Only positive gastos — negative means wrong classification
-  var tg=0;Object.keys(g).forEach(function(k){if(g[k].t<0){g[k].t=0;}tg+=g[k].t;});
-  var ti=0;Object.keys(ing).forEach(function(k){if(ing[k].t<0){ing[k].t=0;}ti+=ing[k].t;});
-  var r=ti-tg;
-  var sect=function(items,col){return Object.entries(items).filter(function(x){return x[1].t>0;}).sort(function(a,b){return a[0].localeCompare(b[0]);}).map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td class="acct" style="font-size:11px">'+x[0]+'</td><td>'+h(x[1].name)+'</td><td style="text-align:right;font-weight:600;color:'+col+'">'+fmt(x[1].t)+'€</td></tr>';}).join('');};
-  c.innerHTML=dateFilterHTML()+'<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(ti)+'€</div><div class="stat-l">Ingresos</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(tg)+'€</div><div class="stat-l">Gastos</div></div><div class="stat"><div class="stat-v" style="color:'+(r>=0?'var(--ok)':'var(--rd)')+'">'+fmt(r)+'€</div><div class="stat-l">Resultado</div></div></div>'+
+  // Acumular saldos por cuenta
+  var s={};
+  all.forEach(function(e){e.lines.forEach(function(l){if(!s[l.a])s[l.a]=0;s[l.a]+=l.d-l.h;});});
+  // Función: suma saldos de cuentas que empiecen por prefijo. G6=saldo deudor(+), G7=saldo acreedor(invertido)
+  function sumPfx(prefixes,invert){
+    var t=0;Object.entries(s).forEach(function(x){var code=x[0],v=x[1];
+      for(var i=0;i<prefixes.length;i++){if(code.startsWith(prefixes[i])){t+=invert?-v:v;break;}}});return t;}
+  function detPfx(prefixes,invert){
+    var items=[];Object.entries(s).forEach(function(x){var code=x[0],v=x[1];
+      for(var i=0;i<prefixes.length;i++){if(code.startsWith(prefixes[i])){var val=invert?-v:v;if(Math.abs(val)>0.01)items.push({code:code,name:am[code]?am[code].name:code,val:val});break;}}});
+    return items.sort(function(a,b){return a.code.localeCompare(b.code);});}
+
+  // PGC 2008 abreviado
+  var cifNegocios=sumPfx(['700','701','702','703','704','705','706','708','709'],true);
+  var aprovision=sumPfx(['600','601','602','606','607','608','609','610','611','612'],false);
+  var gtosPersonal=sumPfx(['640','641','642','643','644','645','649'],false);
+  var otrosGtosExpl=sumPfx(['620','621','622','623','624','625','626','627','628','629','631','634','636','639','650','651','659'],false);
+  var amortiz=sumPfx(['680','681','682'],false);
+  var otrosIngExpl=sumPfx(['740','747','750','751','752','753','754','755','759'],true);
+  var resExplotacion=cifNegocios-aprovision-gtosPersonal-otrosGtosExpl-amortiz+otrosIngExpl;
+
+  var ingFinanc=sumPfx(['760','761','762','769'],true);
+  var gtosFinanc=sumPfx(['660','661','662','664','665','669'],false);
+  var resFinanciero=ingFinanc-gtosFinanc;
+
+  var resAntesImp=resExplotacion+resFinanciero;
+  var impBeneficios=sumPfx(['630','631','633','638'],false);
+  var resEjercicio=resAntesImp-impBeneficios;
+
+  // Renderizar
+  function sectHTML(label,items,color,sign){
+    if(!items.length)return '';
+    return items.map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="padding-left:20px" class="acct">'+x.code+'</td><td>'+h(x.name)+'</td><td style="text-align:right;color:'+color+'">'+fmt(Math.abs(x.val))+'</td></tr>';}).join('');
+  }
+  function lineHTML(label,val,bold,color){
+    var bg=bold?'background:var(--priLt);font-weight:700':'';var fc=color||(val>=0?'var(--ok)':'var(--rd)');
+    return '<tr style="'+bg+'"><td colspan="2" style="font-weight:'+(bold?'700':'600')+'">'+label+'</td><td style="text-align:right;font-weight:700;color:'+fc+'">'+fmt(val)+'€</td></tr>';
+  }
+
+  c.innerHTML=dateFilterHTML()+
+  '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(cifNegocios)+'€</div><div class="stat-l">Cifra negocios</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(aprovision+gtosPersonal+otrosGtosExpl)+'€</div><div class="stat-l">Total gastos</div></div><div class="stat"><div class="stat-v" style="color:'+(resEjercicio>=0?'var(--ok)':'var(--rd)')+'">'+fmt(resEjercicio)+'€</div><div class="stat-l">Resultado</div></div></div>'+
   '<div style="text-align:right;margin-bottom:8px"><button class="btn btn-d" style="font-size:10px" onclick="exportPnLExcel()">📊 Excel</button></div>'+
-  '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--ok)">Ingresos</div><table><tbody>'+sect(ing,'var(--ok)')+'<tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">'+fmt(ti)+'€</td></tr></tbody></table></div>'+
-  '<div class="card"><div class="card-h" style="color:var(--rd)">Gastos</div><table><tbody>'+sect(g,'var(--rd)')+'<tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">'+fmt(tg)+'€</td></tr></tbody></table></div></div>';
+  '<div class="card"><div class="card-h"><span>📈 Cuenta de Pérdidas y Ganancias — PGC 2008</span></div><div class="scr"><table><thead><tr><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Importe €</th></tr></thead><tbody>'+
+  '<tr><td colspan="3" style="font-weight:700;background:#E8F8ED;color:var(--ok)">1. Importe neto cifra de negocios</td></tr>'+
+  sectHTML('',detPfx(['700','701','702','703','704','705','706','708','709'],true),'var(--ok)')+
+  lineHTML('Total cifra negocios',cifNegocios,false,'var(--ok)')+
+  '<tr><td colspan="3" style="font-weight:700;background:#FDF0F0;color:var(--rd)">4. Aprovisionamientos</td></tr>'+
+  sectHTML('',detPfx(['600','601','602','606','607','608','609','610','611','612'],false),'var(--rd)')+
+  (aprovision>0?lineHTML('Total aprovisionamientos',-aprovision,false,'var(--rd)'):'')+
+  '<tr><td colspan="3" style="font-weight:700;background:#FDF0F0;color:var(--rd)">6. Gastos de personal</td></tr>'+
+  sectHTML('',detPfx(['640','641','642','643','644','645','649'],false),'var(--rd)')+
+  (gtosPersonal>0?lineHTML('Total gastos personal',-gtosPersonal,false,'var(--rd)'):'')+
+  '<tr><td colspan="3" style="font-weight:700;background:#FDF0F0;color:var(--rd)">7. Otros gastos de explotación</td></tr>'+
+  sectHTML('',detPfx(['620','621','622','623','624','625','626','627','628','629','631','634','636','639','650','651','659'],false),'var(--rd)')+
+  (otrosGtosExpl>0?lineHTML('Total otros gastos explotación',-otrosGtosExpl,false,'var(--rd)'):'')+
+  (amortiz>0?'<tr><td colspan="3" style="font-weight:700;background:#FDF0F0;color:var(--rd)">8. Amortización del inmovilizado</td></tr>'+sectHTML('',detPfx(['680','681','682'],false),'var(--rd)')+lineHTML('Total amortización',-amortiz,false,'var(--rd)'):'')+
+  (otrosIngExpl>0?'<tr><td colspan="3" style="font-weight:700;background:#E8F8ED;color:var(--ok)">5. Otros ingresos de explotación</td></tr>'+sectHTML('',detPfx(['740','747','750','751','752','753','754','755','759'],true),'var(--ok)')+lineHTML('Total otros ingresos',otrosIngExpl,false,'var(--ok)'):'')+
+  lineHTML('A) RESULTADO DE EXPLOTACIÓN',resExplotacion,true)+
+  (ingFinanc>0||gtosFinanc>0?
+  '<tr><td colspan="3" style="font-weight:700;background:#EBF5FF;color:var(--bl)">Ingresos financieros</td></tr>'+sectHTML('',detPfx(['760','761','762','769'],true),'var(--bl)')+
+  '<tr><td colspan="3" style="font-weight:700;background:#FDF0F0;color:var(--rd)">Gastos financieros</td></tr>'+sectHTML('',detPfx(['660','661','662','664','665','669'],false),'var(--rd)')+
+  lineHTML('B) RESULTADO FINANCIERO',resFinanciero,true):'')+
+  lineHTML('C) RESULTADO ANTES DE IMPUESTOS',resAntesImp,true)+
+  (impBeneficios>0?lineHTML('Impuesto sobre beneficios',-impBeneficios,false,'var(--rd)'):'')+
+  lineHTML('D) RESULTADO DEL EJERCICIO',resEjercicio,true)+
+  '</tbody></table></div></div>';
 }
 function exportPnLExcel(){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});var g={},ing={};
@@ -526,46 +579,64 @@ function exportPnLExcel(){
   exportExcel(rows,['Cuenta','Nombre','Tipo','Importe'],'pyg');
 }
 
-// ═══ BALANCE — with result in PN ═══
+// ═══ BALANCE — PGC 2008 abreviado ═══
 function renderBalance(c){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  if(!all.length){c.innerHTML='<div class="empty">Sin datos</div>';return;}
   var m={};all.forEach(function(e){e.lines.forEach(function(l){if(!m[l.a])m[l.a]=0;m[l.a]+=l.d-l.h;});});
   var resultado=0;
-  Object.entries(m).forEach(function(x){var code=x[0],s=x[1];var g=am[code]?am[code].g:parseInt(code[0])||0;
-  if(g===7)resultado+=(-s);if(g===6)resultado-=s;});
-  var anc=[],ac=[],pn=[],pnc=[],pc=[];
-  Object.entries(m).forEach(function(x){
-    var code=x[0],s=x[1];if(Math.abs(s)<0.01)return;
-    var a=am[code];var g=a?a.g:parseInt(code[0])||0;var t=a?a.t:'A';
-    if(g>=6)return;
-    var item={code:code,name:a?a.name:code,saldo:Math.abs(s),sign:s};
-    if(g===2)anc.push(item);
-    else if(g===3||(g===4&&t==='A')||(g===5&&t==='A'))ac.push(item);
-    else if(g===1&&!code.startsWith('17'))pn.push(item);
-    else if(g===1&&code.startsWith('17'))pnc.push(item);
-    else if((g===4&&t==='P')||(g===5&&t==='P'))pc.push(item);
-  });
-  var tAnc=anc.reduce(function(s,x){return s+x.sign;},0);
-  var tAc=ac.reduce(function(s,x){return s+x.sign;},0);
-  var tPn=pn.reduce(function(s,x){return s-x.sign;},0)+resultado;
-  var tPnc=pnc.reduce(function(s,x){return s-x.sign;},0);
-  var tPc=pc.reduce(function(s,x){return s-x.sign;},0);
-  var tA=tAnc+tAc,tP=tPn+tPnc+tPc;var cuadre=Math.abs(tA-tP)<1;
-  if(!all.length){c.innerHTML='<div class="empty">Sin datos</div>';return;}
-  var sect=function(items,col,isP){return items.sort(function(a,b){return a.code.localeCompare(b.code);}).map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="padding-left:18px;font-weight:600;color:var(--pri);font-size:11px">'+x.code+'</td><td>'+h(x.name)+'</td><td style="text-align:right;font-weight:600;color:'+col+'">'+fmt(isP?Math.abs(x.sign):x.saldo)+'€</td></tr>';}).join('');};
+  Object.entries(m).forEach(function(x){var code=x[0],s=x[1];var g=parseInt(code[0])||0;
+    if(g===7)resultado+=(-s); if(g===6)resultado-=s;});
+  function getItems(prefixes){
+    var items=[];Object.entries(m).forEach(function(x){var code=x[0],s=x[1];if(Math.abs(s)<0.01)return;
+      for(var i=0;i<prefixes.length;i++){if(code.startsWith(prefixes[i])){items.push({code:code,name:am[code]?am[code].name:code,saldo:s});break;}}});
+    return items.sort(function(a,b){return a.code.localeCompare(b.code);});}
+  var aInmMat=getItems(['21','22']);var aAmort=getItems(['28','29']);
+  var aInmIntang=getItems(['20']);var aInvFinLP=getItems(['24','25']);
+  var aExist=getItems(['30','31','32','33','34','35','36']);
+  var aDeudores=getItems(['43','44','460','470','471','472','473','474']);
+  var aInvFinCP=getItems(['53','54']);var aEfectivo=getItems(['57']);
+  var pFP=getItems(['10','11','12','13']);var pDeudaLP=getItems(['17']);
+  var pProv=getItems(['40']);
+  var pAcreed=getItems(['41','465','475','476','477','523','524','525','526']);
+  var pDeudasCP=getItems(['50','51','52']);
+  function sumD(it){return it.reduce(function(s,x){return s+x.saldo;},0);}
+  var tANC=sumD(aInmIntang)+sumD(aInmMat)+sumD(aInvFinLP)+sumD(aAmort);
+  var tAC=sumD(aExist)+sumD(aDeudores)+sumD(aInvFinCP)+sumD(aEfectivo);
+  var tActivo=tANC+tAC;
+  var tPN=-sumD(pFP)+resultado;var tPNC=-sumD(pDeudaLP);
+  var tPC=-sumD(pProv)-sumD(pAcreed)-sumD(pDeudasCP);
+  var tPasivo=tPN+tPNC+tPC;var cuadre=Math.abs(tActivo-tPasivo)<1;
+  function sectB(items,isA){return items.map(function(x,i){var val=isA?x.saldo:-x.saldo;
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="padding-left:20px" class="acct">'+x.code+'</td><td>'+h(x.name)+'</td><td style="text-align:right;font-weight:600">'+fmt(val)+'€</td></tr>';}).join('');}
+  function subT(l,v){return '<tr style="background:#F0F4FF"><td colspan="2"><em>'+l+'</em></td><td style="text-align:right;font-weight:600">'+fmt(v)+'€</td></tr>';}
+  function masaH(l,col){return '<tr><td colspan="3" style="font-weight:700;background:'+(col==='b'?'#EBF5FF':'#F3EEFF')+';color:'+(col==='b'?'var(--bl)':'var(--vi)')+'">'+l+'</td></tr>';}
   c.innerHTML=dateFilterHTML()+
-  '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="badge '+(cuadre?'badge-g':'badge-r')+'">'+(cuadre?'✓ Balance cuadrado':'✗ Descuadre: '+fmt(Math.abs(tA-tP))+'€')+'</span></div>'+
+  '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="badge '+(cuadre?'badge-g':'badge-r')+'">'+(cuadre?'✓ Balance cuadrado':'✗ Descuadre: '+fmt(Math.abs(tActivo-tPasivo))+'€')+'</span></div>'+
   '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--bl)">ACTIVO</div><table><tbody>'+
-  '<tr><td colspan="3" style="font-weight:700;background:#EBF5FF;color:var(--bl)">No corriente</td></tr>'+sect(anc,'var(--bl)',false)+'<tr style="background:#EFF6FF"><td colspan="2"><em>Subtotal</em></td><td style="text-align:right;font-weight:600">'+fmt(tAnc)+'€</td></tr>'+
-  '<tr><td colspan="3" style="font-weight:700;background:#EBF5FF;color:var(--bl)">Corriente</td></tr>'+sect(ac,'var(--bl)',false)+'<tr style="background:#EFF6FF"><td colspan="2"><em>Subtotal</em></td><td style="text-align:right;font-weight:600">'+fmt(tAc)+'€</td></tr>'+
-  '<tr class="total"><td colspan="2">TOTAL ACTIVO</td><td style="text-align:right;font-size:14px">'+fmt(tA)+'€</td></tr></tbody></table></div>'+
-  '<div class="card"><div class="card-h" style="color:var(--vi)">PN + PASIVO</div><table><tbody>'+
-  '<tr><td colspan="3" style="font-weight:700;background:#F3EEFF;color:var(--vi)">Patrimonio neto</td></tr>'+sect(pn,'var(--vi)',true)+
-  '<tr><td style="padding-left:18px;font-weight:600;color:var(--pri);font-size:11px">12900000</td><td>Resultado del ejercicio</td><td style="text-align:right;font-weight:600;color:'+(resultado>=0?'var(--ok)':'var(--rd)')+'">'+fmt(resultado)+'€</td></tr>'+
-  '<tr style="background:#F5F0FF"><td colspan="2"><em>Subtotal</em></td><td style="text-align:right;font-weight:600">'+fmt(tPn)+'€</td></tr>'+
-  '<tr><td colspan="3" style="font-weight:700;background:#F3EEFF;color:var(--vi)">Pasivo no corriente</td></tr>'+sect(pnc,'var(--vi)',true)+'<tr style="background:#F5F0FF"><td colspan="2"><em>Subtotal</em></td><td style="text-align:right;font-weight:600">'+fmt(tPnc)+'€</td></tr>'+
-  '<tr><td colspan="3" style="font-weight:700;background:#F3EEFF;color:var(--vi)">Pasivo corriente</td></tr>'+sect(pc,'var(--vi)',true)+'<tr style="background:#F5F0FF"><td colspan="2"><em>Subtotal</em></td><td style="text-align:right;font-weight:600">'+fmt(tPc)+'€</td></tr>'+
-  '<tr class="total"><td colspan="2">TOTAL PN+PASIVO</td><td style="text-align:right;font-size:14px">'+fmt(tP)+'€</td></tr></tbody></table></div></div>';
+  masaH('A) Activo no corriente','b')+
+  (aInmIntang.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">I. Inmovilizado intangible</td></tr>'+sectB(aInmIntang,true):'')+
+  (aInmMat.length||aAmort.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">II. Inmovilizado material</td></tr>'+sectB(aInmMat,true)+sectB(aAmort,true):'')+
+  (aInvFinLP.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">V. Inversiones financieras LP</td></tr>'+sectB(aInvFinLP,true):'')+
+  subT('Total no corriente',tANC)+
+  masaH('B) Activo corriente','b')+
+  (aExist.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">I. Existencias</td></tr>'+sectB(aExist,true):'')+
+  (aDeudores.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">III. Deudores comerciales</td></tr>'+sectB(aDeudores,true):'')+
+  (aInvFinCP.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">V. Inversiones financieras CP</td></tr>'+sectB(aInvFinCP,true):'')+
+  (aEfectivo.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">VII. Efectivo</td></tr>'+sectB(aEfectivo,true):'')+
+  subT('Total corriente',tAC)+
+  '<tr class="total"><td colspan="2">TOTAL ACTIVO</td><td style="text-align:right;font-size:14px">'+fmt(tActivo)+'€</td></tr></tbody></table></div>'+
+  '<div class="card"><div class="card-h" style="color:var(--vi)">PATRIMONIO NETO Y PASIVO</div><table><tbody>'+
+  masaH('A) Patrimonio neto','v')+
+  '<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">A-1) Fondos propios</td></tr>'+sectB(pFP,false)+
+  '<tr><td style="padding-left:20px" class="acct">129</td><td>Resultado del ejercicio</td><td style="text-align:right;font-weight:600;color:'+(resultado>=0?'var(--ok)':'var(--rd)')+'">'+fmt(resultado)+'€</td></tr>'+
+  subT('Total patrimonio neto',tPN)+
+  masaH('B) Pasivo no corriente','v')+sectB(pDeudaLP,false)+subT('Total pasivo no corriente',tPNC)+
+  masaH('C) Pasivo corriente','v')+
+  (pProv.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">V. Acreedores comerciales</td></tr>'+sectB(pProv,false):'')+
+  (pAcreed.length||pDeudasCP.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">Otras deudas CP</td></tr>'+sectB(pAcreed,false)+sectB(pDeudasCP,false):'')+
+  subT('Total pasivo corriente',tPC)+
+  '<tr class="total"><td colspan="2">TOTAL PN + PASIVO</td><td style="text-align:right;font-size:14px">'+fmt(tPasivo)+'€</td></tr></tbody></table></div></div>';
 }
 
 // ═══ PARTNERS ═══
@@ -950,84 +1021,139 @@ async function doBackup(){
 // ═══ DEMO DATA ═══
 async function loadDemo(){
   var cid=state.company.id;
-  // Create demo accounts if empty
-  if(state.accounts.length<5){
-    var demoAccounts=[
-      {code:'10000000',name:'Capital social',g:1,t:'P'},{code:'11200000',name:'Reserva legal',g:1,t:'P'},
-      {code:'12900000',name:'Resultado del ejercicio',g:1,t:'P'},
-      {code:'17000000',name:'Deudas a LP',g:1,t:'P'},
-      {code:'21000000',name:'Terrenos',g:2,t:'A'},{code:'21800000',name:'Equipos informáticos',g:2,t:'A'},
-      {code:'28180000',name:'Amort. ac. equipos',g:2,t:'A'},
-      {code:'30000000',name:'Existencias',g:3,t:'A'},
-      {code:'43000000',name:'Clientes',g:4,t:'A'},{code:'40000000',name:'Proveedores',g:4,t:'P'},
-      {code:'47200000',name:'IVA soportado',g:4,t:'A'},{code:'47700000',name:'IVA repercutido',g:4,t:'P'},
-      {code:'47500000',name:'HP acreedora IVA',g:4,t:'P'},
-      {code:'55100001',name:'CC Pepe',g:5,t:'P'},{code:'55100002',name:'CC Fernanda',g:5,t:'P'},
-      {code:'55100003',name:'CC Sergio',g:5,t:'P'},{code:'55100004',name:'CC Santi',g:5,t:'P'},
-      {code:'55100005',name:'CC Salva',g:5,t:'P'},
-      {code:'57200000',name:'Banco c/c',g:5,t:'A'},{code:'57000000',name:'Caja',g:5,t:'A'},
-      {code:'60000000',name:'Compra de NPLs',g:6,t:'G'},{code:'62100000',name:'Arrendamientos',g:6,t:'G'},
-      {code:'62200000',name:'Reparaciones',g:6,t:'G'},{code:'62300000',name:'Serv. profesionales',g:6,t:'G'},
-      {code:'62400000',name:'Transportes',g:6,t:'G'},{code:'62500000',name:'Primas de seguros',g:6,t:'G'},
-      {code:'62600000',name:'Servicios bancarios',g:6,t:'G'},{code:'62900000',name:'Otros servicios',g:6,t:'G'},
-      {code:'63100000',name:'Otros tributos',g:6,t:'G'},{code:'64000000',name:'Sueldos y salarios',g:6,t:'G'},
-      {code:'64200000',name:'Seg. Social empresa',g:6,t:'G'},{code:'68180000',name:'Amort. equipos',g:6,t:'G'},
-      {code:'70000000',name:'Venta carteras NPL',g:7,t:'I'},{code:'75200000',name:'Ingresos por arrendamientos',g:7,t:'I'},
-      {code:'75900000',name:'Otros ingresos',g:7,t:'I'},{code:'76900000',name:'Ingresos financieros',g:7,t:'I'}
-    ];
-    for(var i=0;i<demoAccounts.length;i++){
-      await api('/api/accounts/'+cid,{method:'POST',body:demoAccounts[i]});
-    }
+  // PGC 2008 accounts needed for the 30 demo entries
+  var demoAccounts=[
+    {code:'10000000',name:'Capital social',g:1,t:'P'},
+    {code:'12900000',name:'Resultado del ejercicio',g:1,t:'P'},
+    {code:'21600000',name:'Mobiliario',g:2,t:'A'},
+    {code:'28160000',name:'Amort acum mobiliario',g:2,t:'A'},
+    {code:'40000000',name:'Proveedores',g:4,t:'P'},
+    {code:'41000000',name:'Acreedores prest servicios',g:4,t:'P'},
+    {code:'43000000',name:'Clientes',g:4,t:'A'},
+    {code:'46500000',name:'Remuneraciones ptes pago',g:4,t:'P'},
+    {code:'47200000',name:'HP IVA soportado',g:4,t:'A'},
+    {code:'47500000',name:'HP acreedora por IVA',g:4,t:'P'},
+    {code:'47510000',name:'HP acreedora IRPF',g:4,t:'P'},
+    {code:'47600000',name:'Org SS acreedora',g:4,t:'P'},
+    {code:'47700000',name:'HP IVA repercutido',g:4,t:'P'},
+    {code:'52300000',name:'Proveedores inmovilizado CP',g:5,t:'P'},
+    {code:'55100001',name:'CC Pepe',g:5,t:'P'},
+    {code:'55100002',name:'CC Fernanda',g:5,t:'P'},
+    {code:'55100003',name:'CC Sergio',g:5,t:'P'},
+    {code:'55100004',name:'CC Santi',g:5,t:'P'},
+    {code:'55100005',name:'CC Salva',g:5,t:'P'},
+    {code:'57000000',name:'Caja euros',g:5,t:'A'},
+    {code:'57200000',name:'Bancos c/c',g:5,t:'A'},
+    {code:'60000000',name:'Compra mercaderías',g:6,t:'G'},
+    {code:'62100000',name:'Arrendamientos y cánones',g:6,t:'G'},
+    {code:'62300000',name:'Servicios profesionales independientes',g:6,t:'G'},
+    {code:'62600000',name:'Servicios bancarios y similares',g:6,t:'G'},
+    {code:'62800000',name:'Suministros',g:6,t:'G'},
+    {code:'62900000',name:'Otros servicios',g:6,t:'G'},
+    {code:'64000000',name:'Sueldos y salarios',g:6,t:'G'},
+    {code:'64200000',name:'Seg Social a cargo empresa',g:6,t:'G'},
+    {code:'70000000',name:'Venta de mercaderías',g:7,t:'I'},
+    {code:'70500000',name:'Prestaciones de servicios',g:7,t:'I'}
+  ];
+  for(var i=0;i<demoAccounts.length;i++){
+    try{await api('/api/accounts/'+cid,{method:'POST',body:demoAccounts[i]});}catch(e){}
   }
-  // Demo entries for 2025
-  var demoEntries=[
-    {id:'d01',date:'2025-01-15',concept:'Compra cartera NPL Banco Sabadell',type:'demo',lines:[{a:'60000000',d:180000,h:0},{a:'47200000',d:37800,h:0},{a:'57200000',d:0,h:217800}]},
-    {id:'d02',date:'2025-01-20',concept:'Alquiler oficina enero',type:'demo',lines:[{a:'62100000',d:1200,h:0},{a:'47200000',d:252,h:0},{a:'55100001',d:0,h:1452}]},
-    {id:'d03',date:'2025-02-10',concept:'Honorarios notario escritura',type:'demo',lines:[{a:'62300000',d:3500,h:0},{a:'47200000',d:735,h:0},{a:'57200000',d:0,h:4235}]},
-    {id:'d04',date:'2025-02-28',concept:'Venta parcial cartera NPL a fondo',type:'demo',lines:[{a:'57200000',d:302500,h:0},{a:'47700000',d:0,h:52500},{a:'70000000',d:0,h:250000}]},
-    {id:'d05',date:'2025-03-15',concept:'Seguro RC empresa',type:'demo',lines:[{a:'62500000',d:2800,h:0},{a:'47200000',d:588,h:0},{a:'57200000',d:0,h:3388}]},
-    {id:'d06',date:'2025-04-01',concept:'Alquiler oficina abril',type:'demo',lines:[{a:'62100000',d:1200,h:0},{a:'47200000',d:252,h:0},{a:'55100002',d:0,h:1452}]},
-    {id:'d07',date:'2025-04-20',concept:'Ingreso alquiler inmueble cartera',type:'demo',lines:[{a:'57200000',d:18150,h:0},{a:'47700000',d:0,h:3150},{a:'75200000',d:0,h:15000}]},
-    {id:'d08',date:'2025-05-10',concept:'Compra cartera NPL CaixaBank',type:'demo',lines:[{a:'60000000',d:95000,h:0},{a:'47200000',d:19950,h:0},{a:'57200000',d:0,h:114950}]},
-    {id:'d09',date:'2025-06-15',concept:'Servicios legales reclamación',type:'demo',lines:[{a:'62300000',d:8500,h:0},{a:'47200000',d:1785,h:0},{a:'55100003',d:0,h:10285}]},
-    {id:'d10',date:'2025-07-01',concept:'Venta inmueble cartera',type:'demo',lines:[{a:'57200000',d:181500,h:0},{a:'47700000',d:0,h:31500},{a:'70000000',d:0,h:150000}]},
-    {id:'d11',date:'2025-08-20',concept:'Reparación inmueble',type:'demo',lines:[{a:'62200000',d:4200,h:0},{a:'47200000',d:882,h:0},{a:'57200000',d:0,h:5082}]},
-    {id:'d12',date:'2025-09-30',concept:'Comisión bancaria trimestral',type:'demo',lines:[{a:'62600000',d:450,h:0},{a:'57200000',d:0,h:450}]},
-    {id:'d13',date:'2025-10-15',concept:'Ingreso financiero cartera',type:'demo',lines:[{a:'57200000',d:12100,h:0},{a:'47700000',d:0,h:2100},{a:'76900000',d:0,h:10000}]},
-    {id:'d14',date:'2025-11-01',concept:'Aportación capital Pepe',type:'demo',lines:[{a:'57200000',d:50000,h:0},{a:'55100001',d:0,h:50000}]},
-    {id:'d15',date:'2025-11-20',concept:'Compra equipos informáticos',type:'demo',lines:[{a:'21800000',d:3500,h:0},{a:'47200000',d:735,h:0},{a:'57200000',d:0,h:4235}]},
-    {id:'d16',date:'2025-12-15',concept:'Venta cartera NPL pequeña',type:'demo',lines:[{a:'57200000',d:108900,h:0},{a:'47700000',d:0,h:18900},{a:'70000000',d:0,h:90000}]},
-    {id:'d17',date:'2025-12-31',concept:'Amortización equipos',type:'demo',lines:[{a:'68180000',d:700,h:0},{a:'28180000',d:0,h:700}]}
+  // 30 asientos PGC 2008 — mayo 2026
+  var de=[
+    // 1. Venta servicios software a Restaurante Sol
+    {id:'d01',date:'2026-05-01',concept:'Fra. Restaurante Sol — Venta software',type:'demo',lines:[
+      {a:'43000000',d:1210,h:0},{a:'70000000',d:0,h:1000},{a:'47700000',d:0,h:210}]},
+    // 2. Cobro cliente Restaurante Sol
+    {id:'d02',date:'2026-05-02',concept:'Cobro cliente Restaurante Sol',type:'demo',lines:[
+      {a:'57200000',d:1210,h:0},{a:'43000000',d:0,h:1210}]},
+    // 3. Venta mensualidad software Bar Valencia
+    {id:'d03',date:'2026-05-03',concept:'Fra. Bar Valencia — Mensualidad software',type:'demo',lines:[
+      {a:'43000000',d:605,h:0},{a:'70000000',d:0,h:500},{a:'47700000',d:0,h:105}]},
+    // 4. Cobro Bar Valencia
+    {id:'d04',date:'2026-05-04',concept:'Cobro cliente Bar Valencia',type:'demo',lines:[
+      {a:'57200000',d:605,h:0},{a:'43000000',d:0,h:605}]},
+    // 5. Venta servicio IA Hotel Mar
+    {id:'d05',date:'2026-05-05',concept:'Fra. Hotel Mar — Servicio IA',type:'demo',lines:[
+      {a:'43000000',d:2420,h:0},{a:'70500000',d:0,h:2000},{a:'47700000',d:0,h:420}]},
+    // 6. Gasto teléfono
+    {id:'d06',date:'2026-05-06',concept:'Factura telefonía',type:'demo',lines:[
+      {a:'62900000',d:80,h:0},{a:'47200000',d:16.80,h:0},{a:'41000000',d:0,h:96.80}]},
+    // 7. Pago teléfono
+    {id:'d07',date:'2026-05-07',concept:'Pago factura teléfono',type:'demo',lines:[
+      {a:'41000000',d:96.80,h:0},{a:'57200000',d:0,h:96.80}]},
+    // 8. Electricidad
+    {id:'d08',date:'2026-05-08',concept:'Factura electricidad oficina',type:'demo',lines:[
+      {a:'62800000',d:150,h:0},{a:'47200000',d:31.50,h:0},{a:'41000000',d:0,h:181.50}]},
+    // 9. Pago electricidad
+    {id:'d09',date:'2026-05-09',concept:'Pago electricidad',type:'demo',lines:[
+      {a:'41000000',d:181.50,h:0},{a:'57200000',d:0,h:181.50}]},
+    // 10. Gasolina (caja)
+    {id:'d10',date:'2026-05-10',concept:'Gasolina vehículo',type:'demo',lines:[
+      {a:'62900000',d:70,h:0},{a:'47200000',d:14.70,h:0},{a:'57000000',d:0,h:84.70}]},
+    // 11. Restaurante cliente (IVA no deducible → todo a gasto)
+    {id:'d11',date:'2026-05-11',concept:'Comida restaurante con cliente',type:'demo',lines:[
+      {a:'62900000',d:120,h:0},{a:'47200000',d:25.20,h:0},{a:'57200000',d:0,h:145.20}]},
+    // 12. Asesoría fiscal
+    {id:'d12',date:'2026-05-12',concept:'Servicios asesoría fiscal',type:'demo',lines:[
+      {a:'62300000',d:300,h:0},{a:'47200000',d:63,h:0},{a:'41000000',d:0,h:363}]},
+    // 13. Pago asesoría
+    {id:'d13',date:'2026-05-13',concept:'Pago asesoría fiscal',type:'demo',lines:[
+      {a:'41000000',d:363,h:0},{a:'57200000',d:0,h:363}]},
+    // 14. Alquiler oficina
+    {id:'d14',date:'2026-05-14',concept:'Alquiler oficina mayo',type:'demo',lines:[
+      {a:'62100000',d:600,h:0},{a:'47200000',d:126,h:0},{a:'41000000',d:0,h:726}]},
+    // 15. Pago alquiler
+    {id:'d15',date:'2026-05-15',concept:'Pago alquiler oficina',type:'demo',lines:[
+      {a:'41000000',d:726,h:0},{a:'57200000',d:0,h:726}]},
+    // 16. Compra material oficina
+    {id:'d16',date:'2026-05-16',concept:'Compra material oficina',type:'demo',lines:[
+      {a:'60000000',d:250,h:0},{a:'47200000',d:52.50,h:0},{a:'40000000',d:0,h:302.50}]},
+    // 17. Pago material
+    {id:'d17',date:'2026-05-17',concept:'Pago material oficina',type:'demo',lines:[
+      {a:'40000000',d:302.50,h:0},{a:'57200000',d:0,h:302.50}]},
+    // 18. Compra equipo informático (inmovilizado)
+    {id:'d18',date:'2026-05-18',concept:'Compra equipos informáticos',type:'demo',lines:[
+      {a:'21600000',d:1200,h:0},{a:'47200000',d:252,h:0},{a:'52300000',d:0,h:1452}]},
+    // 19. Pago equipo
+    {id:'d19',date:'2026-05-19',concept:'Pago ordenador oficina',type:'demo',lines:[
+      {a:'52300000',d:1452,h:0},{a:'57200000',d:0,h:1452}]},
+    // 20. Nóminas
+    {id:'d20',date:'2026-05-20',concept:'Nóminas mayo',type:'demo',lines:[
+      {a:'64000000',d:4500,h:0},{a:'47510000',d:0,h:450},{a:'47600000',d:0,h:285},{a:'46500000',d:0,h:3765}]},
+    // 21. Seg Social empresa
+    {id:'d21',date:'2026-05-20',concept:'Seg Social empresa mayo',type:'demo',lines:[
+      {a:'64200000',d:1350,h:0},{a:'47600000',d:0,h:1350}]},
+    // 22. Pago nóminas
+    {id:'d22',date:'2026-05-21',concept:'Pago nóminas empleados',type:'demo',lines:[
+      {a:'46500000',d:3765,h:0},{a:'57200000',d:0,h:3765}]},
+    // 23. Pago Seg Social
+    {id:'d23',date:'2026-05-22',concept:'Pago Seguridad Social',type:'demo',lines:[
+      {a:'47600000',d:1635,h:0},{a:'57200000',d:0,h:1635}]},
+    // 24. Pago IRPF
+    {id:'d24',date:'2026-05-23',concept:'Pago IRPF nóminas',type:'demo',lines:[
+      {a:'47510000',d:450,h:0},{a:'57200000',d:0,h:450}]},
+    // 25. Ingreso caja a banco
+    {id:'d25',date:'2026-05-24',concept:'Ingreso de caja a banco',type:'demo',lines:[
+      {a:'57200000',d:500,h:0},{a:'57000000',d:0,h:500}]},
+    // 26. Retirada efectivo
+    {id:'d26',date:'2026-05-25',concept:'Retirada efectivo banco',type:'demo',lines:[
+      {a:'57000000',d:300,h:0},{a:'57200000',d:0,h:300}]},
+    // 27. Comisiones bancarias
+    {id:'d27',date:'2026-05-26',concept:'Comisiones bancarias',type:'demo',lines:[
+      {a:'62600000',d:18,h:0},{a:'57200000',d:0,h:18}]},
+    // 28. Venta servicio automatización
+    {id:'d28',date:'2026-05-27',concept:'Fra. Asesoría Norte — Automatización documental',type:'demo',lines:[
+      {a:'43000000',d:968,h:0},{a:'70500000',d:0,h:800},{a:'47700000',d:0,h:168}]},
+    // 29. Cobro Asesoría Norte
+    {id:'d29',date:'2026-05-28',concept:'Cobro cliente Asesoría Norte',type:'demo',lines:[
+      {a:'57200000',d:968,h:0},{a:'43000000',d:0,h:968}]},
+    // 30. Liquidación IVA
+    {id:'d30',date:'2026-05-31',concept:'Liquidación IVA mayo',type:'demo',lines:[
+      {a:'47700000',d:903,h:0},{a:'47200000',d:0,h:581.70},{a:'47500000',d:0,h:321.30}]}
   ];
-  for(var j=0;j<demoEntries.length;j++){await api('/api/entries/'+cid,{method:'POST',body:demoEntries[j]});}
-  // Demo rules
-  var demoRules=[
-    {id:'r01',p:'ALQUILER|ARRENDAMIENTO|RENTA',a:'62100000',d:'Alquiler oficina',pr:1,iv:'general'},
-    {id:'r02',p:'NOTARI|REGISTR|LEGAL|ABOGAD',a:'62300000',d:'Serv. profesionales',pr:1,iv:'general'},
-    {id:'r03',p:'SEGURO|POLIZA',a:'62500000',d:'Seguros',pr:1,iv:'general'},
-    {id:'r04',p:'COMISION|MANTENIMIENTO CUENTA|SWIFT',a:'62600000',d:'Serv. bancarios',pr:1,iv:'na'},
-    {id:'r05',p:'NOMINA|SALARIO|SUELDO',a:'64000000',d:'Sueldos y salarios',pr:1,iv:'na'},
-    {id:'r06',p:'SEGURIDAD SOCIAL|SEG.SOCIAL|TGSS',a:'64200000',d:'Seg. Social empresa',pr:1,iv:'na'},
-    {id:'r07',p:'REPARACION|MANTENIMIENTO|REFORMA',a:'62200000',d:'Reparaciones',pr:1,iv:'general'},
-    {id:'r08',p:'TRANSPORTE|MENSAJERIA|CORREOS',a:'62400000',d:'Transportes',pr:1,iv:'general'}
-  ];
-  for(var k=0;k<demoRules.length;k++){await api('/api/rules/'+cid,{method:'POST',body:demoRules[k]});}
-  // Demo clients
-  masters.client=[
-    {code:'C001',name:'Fondo Hispania RE',cif:'B12345678',address:'Paseo de la Castellana 50',cp:'28046',city:'Madrid',province:'Madrid',country:'España',account:'43000001',payment:'Transferencia',days:'30',contact:'María García',phone:'915551234',email:'maria@hispania.es',notes:'Fondo inmobiliario'},
-    {code:'C002',name:'Inversiones Levante SL',cif:'B98765432',address:'Gran Vía Marqués del Turia 12',cp:'46005',city:'Valencia',province:'Valencia',country:'España',account:'43000002',payment:'Transferencia',days:'60',contact:'Carlos Ruiz',phone:'963334455',email:'carlos@invlevante.com',notes:'Inversor NPL'},
-    {code:'C003',name:'Costa Blanca Assets',cif:'B55667788',address:'Avda. del Mediterráneo 30',cp:'03001',city:'Alicante',province:'Alicante',country:'España',account:'43000003',payment:'Transferencia',days:'30',contact:'Ana Martínez',phone:'965887799',email:'ana@cblankaassets.com',notes:'Gestora activos'},
-    {code:'C004',name:'Barcelona Capital Fund',cif:'B33445566',address:'Diagonal 442',cp:'08037',city:'Barcelona',province:'Barcelona',country:'España',account:'43000004',payment:'Transferencia',days:'45',contact:'Jordi Puig',phone:'934561234',email:'jordi@bcncapital.com',notes:''}
-  ];
-  saveMasters('client');
-  // Demo suppliers
-  masters.supplier=[
-    {code:'P001',name:'Notaría López & Asociados',cif:'B11223344',address:'C/ Colón 48',cp:'46004',city:'Valencia',province:'Valencia',country:'España',account:'40000001',payment:'Transferencia',days:'15',contact:'Pedro López',phone:'963112233',email:'info@notarialopez.es',notes:''},
-    {code:'P002',name:'Seguros Mapfre',cif:'A28141935',address:'Carretera Pozuelo 52',cp:'28222',city:'Madrid',province:'Madrid',country:'España',account:'40000002',payment:'Recibo',days:'0',contact:'Atención cliente',phone:'900100400',email:'','notes':'RC y multirriesgo'}
-  ];
-  saveMasters('supplier');
-  await loadData();checkIntegrity();state.ejercicio=2025;initDates();
-  toast('Datos demo cargados (2025)');render();
+  for(var j=0;j<de.length;j++){await api('/api/entries/'+cid,{method:'POST',body:de[j]});}
+  await loadData();checkIntegrity();state.ejercicio=2026;initDates();
+  toast('30 asientos demo cargados (mayo 2026)');render();
 }
 
 // ═══ PATCH: Add map to tabs and renderView ═══
