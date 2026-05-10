@@ -343,7 +343,7 @@ function showEntryModal(entry,mode){
   var title=mode==='edit'?'✏️ Editar asiento':mode==='dup'?'📋 Duplicar asiento':'➕ Nuevo asiento manual';
   var dateVal=mode==='dup'?today():(entry?entry.date:today());
   var conceptVal=mode==='dup'?(entry?entry.concept:'')+' (copia)':(entry?entry.concept:'');
-  var bg=document.createElement('div');bg.className='modal-bg';bg.id='entryModal';bg.onclick=function(ev){if(ev.target===bg)bg.remove();};
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='entryModal';
   bg.innerHTML='<div class="modal"><div class="card-h"><span>'+title+'</span><button class="btn btn-d" onclick="document.getElementById(\'entryModal\').remove()">✕</button></div><div class="card-b"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><div style="width:125px"><div class="lbl">Fecha</div><input type="date" class="inp" id="eDate" value="'+dateVal+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div><div style="flex:1;min-width:180px"><div class="lbl">Concepto</div><input class="inp" id="eConcept" value="'+h(conceptVal)+'"></div></div><div id="eLines"></div><div style="margin-top:8px"><button class="btn btn-d" onclick="addEntryLine()">+ Línea</button></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span id="eBalance"></span><button class="btn btn-p" id="eSave" onclick="saveEntry()">💾 '+(mode==='edit'?'Guardar':'Crear')+'</button></div></div></div>';
   document.body.appendChild(bg);renderEntryLines();
 }
@@ -415,7 +415,7 @@ async function saveEntry(){
 
 // ═══ ASSISTANT with file upload ═══
 function showAssistant(){
-  var bg=document.createElement('div');bg.className='modal-bg';bg.id='assistModal';bg.onclick=function(ev){if(ev.target===bg)bg.remove();};
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='assistModal';
   bg.innerHTML='<div class="modal" style="max-width:840px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">🤖 Asistente contable</span><button class="btn btn-d" onclick="document.getElementById(\'assistModal\').remove()">✕</button></div><div class="card-b">'+
   '<div style="border:2px dashed var(--bd);border-radius:6px;padding:16px;text-align:center;cursor:pointer;color:var(--txM);margin-bottom:12px" onclick="$(\'aFile\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--pri)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';handleAssistFile(event.dataTransfer.files[0])"><div style="font-size:24px">📄</div><div style="font-weight:600;color:var(--tx)">Arrastra factura/ticket o haz clic</div><div style="font-size:10px">PDF · Imagen · El sistema extraerá los datos</div><input id="aFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="handleAssistFile(this.files[0])"></div>'+
   '<div id="aFileInfo"></div>'+
