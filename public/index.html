@@ -159,11 +159,11 @@ function checkIntegrity(){
 var TABS=[
 {id:'inicio',label:'Inicio',groups:[{label:'General',items:[{id:'dash',icon:'📊',label:'Dashboard'},{id:'import',icon:'📂',label:'Importar'}]},{label:'Asientos',items:[{id:'newEntry',icon:'➕',label:'Nuevo gasto'},{id:'manualEntry',icon:'✏️',label:'Manual'},{id:'plantillas',icon:'📄',label:'Plantillas'},{id:'borradores',icon:'📝',label:'Borradores'}]}]},
 {id:'diario',label:'Diario',groups:[{label:'Consultas',items:[{id:'journal',icon:'📒',label:'Diario'},{id:'ledger',icon:'📖',label:'Mayor'},{id:'trial',icon:'⚖️',label:'Saldos'}]},{label:'Resultados',items:[{id:'pnl',icon:'📈',label:'PyG'},{id:'balance',icon:'🏛️',label:'Balance'},{id:'libroiva',icon:'📋',label:'Libro IVA'}]},{label:'Facturas',items:[{id:'facturas',icon:'🧾',label:'Facturas'}]}]},
-{id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]},{label:'Posición',items:[{id:'posicion',icon:'🏦',label:'Posición'},{id:'prevision',icon:'📊',label:'Previsión'}]},{label:'Operaciones',items:[{id:'conciliacion',icon:'🔄',label:'Conciliación'},{id:'inmovilizado',icon:'🏗️',label:'Inmovilizado'}]}]},
+{id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]},{label:'Posición',items:[{id:'posicion',icon:'🏦',label:'Posición'},{id:'prevision',icon:'📊',label:'Previsión'}]},{label:'Operaciones',items:[{id:'conciliacion',icon:'🔄',label:'Conciliación'},{id:'infconc',icon:'📄',label:'Inf.Conc.'},{id:'inmovilizado',icon:'🏗️',label:'Inmovilizado'}]}]},
 {id:'maestros',label:'Maestros',groups:[{label:'Terceros',items:[{id:'clients',icon:'🏢',label:'Clientes'},{id:'suppliers',icon:'🏭',label:'Proveedores'}]},{label:'Tablas',items:[{id:'banks',icon:'🏦',label:'Bancos'},{id:'articulos',icon:'📦',label:'Artículos'}]},{label:'Análisis',items:[{id:'analisis',icon:'📊',label:'Proveedores'}]}]},
-{id:'npl',label:'NPL',groups:[{label:'Gestión',items:[{id:'expedientes',icon:'📁',label:'Expedientes'},{id:'captacion',icon:'🤝',label:'Captación'}]},{label:'Seguimiento',items:[{id:'tareas',icon:'✅',label:'Tareas'},{id:'calendario',icon:'📅',label:'Calendario'}]}]},
-{id:'fiscal',label:'Fiscal',groups:[{label:'Modelos',items:[{id:'modelo303',icon:'📋',label:'303 IVA'},{id:'modelo390',icon:'📋',label:'390 Anual'},{id:'modelo111',icon:'📋',label:'111 IRPF'},{id:'modelo347',icon:'📋',label:'347 Terceros'}]},{label:'Informes',items:[{id:'pendientes',icon:'⏳',label:'Pendientes'}]}]},
-{id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'backups',icon:'💾',label:'Backups'},{id:'audit',icon:'📝',label:'Auditoría'},{id:'trash',icon:'🗑️',label:'Papelera'}]}]}
+{id:'npl',label:'NPL',groups:[{label:'Gestión',items:[{id:'expedientes',icon:'📁',label:'Expedientes'},{id:'captacion',icon:'🤝',label:'Captación'}]},{label:'Seguimiento',items:[{id:'tareas',icon:'✅',label:'Tareas'},{id:'calendario',icon:'📅',label:'Calendario'},{id:'cartera',icon:'📊',label:'Cartera'},{id:'rentabilidad',icon:'💰',label:'Rentabilidad'}]}]},
+{id:'fiscal',label:'Fiscal',groups:[{label:'Modelos',items:[{id:'modelo303',icon:'📋',label:'303 IVA'},{id:'modelo390',icon:'📋',label:'390 Anual'},{id:'modelo111',icon:'📋',label:'111 IRPF'},{id:'modelo347',icon:'📋',label:'347 Terceros'},{id:'modelo200',icon:'📋',label:'200 IS'}]},{label:'Informes',items:[{id:'pendientes',icon:'⏳',label:'Pendientes'},{id:'chatcontable',icon:'💬',label:'Chat'}]}]},
+{id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'backups',icon:'💾',label:'Backups'},{id:'audit',icon:'📝',label:'Auditoría'},{id:'trash',icon:'🗑️',label:'Papelera'},{id:'admin',icon:'👤',label:'Admin'}]}]}
 ];
 
 function setView(v){if(v==='newEntry'){showAssistant();return;}if(v==='manualEntry'){showEntryModal();return;}state.view=v;render();}
@@ -247,6 +247,12 @@ function renderView(){
   else if(v==='pendientes')renderPendientesCobro(c);
   else if(v==='tareas')renderTareas(c);
   else if(v==='calendario')renderCalendario(c);
+  else if(v==='modelo200')renderModelo200(c);
+  else if(v==='chatcontable')renderChat(c);
+  else if(v==='admin')renderAdmin(c);
+  else if(v==='cartera')renderCartera(c);
+  else if(v==='rentabilidad')renderRentabilidad(c);
+  else if(v==='infconc')renderInfConciliacion(c);
   else c.innerHTML='<div class="empty"><div style="font-size:40px;margin-bottom:10px">🚧</div>Próximamente</div>';
 }
 
@@ -1704,6 +1710,202 @@ function renderCalendario(c){
     var pasado=e.date<hoy;var cercano=!pasado&&e.date<=hoy.slice(0,8)+'31';
     return '<tr class="'+(i%2?'alt':'')+'" style="'+(pasado?'opacity:0.5':'')+(cercano&&!pasado?';background:#FFF8E1':'')+'"><td style="font-size:10px;font-weight:600;white-space:nowrap">'+fmtD(e.date)+'</td><td><span class="badge '+(e.tipo==='fiscal'?'badge-r':e.tipo==='judicial'?'badge-a':'badge-b')+'">'+e.tipo+'</span></td><td style="font-size:11px">'+h(e.desc)+'</td><td>'+(pasado?'<span style="color:var(--txM)">Pasado</span>':cercano?'<span style="color:var(--am);font-weight:600">⚠ Próximo</span>':'<span style="color:var(--ok)">Pendiente</span>')+'</td></tr>';
   }).join('')+'</tbody></table></div></div>';
+}
+
+// ═══ MODELO 200 — IMPUESTO SOCIEDADES ═══
+function renderModelo200(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var s={};all.forEach(function(e){e.lines.forEach(function(l){if(!s[l.a])s[l.a]=0;s[l.a]+=l.d-l.h;});});
+  var ingresos=0,gastos=0;
+  Object.entries(s).forEach(function(x){var g=parseInt(x[0][0])||0;if(g===7)ingresos+=(-x[1]);if(g===6)gastos+=x[1];});
+  var resultado=ingresos-gastos;
+  var tipo=resultado>0?0.25:0;
+  var cuota=resultado>0?Math.round(resultado*tipo*100)/100:0;
+  var deducciones=0;var liquidar=cuota-deducciones;
+  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 200 — Impuesto sobre Sociedades '+state.ejercicio+'</span></div>'+
+  '<table><tbody>'+
+  '<tr><td style="font-weight:600;width:60%">A) Ingresos computables</td><td style="text-align:right;color:var(--ok)">'+fmt(ingresos)+'€</td></tr>'+
+  '<tr><td style="font-weight:600">B) Gastos deducibles</td><td style="text-align:right;color:var(--rd)">'+fmt(gastos)+'€</td></tr>'+
+  '<tr style="background:var(--priLt)"><td style="font-weight:700;font-size:14px">C) Base imponible (A - B)</td><td style="text-align:right;font-weight:700;font-size:14px;color:'+(resultado>=0?'var(--ok)':'var(--rd)')+'">'+fmt(resultado)+'€</td></tr>'+
+  '<tr><td style="font-weight:600">Tipo impositivo</td><td style="text-align:right">25%</td></tr>'+
+  '<tr><td style="font-weight:600">D) Cuota íntegra</td><td style="text-align:right;color:var(--rd)">'+fmt(cuota)+'€</td></tr>'+
+  '<tr><td style="font-weight:600">E) Deducciones y bonificaciones</td><td style="text-align:right;color:var(--ok)">'+fmt(deducciones)+'€</td></tr>'+
+  '<tr style="background:var(--priLt)"><td style="font-weight:700;font-size:14px">F) Cuota a ingresar (D - E)</td><td style="text-align:right;font-weight:700;font-size:14px;color:var(--rd)">'+fmt(liquidar)+'€</td></tr>'+
+  '</tbody></table>'+
+  '<div style="padding:10px 14px;font-size:11px;color:var(--txM)">Plazo: 25 julio del año siguiente. Base imponible negativa: compensable en ejercicios futuros.</div></div>';
+}
+
+// ═══ CHAT CONTABLE ═══
+var chatHistory=[];
+function renderChat(c){
+  c.innerHTML='<div class="card"><div class="card-h"><span>💬 Chat contable</span><button class="btn btn-d" style="font-size:10px" onclick="chatHistory=[];render()">Limpiar</button></div><div class="card-b">'+
+  '<div id="chatMessages" style="max-height:400px;overflow-y:auto;margin-bottom:12px;font-size:12px">'+
+  (chatHistory.length?chatHistory.map(function(m){return '<div style="margin-bottom:8px;padding:8px;border-radius:6px;background:'+(m.role==='user'?'#EBF5FF':'var(--priLt)')+'"><strong>'+(m.role==='user'?'Tú':'🤖 Asistente')+':</strong> '+m.text+'</div>';}).join(''):'<div style="color:var(--txM);text-align:center;padding:20px">Pregúntame lo que quieras sobre tu contabilidad.<br>Ejemplos: "¿Cuánto IVA tengo que pagar?", "¿Cuál es mi resultado?", "¿Cuánto debo a proveedores?"</div>')+
+  '</div>'+
+  '<div style="display:flex;gap:6px"><input class="inp" id="chatInput" placeholder="Escribe tu pregunta contable..." onkeydown="if(event.key===\'Enter\')sendChat()" style="flex:1"><button class="btn btn-p" onclick="sendChat()">Enviar</button></div></div></div>';
+}
+function sendChat(){
+  var input=$('chatInput');var q=input.value.trim();if(!q)return;
+  chatHistory.push({role:'user',text:h(q)});
+  // Process question locally
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var s={};all.forEach(function(e){e.lines.forEach(function(l){if(!s[l.a])s[l.a]=0;s[l.a]+=l.d-l.h;});});
+  var ivaRep=0,ivaSop=0,ingresos=0,gastos=0,banco=0,caja=0,clientes=0,proveedores=0;
+  Object.entries(s).forEach(function(x){
+    var code=x[0],val=x[1];
+    if(code.startsWith('477'))ivaRep+=-(val);
+    if(code.startsWith('472'))ivaSop+=val;
+    if(parseInt(code[0])===7)ingresos+=(-val);
+    if(parseInt(code[0])===6)gastos+=val;
+    if(code.startsWith('572'))banco+=val;
+    if(code.startsWith('570'))caja+=val;
+    if(code.startsWith('430'))clientes+=val;
+    if(code.startsWith('400')||code.startsWith('410'))proveedores+=(-val);
+  });
+  var ql=q.toLowerCase();var answer='No tengo suficiente información para responder. Prueba a preguntar sobre IVA, resultado, tesorería, proveedores o clientes.';
+  if(ql.indexOf('iva')>=0&&(ql.indexOf('pagar')>=0||ql.indexOf('cuanto')>=0||ql.indexOf('cuánto')>=0||ql.indexOf('liquidar')>=0)){
+    var liq=ivaRep-ivaSop;answer='<strong>Liquidación IVA '+state.ejercicio+':</strong><br>IVA Repercutido: '+fmt(ivaRep)+'€<br>IVA Soportado: '+fmt(ivaSop)+'€<br><strong>Resultado: '+fmt(Math.abs(liq))+'€ '+(liq>=0?'a pagar':'a devolver')+'</strong>';
+  }else if(ql.indexOf('resultado')>=0||ql.indexOf('beneficio')>=0||ql.indexOf('perdida')>=0||ql.indexOf('pérdida')>=0||ql.indexOf('ganancia')>=0){
+    var res=ingresos-gastos;answer='<strong>Resultado del ejercicio '+state.ejercicio+':</strong><br>Ingresos: '+fmt(ingresos)+'€<br>Gastos: '+fmt(gastos)+'€<br><strong>'+(res>=0?'Beneficio':'Pérdida')+': '+fmt(Math.abs(res))+'€</strong>';
+  }else if(ql.indexOf('banco')>=0||ql.indexOf('tesoreria')>=0||ql.indexOf('tesorería')>=0||ql.indexOf('saldo')>=0||ql.indexOf('dinero')>=0){
+    answer='<strong>Tesorería:</strong><br>Banco: '+fmt(banco)+'€<br>Caja: '+fmt(caja)+'€<br><strong>Total disponible: '+fmt(banco+caja)+'€</strong>';
+  }else if(ql.indexOf('proveedor')>=0||ql.indexOf('debo')>=0||ql.indexOf('pagar')>=0||ql.indexOf('deuda')>=0){
+    answer='<strong>Proveedores/Acreedores:</strong><br>Pendiente de pago: <strong style="color:var(--rd)">'+fmt(proveedores)+'€</strong>';
+  }else if(ql.indexOf('cliente')>=0||ql.indexOf('cobrar')>=0||ql.indexOf('cobro')>=0||ql.indexOf('deben')>=0){
+    answer='<strong>Clientes:</strong><br>Pendiente de cobro: <strong style="color:var(--ok)">'+fmt(clientes)+'€</strong>';
+  }else if(ql.indexOf('asiento')>=0||ql.indexOf('cuantos')>=0||ql.indexOf('cuántos')>=0){
+    answer='<strong>Asientos:</strong><br>Total en '+state.ejercicio+': <strong>'+all.length+' asientos</strong>';
+  }else if(ql.indexOf('gasto')>=0&&(ql.indexOf('mayor')>=0||ql.indexOf('principal')>=0||ql.indexOf('más')>=0||ql.indexOf('mas')>=0)){
+    var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+    var topG=Object.entries(s).filter(function(x){return parseInt(x[0][0])===6&&x[1]>0;}).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
+    answer='<strong>Top 5 gastos:</strong><br>'+topG.map(function(x,i){return (i+1)+'. '+(am[x[0]]?am[x[0]].name:x[0])+': <strong>'+fmt(x[1])+'€</strong>';}).join('<br>');
+  }
+  chatHistory.push({role:'bot',text:answer});
+  input.value='';render();
+  setTimeout(function(){var msgs=$('chatMessages');if(msgs)msgs.scrollTop=msgs.scrollHeight;},100);
+}
+
+// ═══ PANEL ADMINISTRACIÓN ═══
+function renderAdmin(c){
+  c.innerHTML='<div class="card"><div class="card-h"><span>👤 Panel de administración</span></div><div class="card-b">'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
+  '<div class="card"><div class="card-h">👥 Usuarios</div><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th></tr></thead><tbody>'+
+  '<tr><td style="font-weight:600">admin</td><td>Administrador</td><td><span class="badge badge-r">Admin</span></td></tr>'+
+  '<tr class="alt"><td style="font-weight:600">javier</td><td>Javier</td><td><span class="badge badge-b">Usuario</span></td></tr>'+
+  '<tr><td style="font-weight:600">pepe</td><td>Pepe</td><td><span class="badge badge-b">Usuario</span></td></tr>'+
+  '<tr class="alt"><td style="font-weight:600">santi</td><td>Santi</td><td><span class="badge badge-b">Usuario</span></td></tr>'+
+  '</tbody></table></div>'+
+  '<div class="card"><div class="card-h">🏢 Empresas</div><table><thead><tr><th>Empresa</th><th>CIF</th><th>Estado</th></tr></thead><tbody>'+
+  '<tr><td style="font-weight:600">'+h(state.company?state.company.name:'')+'</td><td>—</td><td><span class="badge badge-g">Activa</span></td></tr>'+
+  '</tbody></table><div style="padding:8px;font-size:11px;color:var(--txM)">La multiempresa real (Cimafondos + Fanessi) requiere cambios en el servidor.</div></div>'+
+  '</div>'+
+  '<div class="card" style="margin-top:8px"><div class="card-h">📊 Estadísticas del sistema</div><div class="card-b"><div class="row">'+
+  '<div class="stat"><div class="stat-v" style="color:var(--bl)">'+state.entries.length+'</div><div class="stat-l">Asientos</div></div>'+
+  '<div class="stat"><div class="stat-v" style="color:var(--ok)">'+state.accounts.length+'</div><div class="stat-l">Cuentas</div></div>'+
+  '<div class="stat"><div class="stat-v" style="color:var(--am)">'+state.rules.length+'</div><div class="stat-l">Reglas</div></div>'+
+  '<div class="stat"><div class="stat-v" style="color:var(--vi)">'+(function(){loadMasters();return masters.client.length+masters.supplier.length+masters.bank.length;})()+'</div><div class="stat-l">Maestros</div></div>'+
+  '<div class="stat"><div class="stat-v" style="color:var(--rd)">'+(function(){loadArticulos();return articulos.length;})()+'</div><div class="stat-l">Artículos</div></div>'+
+  '</div></div></div>'+
+  '<div class="card" style="margin-top:8px"><div class="card-h" style="color:var(--rd)">⚠️ Zona peligrosa</div><div class="card-b">'+
+  '<div style="display:flex;gap:8px"><button class="btn btn-r" onclick="borrarDatosEmpresa()">🗑 Borrar TODOS los datos</button><button class="btn btn-d" onclick="exportarTodoCSV()">📊 Exportar todo CSV</button></div>'+
+  '</div></div></div></div>';
+}
+function borrarDatosEmpresa(){
+  var nombre=prompt('Escribe el nombre de la empresa para confirmar el borrado TOTAL:');
+  if(!nombre||nombre!==state.company.name){toast('Nombre incorrecto. Borrado cancelado.','error');return;}
+  if(!confirm('⚠️ ÚLTIMA CONFIRMACIÓN: ¿Borrar TODOS los datos de '+state.company.name+'? Esta acción NO se puede deshacer.'))return;
+  var count=3;var timer=setInterval(function(){
+    count--;toast('Borrando en '+count+'...','error');
+    if(count<=0){
+      clearInterval(timer);
+      // Clear localStorage
+      Object.keys(localStorage).forEach(function(k){if(k.indexOf(state.company.id)>=0||k.indexOf('cf_')>=0)localStorage.removeItem(k);});
+      toast('Datos locales borrados. Los asientos del servidor requieren borrado manual.','error');
+      render();
+    }
+  },1000);
+}
+function exportarTodoCSV(){
+  var rows=['TIPO,DATO1,DATO2,DATO3,DATO4'];
+  state.accounts.forEach(function(a){rows.push('CUENTA,'+a.code+','+a.name+',G'+a.g+','+a.t);});
+  state.entries.forEach(function(e){e.lines.forEach(function(l){rows.push('ASIENTO,'+e.date+','+e.concept+','+l.a+','+(l.d||0)+','+(l.h||0));});});
+  state.rules.forEach(function(r){rows.push('REGLA,'+r.p+','+r.a+','+r.d+','+(r.iv||''));});
+  var blob=new Blob([rows.join('\n')],{type:'text/csv'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download='export_total_'+state.ejercicio+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  toast('CSV exportado');
+}
+
+// ═══ CARTERA DE EXPEDIENTES ═══
+function renderCartera(c){
+  loadExpedientes();
+  var estados={gestion:0,judicial:0,cobrado:0,dacion:0,vendido:0,fallido:0};
+  var totalDeuda=0,totalPrecio=0,cobrado=0;
+  expedientes.forEach(function(e){
+    var st=e.estado||'gestion';if(estados[st]!==undefined)estados[st]++;
+    totalDeuda+=(e.deuda||0);totalPrecio+=(e.precio||0);
+    if(st==='cobrado'||st==='vendido')cobrado+=(e.deuda||0);
+  });
+  var pctCobro=totalDeuda>0?Math.round(cobrado/totalDeuda*100):0;
+  c.innerHTML='<div class="row"><div class="stat"><div class="stat-v" style="color:var(--bl)">'+expedientes.length+'</div><div class="stat-l">📁 Total cartera</div></div><div class="stat"><div class="stat-v" style="color:var(--am)">'+fmt(totalDeuda)+'€</div><div class="stat-l">💰 Deuda nominal</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(totalPrecio)+'€</div><div class="stat-l">🏷️ Inversión</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+pctCobro+'%</div><div class="stat-l">📊 % cobrado</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>📊 Distribución por estado</span></div><div class="card-b">'+
+  '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">'+
+  [{k:'gestion',l:'En gestión',c:'badge-b'},{k:'judicial',l:'Judicial',c:'badge-a'},{k:'cobrado',l:'Cobrado',c:'badge-g'},{k:'dacion',l:'Dación',c:'badge-v'},{k:'vendido',l:'Vendido',c:'badge-o'},{k:'fallido',l:'Fallido',c:'badge-r'}].map(function(st){
+    var n=estados[st.k]||0;var pct=expedientes.length>0?Math.round(n/expedientes.length*100):0;
+    return '<div style="text-align:center;padding:12px;border:1px solid var(--bd);border-radius:6px"><div style="font-size:24px;font-weight:700">'+n+'</div><div style="font-size:10px;color:var(--txM)">'+st.l+'</div><div style="margin-top:4px"><span class="badge '+st.c+'">'+pct+'%</span></div></div>';
+  }).join('')+'</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>📁 Expedientes por tipo</span></div>'+
+  (function(){
+    var tipos={};expedientes.forEach(function(e){var t=e.tipo||'otros';if(!tipos[t])tipos[t]={count:0,deuda:0,precio:0};tipos[t].count++;tipos[t].deuda+=(e.deuda||0);tipos[t].precio+=(e.precio||0);});
+    return '<table><thead><tr><th>Tipo</th><th style="text-align:right">Expedientes</th><th style="text-align:right">Deuda</th><th style="text-align:right">Inversión</th><th style="text-align:right">% compra</th></tr></thead><tbody>'+
+    Object.entries(tipos).map(function(x,i){var pct=x[1].deuda>0?Math.round(x[1].precio/x[1].deuda*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600"><span class="badge badge-v">'+h(x[0])+'</span></td><td style="text-align:right">'+x[1].count+'</td><td style="text-align:right">'+fmt(x[1].deuda)+'€</td><td style="text-align:right">'+fmt(x[1].precio)+'€</td><td style="text-align:right;font-weight:600">'+pct+'%</td></tr>';}).join('')+'</tbody></table>';
+  })()+'</div>';
+}
+
+// ═══ RENTABILIDAD POR EXPEDIENTE ═══
+function renderRentabilidad(c){
+  loadExpedientes();
+  var items=expedientes.filter(function(e){return e.deuda>0&&e.precio>0;}).map(function(e){
+    var rentab=Math.round((e.deuda-e.precio)/e.precio*100);
+    var multiple=e.precio>0?(e.deuda/e.precio).toFixed(1):'—';
+    return {codigo:e.codigo,deudor:e.deudor,deuda:e.deuda,precio:e.precio,rentab:rentab,multiple:multiple,estado:e.estado||'gestion'};
+  }).sort(function(a,b){return b.rentab-a.rentab;});
+  var totalInvertido=items.reduce(function(s,x){return s+x.precio;},0);
+  var totalRecuperable=items.reduce(function(s,x){return s+x.deuda;},0);
+  var rentabMedia=totalInvertido>0?Math.round((totalRecuperable-totalInvertido)/totalInvertido*100):0;
+
+  c.innerHTML='<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(totalInvertido)+'€</div><div class="stat-l">🏷️ Invertido</div></div><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(totalRecuperable)+'€</div><div class="stat-l">💰 Recuperable</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+rentabMedia+'%</div><div class="stat-l">📊 Rentabilidad media</div></div><div class="stat"><div class="stat-v" style="color:var(--vi)">x'+(totalInvertido>0?(totalRecuperable/totalInvertido).toFixed(1):'0')+'</div><div class="stat-l">📈 Múltiplo medio</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>💰 Rentabilidad por expediente</span></div>'+
+  (items.length?'<table><thead><tr><th>Código</th><th>Deudor</th><th style="text-align:right">Inversión</th><th style="text-align:right">Deuda</th><th style="text-align:right">Rentab.</th><th style="text-align:right">Múltiplo</th><th>Estado</th><th>Barra</th></tr></thead><tbody>'+
+  items.map(function(x,i){
+    var barW=Math.min(Math.max(x.rentab,0),500)/5;
+    var estBadge=x.estado==='cobrado'?'badge-g':x.estado==='fallido'?'badge-r':x.estado==='judicial'?'badge-a':'badge-b';
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:700;font-family:monospace;font-size:10px;color:var(--pri)">'+h(x.codigo)+'</td><td style="font-size:11px">'+h(x.deudor)+'</td><td style="text-align:right">'+fmt(x.precio)+'€</td><td style="text-align:right">'+fmt(x.deuda)+'€</td><td style="text-align:right;font-weight:700;color:var(--ok)">'+x.rentab+'%</td><td style="text-align:right;font-weight:600;color:var(--vi)">x'+x.multiple+'</td><td><span class="badge '+estBadge+'">'+h(x.estado)+'</span></td><td><div style="width:'+barW+'px;height:10px;background:var(--ok);border-radius:5px;opacity:0.5"></div></td></tr>';
+  }).join('')+'</tbody></table>':'<div class="empty">Sin datos de rentabilidad — añade expedientes con deuda y precio</div>')+'</div>';
+}
+
+// ═══ INFORME DE CONCILIACIÓN ═══
+function renderInfConciliacion(c){
+  var all=filteredEntries();
+  var conciliados=0,pendientes=0,totalConc=0,totalPend=0;
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(l.a&&l.a.startsWith('572')){
+      var mov=Math.abs(l.d-l.h);
+      if(e.conciliado){conciliados++;totalConc+=mov;}
+      else{pendientes++;totalPend+=mov;}
+    }
+  });});
+  c.innerHTML='<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+conciliados+'</div><div class="stat-l">✅ Conciliados</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+pendientes+'</div><div class="stat-l">⏳ Pendientes</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(totalConc)+'€</div><div class="stat-l">💚 Importe conciliado</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(totalPend)+'€</div><div class="stat-l">🔴 Importe pendiente</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>📄 Partidas pendientes de conciliar</span></div>'+
+  (function(){
+    var pend=[];
+    all.forEach(function(e){if(!e.conciliado){e.lines.forEach(function(l){if(l.a&&l.a.startsWith('572'))pend.push({date:e.date,concept:e.concept,debe:l.d,haber:l.h});});}});
+    if(!pend.length)return '<div class="empty">✓ Todo conciliado</div>';
+    return '<table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Entrada</th><th style="text-align:right">Salida</th></tr></thead><tbody>'+
+    pend.map(function(p,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px">'+fmtD(p.date)+'</td><td style="font-size:11px">'+h(p.concept)+'</td><td style="text-align:right;color:var(--ok)">'+(p.debe>0?fmt(p.debe):'')+'</td><td style="text-align:right;color:var(--rd)">'+(p.haber>0?fmt(p.haber):'')+'</td></tr>';}).join('')+
+    '<tr class="total"><td colspan="2">TOTAL PENDIENTE</td><td style="text-align:right">'+fmt(pend.reduce(function(s,p){return s+p.debe;},0))+'€</td><td style="text-align:right">'+fmt(pend.reduce(function(s,p){return s+p.haber;},0))+'€</td></tr></tbody></table>';
+  })()+'</div>';
 }
 
 // ═══ ANÁLISIS PROVEEDORES ═══
