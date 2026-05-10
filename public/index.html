@@ -487,24 +487,47 @@ function toggleVoice(){
 
 function proposeEntry(){
   var desc=$('aDesc').value;var amt=parseFloat($('aAmt').value)||0;var ivaType=$('aIva').value;var date=$('aDate').value;var paidBy=$('aPaidBy').value;
-  if(!desc){toast('Escribe una descripción','error');return;}
-  // Try to extract amount from description if not set
-  if(!amt){var numMatch=desc.match(/(\d+[.,]?\d*)\s*(euro|€|eur)/i);if(numMatch){amt=parseFloat(numMatch[1].replace(',','.'));if(amt>0)$('aAmt').value=amt;}}
-  if(!amt){var numMatch2=desc.match(/(\d+[.,]\d{2})/);if(numMatch2){amt=parseFloat(numMatch2[1].replace(',','.'));if(amt>0)$('aAmt').value=amt;}}
-  if(!amt||amt<=0){toast('⚠ Pon el importe total (con IVA incluido)','error');$('aAmt').focus();return;}
+  if(!desc){toast('Escribe qué es el gasto','error');return;}
+  // ── SMART EXTRACT from description ──
+  // 1. Extract amount: "35 euros", "1200€", "96,80", "factura 850.50"
+  if(!amt){
+    var p1=desc.match(/(\d+[\.,]?\d*)\s*(euros?|€|eur)/i);
+    if(p1){amt=parseFloat(p1[1].replace(',','.'));if(amt>0)$('aAmt').value=amt;}
+  }
+  if(!amt){
+    var p2=desc.match(/(\d+[\.,]\d{2})/);
+    if(p2){amt=parseFloat(p2[1].replace(',','.'));if(amt>0)$('aAmt').value=amt;}
+  }
+  if(!amt){
+    var p3=desc.match(/(\d{2,})/);
+    if(p3){var v3=parseFloat(p3[1]);if(v3>=5){amt=v3;$('aAmt').value=amt;}}
+  }
+  // 2. Extract payer: "pagado Pepe", "paga Santi", mention of socio name
+  if(!paidBy){
+    var txt=desc.toLowerCase();
+    for(var j=0;j<SOCIOS.length;j++){
+      if(txt.indexOf(SOCIOS[j].n.toLowerCase())>=0){
+        paidBy=SOCIOS[j].a;$('aPaidBy').value=paidBy;break;
+      }
+    }
+  }
+  // 3. Match rules for account + IVA
   var st=desc.toUpperCase();var acct='62900000',rn='Otros servicios',riv=null;
   for(var i=0;i<state.rules.length;i++){var r=state.rules[i];try{if(new RegExp(r.p,'i').test(st)){acct=r.a;rn=r.d;riv=r.iv;break;}}catch(e){}}
-  var dp=paidBy;
-  if(!dp){var txt=desc.toLowerCase();for(var j=0;j<SOCIOS.length;j++){if(txt.indexOf(SOCIOS[j].n.toLowerCase())>=0){dp=SOCIOS[j].a;break;}}}
+  // If rule sets IVA, update selector
+  if(riv&&riv!=='na'){ivaType=riv;$('aIva').value=riv;}
+  // 4. If still no amount, ask
+  if(!amt||amt<=0){toast('Pon el importe. Ej: "comida restaurante 35 euros pagado Pepe"','error');$('aAmt').focus();return;}
+  // ── BUILD ENTRY ──
   var eIva=riv||ivaType;var ic=IVA.find(function(x){return x.id===eIva;});
   var ded=ic&&ic.r!==null&&ic.r>0&&eIva!=='nodeducible';
   var base=amt,iva=0;if(ded&&amt>0){base=Math.round((amt/(1+ic.r))*100)/100;iva=Math.round((amt-base)*100)/100;}
-  var cp=dp||'57200000';var ls=[{a:acct,d:ded?base:amt,h:0}];if(ded)ls.push({a:'47200000',d:iva,h:0});ls.push({a:cp,d:0,h:amt});
+  var cp=paidBy||'57200000';var ls=[{a:acct,d:ded?base:amt,h:0}];if(ded)ls.push({a:'47200000',d:iva,h:0});ls.push({a:cp,d:0,h:amt});
   var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  var payer=dp?SOCIOS.find(function(s){return s.a===dp;}):null;
-  $('aProposal').innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:12px"><div class="card-h" style="background:var(--priLt);color:var(--pri)">Propuesta — '+h(rn)+'</div><div class="card-b"><div style="display:flex;gap:14px;margin-bottom:10px;font-size:12px;flex-wrap:wrap"><div>Fecha: <strong>'+fmtD(date)+'</strong></div><div>Base: <strong>'+fmt(base)+'€</strong></div>'+(iva>0?'<div>IVA '+ic.l+': <strong>'+fmt(iva)+'€</strong></div>':'')+'<div>Total: <strong>'+fmt(amt)+'€</strong></div><div>Paga: <strong style="color:'+(dp?'var(--or)':'var(--bl)')+'">'+(payer?payer.n:'Banco')+'</strong></div></div>'+
+  var payer=paidBy?SOCIOS.find(function(s){return s.a===paidBy;}):null;
+  $('aProposal').innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:12px"><div class="card-h" style="background:var(--priLt);color:var(--pri)">Propuesta \u2014 '+h(rn)+'</div><div class="card-b"><div style="display:flex;gap:14px;margin-bottom:10px;font-size:12px;flex-wrap:wrap"><div>Fecha: <strong>'+fmtD(date)+'</strong></div><div>Base: <strong>'+fmt(base)+'\u20ac</strong></div>'+(iva>0?'<div>IVA '+ic.l+': <strong>'+fmt(iva)+'\u20ac</strong></div>':'')+'<div>Total: <strong>'+fmt(amt)+'\u20ac</strong></div><div>Paga: <strong style="color:'+(paidBy?'var(--or)':'var(--bl)')+'">'+(payer?payer.n:'Banco')+'</strong></div></div>'+
   '<table><thead><tr><th>Cuenta</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th></tr></thead><tbody>'+ls.map(function(l){return '<tr><td><span class="acct">'+l.a+'</span> <span style="color:var(--txM)">'+(am[l.a]?am[l.a].name:'')+'</span></td><td style="text-align:right" class="amt-pos">'+(l.d>0?fmt(l.d):'')+'</td><td style="text-align:right" class="amt-neg">'+(l.h>0?fmt(l.h):'')+'</td></tr>';}).join('')+'</tbody></table>'+
-  '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-d" onclick="$(\'aProposal\').innerHTML=\'\'">✗</button><button class="btn btn-p" onclick="saveAssistEntry()">✓ Contabilizar</button></div></div></div>';
+  '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-d" onclick="$(\'aProposal\').innerHTML=\'\'">✗</button><button class="btn btn-p" onclick="saveAssistEntry()">\u2713 Contabilizar</button></div></div></div>';
   window._assistData={date:date,concept:desc,lines:ls};
 }
 
