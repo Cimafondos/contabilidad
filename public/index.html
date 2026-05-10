@@ -157,9 +157,9 @@ function checkIntegrity(){
 
 // TABS & RIBBON
 var TABS=[
-{id:'inicio',label:'Inicio',groups:[{label:'General',items:[{id:'dash',icon:'📊',label:'Dashboard'},{id:'import',icon:'📂',label:'Importar'}]},{label:'Asientos',items:[{id:'newEntry',icon:'➕',label:'Nuevo gasto'},{id:'manualEntry',icon:'✏️',label:'Manual'}]}]},
+{id:'inicio',label:'Inicio',groups:[{label:'General',items:[{id:'dash',icon:'📊',label:'Dashboard'},{id:'import',icon:'📂',label:'Importar'}]},{label:'Asientos',items:[{id:'newEntry',icon:'➕',label:'Nuevo gasto'},{id:'manualEntry',icon:'✏️',label:'Manual'},{id:'plantillas',icon:'📄',label:'Plantillas'}]}]},
 {id:'diario',label:'Diario',groups:[{label:'Consultas',items:[{id:'journal',icon:'📒',label:'Diario'},{id:'ledger',icon:'📖',label:'Mayor'},{id:'trial',icon:'⚖️',label:'Saldos'}]},{label:'Resultados',items:[{id:'pnl',icon:'📈',label:'PyG'},{id:'balance',icon:'🏛️',label:'Balance'},{id:'libroiva',icon:'📋',label:'Libro IVA'}]}]},
-{id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]}]},
+{id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]},{label:'Posición',items:[{id:'posicion',icon:'🏦',label:'Posición'}]}]},
 {id:'maestros',label:'Maestros',groups:[{label:'Terceros',items:[{id:'clients',icon:'🏢',label:'Clientes'},{id:'suppliers',icon:'🏭',label:'Proveedores'}]},{label:'Tablas',items:[{id:'banks',icon:'🏦',label:'Bancos'}]}]},
 {id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'trash',icon:'🗑️',label:'Papelera'}]}]}
 ];
@@ -225,6 +225,8 @@ function renderView(){
   else if(v==='periods')renderPeriods(c);
   else if(v==='cierre')renderCierre(c);
   else if(v==='libroiva')renderLibroIVA(c);
+  else if(v==='plantillas')renderPlantillas(c);
+  else if(v==='posicion')renderPosicion(c);
   else c.innerHTML='<div class="empty"><div style="font-size:40px;margin-bottom:10px">🚧</div>Próximamente</div>';
 }
 
@@ -344,7 +346,7 @@ function showEntryModal(entry,mode){
   var dateVal=mode==='dup'?today():(entry?entry.date:today());
   var conceptVal=mode==='dup'?(entry?entry.concept:'')+' (copia)':(entry?entry.concept:'');
   var bg=document.createElement('div');bg.className='modal-bg';bg.id='entryModal';
-  bg.innerHTML='<div class="modal"><div class="card-h"><span>'+title+'</span><button class="btn btn-d" onclick="document.getElementById(\'entryModal\').remove()">✕</button></div><div class="card-b"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><div style="width:125px"><div class="lbl">Fecha</div><input type="date" class="inp" id="eDate" value="'+dateVal+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div><div style="flex:1;min-width:180px"><div class="lbl">Concepto</div><input class="inp" id="eConcept" value="'+h(conceptVal)+'"></div></div><div id="eLines"></div><div style="margin-top:8px"><button class="btn btn-d" onclick="addEntryLine()">+ Línea</button></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span id="eBalance"></span><button class="btn btn-p" id="eSave" onclick="saveEntry()">💾 '+(mode==='edit'?'Guardar':'Crear')+'</button></div></div></div>';
+  bg.innerHTML='<div class="modal"><div class="card-h"><span>'+title+'</span><button class="btn btn-d" onclick="document.getElementById(\'entryModal\').remove()">✕</button></div><div class="card-b"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><div style="width:125px"><div class="lbl">Fecha</div><input type="date" class="inp" id="eDate" value="'+dateVal+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div><div style="flex:1;min-width:180px"><div class="lbl">Concepto</div><input class="inp" id="eConcept" value="'+h(conceptVal)+'"></div></div><div id="eLines"></div><div style="margin-top:8px"><button class="btn btn-d" onclick="addEntryLine()">+ Línea</button></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span id="eBalance"></span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="saveAsPlantilla()" title="Guardar como plantilla">📄 Plantilla</button><button class="btn btn-p" id="eSave" onclick="saveEntry()">💾 '+(mode==='edit'?'Guardar':'Crear')+'</button></div></div></div></div>';
   document.body.appendChild(bg);renderEntryLines();
 }
 
@@ -395,6 +397,18 @@ function updateBalance(){
   var eb=$('eBalance');if(eb)eb.innerHTML='<span class="badge '+(ok?'badge-g':'badge-r')+'">'+(ok?'✓ Cuadrado':'Descuadre: '+fmt(Math.abs(tD-tH)))+'</span>';
   var es=$('eSave');if(es)es.disabled=!ok;
 }
+function saveAsPlantilla(){
+  var concept=$('eConcept').value;
+  var lines=entryLines.filter(function(l){return l.a;}).map(function(l){return {a:l.a,d:parseFloat(l.d)||0,h:parseFloat(l.h)||0};});
+  if(lines.length<2){toast('Mínimo 2 líneas','error');return;}
+  var name=prompt('Nombre de la plantilla:',concept||'');
+  if(!name)return;
+  loadPlantillas();
+  plantillas.push({id:'pl_'+uid(),name:name,concept:concept,period:'Manual',lines:lines});
+  savePlantillas();
+  toast('✓ Plantilla guardada: '+name);
+}
+
 async function saveEntry(){
   var date=$('eDate').value;var concept=$('eConcept').value;
   if(isPeriodClosed(date)){toast('⛔ Periodo cerrado — no se puede crear/editar asientos en '+date.slice(0,7),'error');return;}
@@ -1097,6 +1111,120 @@ function renderSalesMap(c){
     return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td>'+x[1].clients.length+'</td><td style="text-align:right" class="amt-pos">'+fmt(x[1].total)+'€</td></tr>';
   }).join('')+'</tbody></table>'
   :'<div class="empty"><div style="font-size:40px;margin-bottom:10px">🗺️</div><div style="font-weight:600;margin-bottom:6px">Mapa de ventas</div><div style="color:var(--txM);font-size:12px">Añade clientes con provincia en <strong>Maestros → Clientes</strong><br>y asígnales una cuenta contable del grupo 7 para ver las ventas aquí.</div></div>')+'</div></div>';
+}
+
+// ═══ POSICIÓN DE TESORERÍA ═══
+function renderPosicion(c){
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  // Agrupar saldos por cuenta bancaria (572.xxx) y caja (570.xxx)
+  var cuentas={};
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(l.a&&(l.a.startsWith('572')||l.a.startsWith('570'))){
+      if(!cuentas[l.a])cuentas[l.a]={code:l.a,name:am[l.a]?am[l.a].name:l.a,debe:0,haber:0};
+      cuentas[l.a].debe+=l.d;cuentas[l.a].haber+=l.h;
+    }
+  });});
+  var items=Object.values(cuentas).map(function(x){x.saldo=x.debe-x.haber;return x;}).sort(function(a,b){return a.code.localeCompare(b.code);});
+  var totalSaldo=items.reduce(function(s,x){return s+x.saldo;},0);
+
+  // Cobros y pagos pendientes (430=clientes por cobrar, 400=proveedores por pagar)
+  var pendCobro=0,pendPago=0;
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(l.a&&l.a.startsWith('430'))pendCobro+=l.d-l.h;
+    if(l.a&&l.a.startsWith('400'))pendPago+=l.h-l.d;
+  });});
+
+  c.innerHTML=dateFilterHTML()+
+  '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(totalSaldo)+'€</div><div class="stat-l">🏦 Saldo total disponible</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(pendCobro>0?pendCobro:0)+'€</div><div class="stat-l">📥 Pendiente de cobro</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(pendPago>0?pendPago:0)+'€</div><div class="stat-l">📤 Pendiente de pago</div></div><div class="stat"><div class="stat-v" style="color:'+(totalSaldo+pendCobro-pendPago>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalSaldo+pendCobro-pendPago)+'€</div><div class="stat-l">📊 Posición neta prevista</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>🏦 Detalle por cuenta</span></div>'+
+  (items.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Entradas</th><th style="text-align:right">Salidas</th><th style="text-align:right">Saldo</th></tr></thead><tbody>'+
+  items.map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td class="acct">'+x.code+'</td><td>'+h(x.name)+'</td><td style="text-align:right;color:var(--ok)">'+fmt(x.debe)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(x.haber)+'€</td><td style="text-align:right;font-weight:700" class="'+(x.saldo>=0?'amt-pos':'amt-neg')+'">'+fmt(x.saldo)+'€</td></tr>';}).join('')+
+  '<tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">'+fmt(items.reduce(function(s,x){return s+x.debe;},0))+'€</td><td style="text-align:right">'+fmt(items.reduce(function(s,x){return s+x.haber;},0))+'€</td><td style="text-align:right;font-size:14px">'+fmt(totalSaldo)+'€</td></tr></tbody></table>':'<div class="empty">Sin movimientos bancarios</div>')+'</div>';
+}
+
+// ═══ PLANTILLAS DE ASIENTOS REPETITIVOS ═══
+var plantillas=[];
+function loadPlantillas(){try{plantillas=JSON.parse(localStorage.getItem('cf_plantillas_'+(state.company?state.company.id:''))||'[]');}catch(e){plantillas=[];}}
+function savePlantillas(){try{localStorage.setItem('cf_plantillas_'+(state.company?state.company.id:''),JSON.stringify(plantillas));}catch(e){}}
+
+function renderPlantillas(c){
+  loadPlantillas();
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  c.innerHTML='<div class="card"><div class="card-h"><span>📄 Plantillas de asientos repetitivos — '+plantillas.length+'</span><button class="btn btn-p" onclick="newPlantilla()">+ Nueva plantilla</button></div>'+
+  (plantillas.length?'<div class="scr"><table><thead><tr><th>Nombre</th><th>Concepto</th><th>Líneas</th><th style="text-align:right">Importe</th><th>Periodicidad</th><th style="width:100px">Acciones</th></tr></thead><tbody>'+
+  plantillas.map(function(p,i){
+    var total=p.lines.reduce(function(s,l){return s+(l.d||0);},0);
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(p.name)+'</td><td style="font-size:11px">'+h(p.concept||'')+'</td><td style="font-size:11px;color:var(--txM)">'+p.lines.length+' líneas</td><td style="text-align:right;font-weight:600">'+fmt(total)+'€</td><td><span class="badge badge-b">'+(p.period||'Manual')+'</span></td><td style="white-space:nowrap"><button class="btn btn-p" style="font-size:9px;padding:3px 8px" onclick="usePlantilla('+i+')" title="Usar">▶ Usar</button> <button class="abtn" style="color:var(--rd)" onclick="deletePlantilla('+i+')" title="Borrar">🗑</button></td></tr>';
+  }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:30px;margin-bottom:8px">📄</div><div style="font-weight:600;margin-bottom:4px">Sin plantillas</div><div style="font-size:11px;color:var(--txM)">Crea plantillas para asientos que se repiten cada mes (nóminas, alquiler, seguros...)</div></div>')+'</div>';
+}
+
+function newPlantilla(){
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='plantillaModal';
+  bg.innerHTML='<div class="modal" style="max-width:650px"><div class="card-h"><span>📄 Nueva plantilla</span><button class="btn btn-d" onclick="document.getElementById(\'plantillaModal\').remove()">✕</button></div><div class="card-b">'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px"><div><div class="lbl">Nombre plantilla *</div><input class="inp" id="plName" placeholder="Nómina empleado 1"></div><div><div class="lbl">Periodicidad</div><select class="sel" id="plPeriod" style="width:100%"><option value="Mensual">Mensual</option><option value="Trimestral">Trimestral</option><option value="Anual">Anual</option><option value="Manual">Manual</option></select></div><div style="grid-column:span 2"><div class="lbl">Concepto del asiento</div><input class="inp" id="plConcept" placeholder="Nómina mayo 2026"></div></div>'+
+  '<div class="lbl">Líneas del asiento</div><div id="plLines"></div>'+
+  '<button class="btn btn-d" style="margin:8px 0" onclick="addPlantillaLine()">+ Línea</button>'+
+  '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-d" onclick="document.getElementById(\'plantillaModal\').remove()">Cancelar</button><button class="btn btn-p" onclick="savePlantilla()">💾 Guardar plantilla</button></div></div></div>';
+  document.body.appendChild(bg);
+  window._plLines=[{a:'',d:'',h:''},{a:'',d:'',h:''}];
+  renderPlantillaLines();
+}
+
+function renderPlantillaLines(){
+  var el=$('plLines');if(!el)return;
+  el.innerHTML='<table style="font-size:11px"><thead><tr><th>Cuenta</th><th style="width:100px">Debe</th><th style="width:100px">Haber</th><th style="width:30px"></th></tr></thead><tbody>'+
+  window._plLines.map(function(l,i){
+    return '<tr><td><input class="inp" id="pl_a'+i+'" value="'+h(l.a)+'" placeholder="Cuenta 8díg" style="font-size:11px"></td><td><input class="inp" id="pl_d'+i+'" value="'+l.d+'" style="text-align:right;font-size:11px" placeholder="0"></td><td><input class="inp" id="pl_h'+i+'" value="'+l.h+'" style="text-align:right;font-size:11px" placeholder="0"></td><td>'+(window._plLines.length>2?'<button class="abtn" onclick="window._plLines.splice('+i+',1);renderPlantillaLines()">✕</button>':'')+'</td></tr>';
+  }).join('')+'</tbody></table>';
+}
+
+function addPlantillaLine(){
+  // Save current values first
+  for(var i=0;i<window._plLines.length;i++){
+    var a=$('pl_a'+i),d=$('pl_d'+i),h2=$('pl_h'+i);
+    if(a)window._plLines[i]={a:a.value,d:d?d.value:'',h:h2?h2.value:''};
+  }
+  window._plLines.push({a:'',d:'',h:''});
+  renderPlantillaLines();
+}
+
+function savePlantilla(){
+  var name=$('plName').value;var concept=$('plConcept').value;var period=$('plPeriod').value;
+  if(!name){toast('Nombre obligatorio','error');return;}
+  var lines=[];
+  for(var i=0;i<window._plLines.length;i++){
+    var a=$('pl_a'+i),d=$('pl_d'+i),h2=$('pl_h'+i);
+    var code=a?a.value.replace(/[^0-9]/g,''):'';
+    if(code){
+      if(code.length<8)code=code+('00000000').slice(code.length);
+      lines.push({a:code,d:parseFloat(d?d.value:0)||0,h:parseFloat(h2?h2.value:0)||0});
+    }
+  }
+  if(lines.length<2){toast('Mínimo 2 líneas','error');return;}
+  loadPlantillas();
+  plantillas.push({id:'pl_'+uid(),name:name,concept:concept,period:period,lines:lines});
+  savePlantillas();
+  $('plantillaModal').remove();
+  toast('Plantilla creada');render();
+}
+
+function deletePlantilla(idx){
+  if(!confirm('¿Eliminar plantilla?'))return;
+  loadPlantillas();plantillas.splice(idx,1);savePlantillas();toast('Plantilla eliminada');render();
+}
+
+async function usePlantilla(idx){
+  loadPlantillas();var p=plantillas[idx];if(!p)return;
+  var date=prompt('Fecha del asiento (YYYY-MM-DD):',today());
+  if(!date)return;
+  if(isPeriodClosed(date)){toast('⛔ Periodo cerrado','error');return;}
+  var concept=prompt('Concepto:',p.concept||p.name);
+  if(!concept)return;
+  var tD=p.lines.reduce(function(s,l){return s+(l.d||0);},0);
+  var tH=p.lines.reduce(function(s,l){return s+(l.h||0);},0);
+  if(Math.abs(tD-tH)>0.01){toast('La plantilla no cuadra','error');return;}
+  await api('/api/entries/'+state.company.id,{method:'POST',body:{id:'pl_'+uid(),date:date,concept:concept,type:'plantilla',lines:p.lines}});
+  await loadData();checkIntegrity();toast('Asiento creado desde plantilla');render();
 }
 
 // ═══ LIBRO DE IVA ═══
