@@ -317,6 +317,43 @@ app.get('/api/backup/:companyId', (req, res) => {
   };
   res.json(data);
 });
+// — OCR via Claude API —
+app.post('/api/ocr', async (req, res) => {
+    try {
+          const { imageBase64, mediaType } = req.body;
+          if (!imageBase64 || !mediaType) {
+                  return res.status(400).json({ error: 'Faltan imageBase64 o mediaType' });
+          }
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+                  method: 'POST',
+                  headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': process.env.ANTHROPIC_API_KEY,
+                            'anthropic-version': '2023-06-01'
+                  },
+                  body: JSON.stringify({
+                            model: 'claude-opus-4-5',
+                            max_tokens: 1024,
+                            messages: [{
+                                        role: 'user',
+                                        content: [
+                                          { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
+                                          { type: 'text', text: 'Extrae todos los datos de este ticket/factura. Devuelve SOLO un JSON con: establecimiento, fecha, total, productos (array con nombre y precio). Sin explicaciones.' }
+                                                    ]
+                            }]
+                  })
+          });
+          if (!response.ok) {
+                  const err = await response.json();
+                  return res.status(response.status).json({ error: err });
+          }
+          const data = await response.json();
+          res.json({ result: data.content[0].text });
+    } catch (err) {
+          console.error('Error en /api/ocr:', err);
+          res.status(500).json({ error: err.message });
+    }
+});
 
 // ── SPA fallback ──
 app.get('*', (req, res) => {
