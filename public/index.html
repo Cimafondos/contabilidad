@@ -548,17 +548,29 @@ function toggleVoice(){
 // Live extraction from description field
 function extractFromDesc(){
   var desc=$('aDesc').value;if(!desc||desc.length<3)return;
-  // Extract amount
-  var mx=desc.match(/(\d+[\.,]?\d*)\s*(euros?|€|eur)/i);
-  if(!mx)mx=desc.match(/(\d+[\.,]\d{2})/);
-  if(!mx){var mx2=desc.match(/(\d{2,5})(?!\d)/);if(mx2){var v2=parseFloat(mx2[1]);if(v2>=5&&v2<100000)mx=mx2;}}
-  if(mx){var v=parseFloat(mx[1].replace(',','.'));if(v>0&&v<100000)$('aAmt').value=v;}
-  // Extract payer
-  var txt=desc.toLowerCase();
-  for(var j=0;j<SOCIOS.length;j++){
-    if(txt.indexOf(SOCIOS[j].n.toLowerCase())>=0){$('aPaidBy').value=SOCIOS[j].a;break;}
+  // 1. Extract amount - multiple patterns
+  var amtField=$('aAmt');
+  if(amtField&&(!amtField.value||amtField.value==='0'||amtField.value==='')){
+    var mx=desc.match(/(\d+[\.,]?\d*)\s*(euros?|€|eur)/i);
+    if(!mx)mx=desc.match(/(\d+[\.,]\d{2})/);
+    if(!mx){var mx2=desc.match(/\b(\d{2,5})\b/);if(mx2){var v2=parseFloat(mx2[1]);if(v2>=5&&v2<100000)mx=mx2;}}
+    if(mx){var v=parseFloat(mx[1].replace(',','.'));if(v>0&&v<100000){amtField.value=v;}}
   }
-  // Match rule for IVA
+  // 2. Extract payer - prefer "pagado/paga X" pattern first
+  var txt=desc.toLowerCase();var found=false;
+  var payMatch=txt.match(/pag(?:ado|a|ó)\s+(?:por\s+)?(\w+)/i);
+  if(payMatch){
+    var payName=payMatch[1].toLowerCase();
+    for(var j=0;j<SOCIOS.length;j++){
+      if(SOCIOS[j].n.toLowerCase()===payName){$('aPaidBy').value=SOCIOS[j].a;found=true;break;}
+    }
+  }
+  if(!found){
+    for(var k=0;k<SOCIOS.length;k++){
+      if(txt.indexOf(SOCIOS[k].n.toLowerCase())>=0){$('aPaidBy').value=SOCIOS[k].a;break;}
+    }
+  }
+  // 3. Match rule for IVA type
   var st=desc.toUpperCase();
   for(var i=0;i<state.rules.length;i++){var r=state.rules[i];try{if(new RegExp(r.p,'i').test(st)){if(r.iv&&r.iv!=='na')$('aIva').value=r.iv;break;}}catch(e){}}
 }
@@ -588,14 +600,12 @@ function proposeEntry(){
     var p3=desc.match(/(\d{2,5})(?!\d)/);
     if(p3){var v3=parseFloat(p3[1]);if(v3>=5&&v3<100000){amt=v3;$('aAmt').value=amt;}}
   }
-  // 2. Extract payer: "pagado Pepe", "paga Santi", mention of socio name
+  // 2. Extract payer: "pagado Pepe", "paga Santi"
   if(!paidBy){
     var txt=desc.toLowerCase();
-    for(var j=0;j<SOCIOS.length;j++){
-      if(txt.indexOf(SOCIOS[j].n.toLowerCase())>=0){
-        paidBy=SOCIOS[j].a;$('aPaidBy').value=paidBy;break;
-      }
-    }
+    var payMatch=txt.match(/pag(?:ado|a|ó)\s+(?:por\s+)?(\w+)/i);
+    if(payMatch){for(var j=0;j<SOCIOS.length;j++){if(SOCIOS[j].n.toLowerCase()===payMatch[1].toLowerCase()){paidBy=SOCIOS[j].a;$('aPaidBy').value=paidBy;break;}}}
+    if(!paidBy){for(var j2=0;j2<SOCIOS.length;j2++){if(txt.indexOf(SOCIOS[j2].n.toLowerCase())>=0){paidBy=SOCIOS[j2].a;$('aPaidBy').value=paidBy;break;}}}
   }
   // 3. Match rules for account + IVA
   var st=desc.toUpperCase();var acct='62900000',rn='Otros servicios',riv=null;
@@ -639,6 +649,17 @@ async function saveAssistEntry(){
     }
   }
   await api('/api/entries/'+state.company.id,{method:'POST',body:{id:'sm_'+uid(),date:d.date,concept:d.concept,type:'assistant',lines:d.lines}});
+  // Auto-create supplier if not exists
+  var descWords=d.concept.split(/\s+/);
+  var provName=descWords[0];if(descWords.length>1&&descWords[0].length<4)provName=descWords[0]+' '+descWords[1];
+  if(provName&&provName.length>2){
+    loadMasters();
+    var exists=masters.supplier.some(function(s){return s.name&&s.name.toUpperCase()===provName.toUpperCase();});
+    if(!exists&&confirm('¿Dar de alta "'+provName+'" como proveedor?')){
+      masters.supplier.push({code:'P'+String(masters.supplier.length+1).padStart(3,'0'),name:provName,cif:'',address:'',cp:'',city:'',province:'',country:'ES',account:'41000000',payment:'',days:'',contact:'',phone:'',email:'',notes:'Creado desde asistente'});
+      saveMasters('supplier');
+    }
+  }
   $('assistModal').remove();await loadData();checkIntegrity();auditLog('gasto_asistente',d.concept);toast('Asiento contabilizado');render();
 }
 
