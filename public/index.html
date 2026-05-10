@@ -161,6 +161,8 @@ var TABS=[
 {id:'diario',label:'Diario',groups:[{label:'Consultas',items:[{id:'journal',icon:'📒',label:'Diario'},{id:'ledger',icon:'📖',label:'Mayor'},{id:'trial',icon:'⚖️',label:'Saldos'}]},{label:'Resultados',items:[{id:'pnl',icon:'📈',label:'PyG'},{id:'balance',icon:'🏛️',label:'Balance'},{id:'libroiva',icon:'📋',label:'Libro IVA'}]},{label:'Facturas',items:[{id:'facturas',icon:'🧾',label:'Facturas'}]}]},
 {id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]},{label:'Posición',items:[{id:'posicion',icon:'🏦',label:'Posición'},{id:'prevision',icon:'📊',label:'Previsión'}]},{label:'Operaciones',items:[{id:'conciliacion',icon:'🔄',label:'Conciliación'},{id:'inmovilizado',icon:'🏗️',label:'Inmovilizado'}]}]},
 {id:'maestros',label:'Maestros',groups:[{label:'Terceros',items:[{id:'clients',icon:'🏢',label:'Clientes'},{id:'suppliers',icon:'🏭',label:'Proveedores'}]},{label:'Tablas',items:[{id:'banks',icon:'🏦',label:'Bancos'},{id:'articulos',icon:'📦',label:'Artículos'}]},{label:'Análisis',items:[{id:'analisis',icon:'📊',label:'Proveedores'}]}]},
+{id:'npl',label:'NPL',groups:[{label:'Gestión',items:[{id:'expedientes',icon:'📁',label:'Expedientes'},{id:'captacion',icon:'🤝',label:'Captación'}]}]},
+{id:'fiscal',label:'Fiscal',groups:[{label:'Modelos',items:[{id:'modelo303',icon:'📋',label:'Mod 303'}]},{label:'Informes',items:[{id:'pendientes',icon:'⏳',label:'Pendientes'}]}]},
 {id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'backups',icon:'💾',label:'Backups'},{id:'audit',icon:'📝',label:'Auditoría'},{id:'trash',icon:'🗑️',label:'Papelera'}]}]}
 ];
 
@@ -236,6 +238,10 @@ function renderView(){
   else if(v==='facturas')renderFacturas(c);
   else if(v==='conciliacion')renderConciliacion(c);
   else if(v==='inmovilizado')renderInmovilizado(c);
+  else if(v==='expedientes')renderExpedientes(c);
+  else if(v==='captacion')renderCaptacion(c);
+  else if(v==='modelo303')renderModelo303(c);
+  else if(v==='pendientes')renderPendientesCobro(c);
   else c.innerHTML='<div class="empty"><div style="font-size:40px;margin-bottom:10px">🚧</div>Próximamente</div>';
 }
 
@@ -1330,6 +1336,173 @@ function exportPrevExcel(){
   loadPrevLines();
   var rows=prevLines.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}).map(function(l){return [l.date,l.tercero,l.desc,l.tipo,l.ingreso||'',l.gasto||''];});
   exportExcel(rows,['Fecha','Cliente/Proveedor','Descripción','Tipo','Ingreso','Gasto'],'prevision_tesoreria');
+}
+
+// ═══ EXPEDIENTES NPL ═══
+var expedientes=[];
+function loadExpedientes(){try{expedientes=JSON.parse(localStorage.getItem('cf_exp_'+(state.company?state.company.id:''))||'[]');}catch(e){expedientes=[];}}
+function saveExpedientes(){try{localStorage.setItem('cf_exp_'+(state.company?state.company.id:''),JSON.stringify(expedientes));}catch(e){}}
+
+function renderExpedientes(c){
+  loadExpedientes();
+  var totalDeuda=expedientes.reduce(function(s,e){return s+(e.deuda||0);},0);
+  var totalPrecio=expedientes.reduce(function(s,e){return s+(e.precio||0);},0);
+  var estados={};expedientes.forEach(function(e){var st=e.estado||'gestion';if(!estados[st])estados[st]=0;estados[st]++;});
+
+  c.innerHTML='<div class="row"><div class="stat"><div class="stat-v" style="color:var(--bl)">'+expedientes.length+'</div><div class="stat-l">📁 Total expedientes</div></div><div class="stat"><div class="stat-v" style="color:var(--am)">'+fmt(totalDeuda)+'€</div><div class="stat-l">💰 Deuda total</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(totalPrecio)+'€</div><div class="stat-l">🏷️ Precio compra total</div></div><div class="stat"><div class="stat-v" style="color:var(--vi)">'+fmt(totalDeuda>0?(totalPrecio/totalDeuda*100):0)+'%</div><div class="stat-l">📊 % medio compra</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>📁 Expedientes NPL — '+expedientes.length+'</span><div style="display:flex;gap:4px"><button class="btn btn-p" onclick="newExpediente()">+ Nuevo</button><button class="btn btn-d" style="font-size:10px" onclick="exportExpExcel()">📊</button></div></div>'+
+  (expedientes.length?'<div class="scr"><table><thead><tr><th>Código</th><th>Deudor</th><th style="text-align:right">Deuda</th><th style="text-align:right">Precio</th><th>Tipo</th><th>Estado</th><th>Captador</th><th>Judicial</th><th style="width:50px"></th></tr></thead><tbody>'+
+  expedientes.map(function(e,i){
+    var rentab=e.deuda&&e.precio?Math.round((e.deuda-e.precio)/e.precio*100):0;
+    var estBadge=e.estado==='cobrado'?'badge-g':e.estado==='fallido'?'badge-r':e.estado==='judicial'?'badge-a':'badge-b';
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:700;font-family:monospace;color:var(--pri);font-size:10px">'+h(e.codigo||'')+'</td><td style="font-weight:600;font-size:11px">'+h(e.deudor||'')+'</td><td style="text-align:right">'+fmt(e.deuda||0)+'€</td><td style="text-align:right">'+fmt(e.precio||0)+'€ <span style="font-size:9px;color:var(--ok)">('+rentab+'%)</span></td><td style="font-size:10px"><span class="badge badge-v">'+h(e.tipo||'')+'</span></td><td><span class="badge '+estBadge+'">'+h(e.estado||'gestion')+'</span></td><td style="font-size:10px">'+h(e.captador||'')+'</td><td style="font-size:9px">'+h(e.faseJudicial||'—')+'</td><td><button class="abtn" onclick="editExpediente('+i+')">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteExpediente('+i+')">🗑</button></td></tr>';
+  }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:30px;margin-bottom:8px">📁</div>Sin expedientes NPL</div>')+'</div>';
+}
+
+function newExpediente(){showExpModal(-1);}
+function editExpediente(idx){showExpModal(idx);}
+function showExpModal(idx){
+  loadExpedientes();var isEdit=idx>=0;var e=isEdit?expedientes[idx]:{};
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='expModal';
+  var h2='<div class="modal" style="max-width:700px"><div class="card-h"><span>'+(isEdit?'✏️ Editar':'➕ Nuevo')+' expediente NPL</span><button class="btn btn-d" onclick="$(\'expModal\').remove()">✕</button></div><div class="card-b">';
+  h2+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+  h2+='<div><div class="lbl">Código activo *</div><input class="inp" id="expCodigo" value="'+h(e.codigo||'')+'" placeholder="CIM-2026-001"></div>';
+  h2+='<div style="grid-column:span 2"><div class="lbl">Deudor *</div><input class="inp" id="expDeudor" value="'+h(e.deudor||'')+'"></div>';
+  h2+='<div><div class="lbl">Importe deuda</div><input class="inp" id="expDeuda" value="'+(e.deuda||'')+'" style="text-align:right"></div>';
+  h2+='<div><div class="lbl">Precio compra</div><input class="inp" id="expPrecio" value="'+(e.precio||'')+'" style="text-align:right"></div>';
+  h2+='<div><div class="lbl">Tipo</div><select class="sel" id="expTipo" style="width:100%"><option value="hipotecario"'+(e.tipo==='hipotecario'?' selected':'')+'>Hipotecario</option><option value="personal"'+(e.tipo==='personal'?' selected':'')+'>Personal</option><option value="empresarial"'+(e.tipo==='empresarial'?' selected':'')+'>Empresarial</option><option value="publico"'+(e.tipo==='publico'?' selected':'')+'>Público</option></select></div>';
+  h2+='<div><div class="lbl">Estado</div><select class="sel" id="expEstado" style="width:100%"><option value="gestion"'+(e.estado==='gestion'||!e.estado?' selected':'')+'>En gestión</option><option value="judicial"'+(e.estado==='judicial'?' selected':'')+'>Judicial</option><option value="cobrado"'+(e.estado==='cobrado'?' selected':'')+'>Cobrado</option><option value="dacion"'+(e.estado==='dacion'?' selected':'')+'>Dación</option><option value="vendido"'+(e.estado==='vendido'?' selected':'')+'>Vendido</option><option value="fallido"'+(e.estado==='fallido'?' selected':'')+'>Fallido</option></select></div>';
+  h2+='<div><div class="lbl">Ref. catastral</div><input class="inp" id="expCatastral" value="'+h(e.catastral||'')+'"></div>';
+  h2+='<div><div class="lbl">Captador</div><input class="inp" id="expCaptador" value="'+h(e.captador||'')+'"></div>';
+  h2+='<div><div class="lbl">Fase judicial</div><select class="sel" id="expFase" style="width:100%"><option value="">— Sin judicial —</option><option value="demanda"'+(e.faseJudicial==='demanda'?' selected':'')+'>Demanda</option><option value="admision"'+(e.faseJudicial==='admision'?' selected':'')+'>Admisión</option><option value="vista"'+(e.faseJudicial==='vista'?' selected':'')+'>Vista</option><option value="subasta"'+(e.faseJudicial==='subasta'?' selected':'')+'>Subasta</option><option value="adjudicacion"'+(e.faseJudicial==='adjudicacion'?' selected':'')+'>Adjudicación</option><option value="lanzamiento"'+(e.faseJudicial==='lanzamiento'?' selected':'')+'>Lanzamiento</option></select></div>';
+  h2+='<div><div class="lbl">Fecha demanda</div><input type="date" class="inp" id="expFDemanda" value="'+(e.fDemanda||'')+'"></div>';
+  h2+='<div><div class="lbl">Fecha vista</div><input type="date" class="inp" id="expFVista" value="'+(e.fVista||'')+'"></div>';
+  h2+='<div><div class="lbl">Fecha subasta</div><input type="date" class="inp" id="expFSubasta" value="'+(e.fSubasta||'')+'"></div>';
+  h2+='<div><div class="lbl">Comisión %</div><input class="inp" id="expComision" value="'+(e.comision||'')+'" style="text-align:right"></div>';
+  h2+='<div style="grid-column:span 2"><div class="lbl">Descripción inmueble</div><input class="inp" id="expInmueble" value="'+h(e.inmueble||'')+'"></div>';
+  h2+='<div style="grid-column:span 3"><div class="lbl">Notas</div><input class="inp" id="expNotas" value="'+h(e.notas||'')+'"></div>';
+  h2+='</div>';
+  h2+='<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-d" onclick="$(\'expModal\').remove()">Cancelar</button><button class="btn btn-p" onclick="saveExpediente('+idx+')">💾 Guardar</button></div></div></div>';
+  bg.innerHTML=h2;document.body.appendChild(bg);
+}
+function saveExpediente(idx){
+  var item={codigo:$('expCodigo').value,deudor:$('expDeudor').value,deuda:parseFloat($('expDeuda').value)||0,precio:parseFloat($('expPrecio').value)||0,tipo:$('expTipo').value,estado:$('expEstado').value,catastral:$('expCatastral').value,captador:$('expCaptador').value,faseJudicial:$('expFase').value,fDemanda:$('expFDemanda').value,fVista:$('expFVista').value,fSubasta:$('expFSubasta').value,comision:parseFloat($('expComision').value)||0,inmueble:$('expInmueble').value,notas:$('expNotas').value};
+  if(!item.codigo||!item.deudor){toast('Código y deudor obligatorios','error');return;}
+  loadExpedientes();if(idx>=0)expedientes[idx]=item;else expedientes.push(item);
+  saveExpedientes();$('expModal').remove();auditLog(idx>=0?'editar_expediente':'nuevo_expediente',item.codigo);toast('Expediente guardado');render();
+}
+function deleteExpediente(idx){if(!confirm('¿Eliminar expediente?'))return;loadExpedientes();expedientes.splice(idx,1);saveExpedientes();toast('Eliminado');render();}
+function exportExpExcel(){
+  loadExpedientes();
+  var rows=expedientes.map(function(e){return [e.codigo,e.deudor,e.deuda,e.precio,e.tipo,e.estado,e.captador,e.faseJudicial,e.catastral,e.inmueble];});
+  exportExcel(rows,['Código','Deudor','Deuda','Precio','Tipo','Estado','Captador','Fase judicial','Ref.catastral','Inmueble'],'expedientes_npl');
+}
+
+// ═══ CAPTACIÓN COMERCIAL Y COMISIONES ═══
+var captadores=[];
+function loadCaptadores(){try{captadores=JSON.parse(localStorage.getItem('cf_capt_'+(state.company?state.company.id:''))||'[]');}catch(e){captadores=[];}}
+function saveCaptadores(){try{localStorage.setItem('cf_capt_'+(state.company?state.company.id:''),JSON.stringify(captadores));}catch(e){}}
+
+function renderCaptacion(c){
+  loadCaptadores();loadExpedientes();
+  // Calculate commissions from expedientes
+  var comisiones={};
+  expedientes.forEach(function(e){
+    if(e.captador&&e.comision>0){
+      if(!comisiones[e.captador])comisiones[e.captador]={total:0,devengada:0,pagada:0,ops:0};
+      comisiones[e.captador].ops++;
+      var com=e.precio*e.comision/100;
+      comisiones[e.captador].total+=com;
+      if(e.estado==='cobrado'||e.estado==='vendido')comisiones[e.captador].devengada+=com;
+    }
+  });
+
+  c.innerHTML='<div class="grid-2">'+
+  '<div class="card"><div class="card-h"><span>🤝 Captadores — '+captadores.length+'</span><button class="btn btn-p" onclick="newCaptador()">+ Nuevo</button></div>'+
+  (captadores.length?'<table><thead><tr><th>Nombre</th><th>CIF</th><th>Teléfono</th><th>Email</th><th>Condiciones</th><th style="width:30px"></th></tr></thead><tbody>'+
+  captadores.map(function(cap,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(cap.name)+'</td><td style="font-size:10px">'+h(cap.cif||'')+'</td><td style="font-size:10px">'+h(cap.phone||'')+'</td><td style="font-size:10px">'+h(cap.email||'')+'</td><td style="font-size:10px">'+h(cap.condiciones||'')+'</td><td><button class="abtn" style="color:var(--rd)" onclick="deleteCaptador('+i+')">🗑</button></td></tr>';}).join('')+'</tbody></table>':'<div class="empty">Sin captadores</div>')+'</div>'+
+  '<div class="card"><div class="card-h" style="color:var(--am)">💰 Comisiones por captador</div>'+
+  (Object.keys(comisiones).length?'<table><thead><tr><th>Captador</th><th style="text-align:right">Operaciones</th><th style="text-align:right">Com. total</th><th style="text-align:right">Devengada</th><th style="text-align:right">Pagada</th><th style="text-align:right">Pendiente</th></tr></thead><tbody>'+
+  Object.entries(comisiones).map(function(x,i){var c2=x[1];return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right">'+c2.ops+'</td><td style="text-align:right">'+fmt(c2.total)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(c2.devengada)+'€</td><td style="text-align:right;color:var(--bl)">'+fmt(c2.pagada)+'€</td><td style="text-align:right;font-weight:700;color:var(--am)">'+fmt(c2.devengada-c2.pagada)+'€</td></tr>';}).join('')+'</tbody></table>':'<div class="empty">Sin comisiones — asigna captadores a los expedientes</div>')+'</div></div>';
+}
+function newCaptador(){
+  var name=prompt('Nombre del captador:');if(!name)return;
+  var cif=prompt('CIF/NIF:','');var phone=prompt('Teléfono:','');
+  var email=prompt('Email:','');var condiciones=prompt('Condiciones (% comisión, etc):','');
+  loadCaptadores();captadores.push({name:name,cif:cif||'',phone:phone||'',email:email||'',condiciones:condiciones||''});
+  saveCaptadores();toast('Captador creado');render();
+}
+function deleteCaptador(idx){if(!confirm('¿Eliminar?'))return;loadCaptadores();captadores.splice(idx,1);saveCaptadores();toast('Eliminado');render();}
+
+// ═══ MODELO 303 — IVA TRIMESTRAL ═══
+function renderModelo303(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  // Calculate IVA by quarter
+  var trimestres=[{name:'1T (Ene-Mar)',from:'01',to:'03'},{name:'2T (Abr-Jun)',from:'04',to:'06'},{name:'3T (Jul-Sep)',from:'07',to:'09'},{name:'4T (Oct-Dic)',from:'10',to:'12'}];
+  var datos=trimestres.map(function(t){
+    var fromD=state.ejercicio+'-'+t.from+'-01';var toD=state.ejercicio+'-'+t.to+'-31';
+    var rep=0,sop=0,baseRep=0,baseSop=0;
+    all.forEach(function(e){
+      if(e.date>=fromD&&e.date<=toD){
+        e.lines.forEach(function(l){
+          if(l.a&&l.a.startsWith('477'))rep+=l.h-l.d;
+          if(l.a&&l.a.startsWith('472'))sop+=l.d-l.h;
+          var g=parseInt((l.a||'')[0])||0;
+          if(g===7&&l.h>l.d)baseRep+=l.h-l.d;
+          if(g===6&&l.d>l.h)baseSop+=l.d-l.h;
+        });
+      }
+    });
+    return {name:t.name,baseRep:baseRep,rep:rep,baseSop:baseSop,sop:sop,resultado:rep-sop};
+  });
+  var totalRep=datos.reduce(function(s,d){return s+d.rep;},0);
+  var totalSop=datos.reduce(function(s,d){return s+d.sop;},0);
+
+  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 303 — IVA Trimestral '+state.ejercicio+'</span></div>'+
+  '<div style="padding:8px 14px;display:flex;gap:20px;font-size:12px;border-bottom:1px solid #EDF0F4"><div>IVA Repercutido: <strong style="color:var(--rd)">'+fmt(totalRep)+'€</strong></div><div>IVA Soportado: <strong style="color:var(--ok)">'+fmt(totalSop)+'€</strong></div><div>Resultado: <strong style="color:'+(totalRep-totalSop>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(totalRep-totalSop))+'€ '+(totalRep-totalSop>=0?'a pagar':'a devolver')+'</strong></div></div>'+
+  '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Base ventas</th><th style="text-align:right">IVA repercutido</th><th style="text-align:right">Base compras</th><th style="text-align:right">IVA soportado</th><th style="text-align:right">Resultado</th><th>Acción</th></tr></thead><tbody>'+
+  datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+fmt(d.baseRep)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.rep)+'€</td><td style="text-align:right">'+fmt(d.baseSop)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(d.sop)+'€</td><td style="text-align:right;font-weight:700;color:'+(d.resultado>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(d.resultado))+'€</td><td>'+(d.resultado>=0?'<span class="badge badge-r">A pagar</span>':'<span class="badge badge-g">A devolver</span>')+'</td></tr>';}).join('')+
+  '<tr class="total"><td>ANUAL</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.baseRep;},0))+'€</td><td style="text-align:right">'+fmt(totalRep)+'€</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.baseSop;},0))+'€</td><td style="text-align:right">'+fmt(totalSop)+'€</td><td style="text-align:right;font-size:14px">'+fmt(Math.abs(totalRep-totalSop))+'€</td><td></td></tr></tbody></table></div>';
+}
+
+// ═══ PENDIENTES COBRO/PAGO ═══
+function renderPendientesCobro(c){
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var pendCobro=[],pendPago=[];
+  // Agrupar por cliente (430) y proveedor (400/410)
+  var clientes={},proveedores={};
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(l.a&&l.a.startsWith('430')){
+      var key=e.concept||'Sin concepto';if(!clientes[key])clientes[key]={saldo:0,date:e.date};
+      clientes[key].saldo+=l.d-l.h;clientes[key].date=e.date;
+    }
+    if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))){
+      var key2=e.concept||'Sin concepto';if(!proveedores[key2])proveedores[key2]={saldo:0,date:e.date};
+      proveedores[key2].saldo+=l.h-l.d;proveedores[key2].date=e.date;
+    }
+  });});
+  Object.entries(clientes).forEach(function(x){if(x[1].saldo>0.01)pendCobro.push({name:x[0],saldo:x[1].saldo,date:x[1].date});});
+  Object.entries(proveedores).forEach(function(x){if(x[1].saldo>0.01)pendPago.push({name:x[0],saldo:x[1].saldo,date:x[1].date});});
+  pendCobro.sort(function(a,b){return b.saldo-a.saldo;});
+  pendPago.sort(function(a,b){return b.saldo-a.saldo;});
+  var totalCobro=pendCobro.reduce(function(s,x){return s+x.saldo;},0);
+  var totalPago=pendPago.reduce(function(s,x){return s+x.saldo;},0);
+
+  c.innerHTML='<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(totalCobro)+'€</div><div class="stat-l">📥 Pendiente de cobro</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(totalPago)+'€</div><div class="stat-l">📤 Pendiente de pago</div></div><div class="stat"><div class="stat-v" style="color:'+(totalCobro-totalPago>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalCobro-totalPago)+'€</div><div class="stat-l">📊 Posición neta</div></div></div>'+
+  '<div class="grid-2">'+
+  '<div class="card"><div class="card-h" style="color:var(--ok)">📥 Pendiente de cobro — '+pendCobro.length+'</div>'+
+  (pendCobro.length?'<table><thead><tr><th>Cliente/Concepto</th><th>Fecha</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
+  pendCobro.map(function(p,i){
+    var hoy=new Date();var fp=new Date(p.date);var dias=Math.floor((hoy-fp)/(1000*60*60*24));
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:11px">'+h(p.name)+'</td><td style="font-size:10px">'+fmtD(p.date)+' <span style="color:'+(dias>30?'var(--rd)':'var(--txM)')+';font-size:9px">('+dias+'d)</span></td><td style="text-align:right;font-weight:600;color:var(--ok)">'+fmt(p.saldo)+'€</td></tr>';}).join('')+
+  '<tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">'+fmt(totalCobro)+'€</td></tr></tbody></table>':'<div class="empty">Sin pendientes de cobro</div>')+'</div>'+
+  '<div class="card"><div class="card-h" style="color:var(--rd)">📤 Pendiente de pago — '+pendPago.length+'</div>'+
+  (pendPago.length?'<table><thead><tr><th>Proveedor/Concepto</th><th>Fecha</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
+  pendPago.map(function(p,i){
+    var hoy=new Date();var fp=new Date(p.date);var dias=Math.floor((hoy-fp)/(1000*60*60*24));
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:11px">'+h(p.name)+'</td><td style="font-size:10px">'+fmtD(p.date)+' <span style="color:'+(dias>30?'var(--rd)':'var(--txM)')+';font-size:9px">('+dias+'d)</span></td><td style="text-align:right;font-weight:600;color:var(--rd)">'+fmt(p.saldo)+'€</td></tr>';}).join('')+
+  '<tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">'+fmt(totalPago)+'€</td></tr></tbody></table>':'<div class="empty">Sin pendientes de pago</div>')+'</div></div>';
 }
 
 // ═══ ANÁLISIS PROVEEDORES ═══
