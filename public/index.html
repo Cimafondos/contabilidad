@@ -268,8 +268,8 @@ function renderDash(c){
 
   c.innerHTML=dateFilterHTML()+
   '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(ti)+'€</div><div class="stat-l">📈 Ventas</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(tg)+'€</div><div class="stat-l">📉 Compras/Gastos</div></div><div class="stat"><div class="stat-v" style="color:'+(tr>=0?'var(--ok)':'var(--rd)')+'">'+fmt(tr)+'€</div><div class="stat-l">'+(tr>=0?'💰':'⚠️')+' Resultado</div></div><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(tb)+'€</div><div class="stat-l">🏦 Tesorería</div></div><div class="stat"><div class="stat-v" style="color:'+(tiva>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(tiva))+'€</div><div class="stat-l">'+(tiva>=0?'📤 IVA a pagar':'📥 IVA a devolver')+'</div></div></div>'+
-  '<div class="grid-2"><div class="chart-box"><div style="font-weight:600;margin-bottom:8px;font-size:12px">📊 Ingresos vs Gastos mensuales</div><canvas id="chartIG" height="180"></canvas></div><div class="chart-box"><div style="font-weight:600;margin-bottom:8px;font-size:12px">🍩 Distribución de gastos</div><canvas id="chartGasto" height="180"></canvas></div></div>'+
-  '<div class="grid-2"><div class="chart-box"><div style="font-weight:600;margin-bottom:8px;font-size:12px">🏦 Evolución tesorería</div><canvas id="chartTes" height="150"></canvas></div><div class="card"><div class="card-h">📒 Últimos asientos</div><div class="scr" style="max-height:200px"><table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
+  '<div class="grid-2"><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">📊 Ingresos vs Gastos mensuales</div><canvas id="chartIG"></canvas></div><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">🍩 Distribución de gastos</div><div style="display:flex;justify-content:center;align-items:center;height:210px"><canvas id="chartGasto"></canvas></div></div></div>'+
+  '<div class="grid-2"><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">🏦 Evolución tesorería</div><canvas id="chartTes"></canvas></div><div class="card" style="min-height:260px"><div class="card-h">📒 Últimos asientos</div><div class="scr" style="max-height:220px"><table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
   all.slice(-10).reverse().map(function(e,i){var t=e.lines.reduce(function(s,l){return s+l.d;},0);return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px">'+fmtD(e.date)+'</td><td>'+h(e.concept)+'</td><td style="text-align:right" class="amt-pos">'+fmt(t)+'€</td></tr>';}).join('')+'</tbody></table></div></div></div>'+
   '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--rd)">🏭 Top proveedores</div><table><tbody>'+
   topProv.map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right" class="amt-neg">'+fmt(x[1])+'€</td></tr>';}).join('')+'</tbody></table></div><div class="card"><div class="card-h" style="color:var(--ok)">🏢 Top clientes</div><table><tbody>'+
@@ -279,12 +279,12 @@ function renderDash(c){
   setTimeout(function(){
     var colors=['#00854D','#DC3545','#0066CC','#D4920A','#6F42C1','#FF9800','#17a2b8','#e83e8c'];
     // Ingresos vs Gastos bar chart
-    var ctx1=$('chartIG');if(ctx1){new Chart(ctx1,{type:'bar',data:{labels:MONTHS,datasets:[{label:'Ingresos',data:monthI,backgroundColor:'rgba(40,167,69,0.7)',borderRadius:3},{label:'Gastos',data:monthG,backgroundColor:'rgba(220,53,69,0.7)',borderRadius:3}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:10}}}},scales:{y:{ticks:{callback:function(v){return fmt(v);}},grid:{color:'#EDF0F4'}},x:{grid:{display:false}}}}});}
+    var ctx1=$('chartIG');if(ctx1){new Chart(ctx1,{type:'bar',data:{labels:MONTHS,datasets:[{label:'Ingresos',data:monthI,backgroundColor:'rgba(40,167,69,0.7)',borderRadius:3},{label:'Gastos',data:monthG,backgroundColor:'rgba(220,53,69,0.7)',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:8}},tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+fmt(c.parsed.y)+'€';}}}},scales:{y:{ticks:{callback:function(v){return fmt(v);},font:{size:10}},grid:{color:'#EDF0F4'}},x:{ticks:{font:{size:10}},grid:{display:false}}}}});ctx1.parentElement.style.height='210px';}
     // Donut gastos
-    var ctx2=$('chartGasto');if(ctx2&&catGastoArr.length){new Chart(ctx2,{type:'doughnut',data:{labels:catGastoArr.map(function(x){return x[0];}),datasets:[{data:catGastoArr.map(function(x){return Math.abs(x[1]);}),backgroundColor:colors.slice(0,catGastoArr.length)}]},options:{responsive:true,plugins:{legend:{position:'right',labels:{font:{size:9}}}}}});}
+    var ctx2=$('chartGasto');if(ctx2&&catGastoArr.length){new Chart(ctx2,{type:'doughnut',data:{labels:catGastoArr.map(function(x){return x[0];}),datasets:[{data:catGastoArr.map(function(x){return Math.abs(x[1]);}),backgroundColor:colors.slice(0,catGastoArr.length),borderWidth:1}]},options:{responsive:true,maintainAspectRatio:true,aspectRatio:1.6,plugins:{legend:{position:'right',labels:{font:{size:9},padding:6,boxWidth:10}},tooltip:{callbacks:{label:function(c){return c.label+': '+fmt(c.parsed)+'€';}}}}}});}
     // Tesorería line
     var ctx3=$('chartTes');if(ctx3){var cumT=[];var acc=0;monthT.forEach(function(v){acc+=v;cumT.push(acc);});
-    new Chart(ctx3,{type:'line',data:{labels:MONTHS,datasets:[{label:'Saldo banco',data:cumT,borderColor:'#0066CC',backgroundColor:'rgba(0,102,204,0.1)',fill:true,tension:0.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return fmt(v);}},grid:{color:'#EDF0F4'}},x:{grid:{display:false}}}}});}
+    new Chart(ctx3,{type:'line',data:{labels:MONTHS,datasets:[{label:'Saldo banco',data:cumT,borderColor:'#0066CC',backgroundColor:'rgba(0,102,204,0.1)',fill:true,tension:0.3,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return 'Saldo: '+fmt(c.parsed.y)+'€';}}}},scales:{y:{ticks:{callback:function(v){return fmt(v);},font:{size:10}},grid:{color:'#EDF0F4'}},x:{ticks:{font:{size:10}},grid:{display:false}}}}});ctx3.parentElement.style.height='210px';}
   },100);
 }
 
@@ -414,24 +414,55 @@ function handleAssistFile(file){
   if(!file)return;
   var info=$('aFileInfo');
   var isImg=file.type.startsWith('image/');
-  // Show file info + image preview if applicable
-  if(isImg){
-    var reader=new FileReader();
-    reader.onload=function(ev){
-      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">📎</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB</div></div></div><img src="'+ev.target.result+'" style="max-width:100%;max-height:280px;border-radius:6px;border:1px solid var(--bd);display:block;margin:0 auto"></div>';
-    };
-    reader.readAsDataURL(file);
-  }else{
-    info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="font-size:24px">📄</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB — PDF cargado</div></div></div>';
-  }
-  // Try to extract amount from filename (e.g. "factura_1200.50.jpg")
-  var name=file.name.toUpperCase();
-  var numMatch=name.match(/(\d+[.,]\d{2})/);
-  if(numMatch){var amt=parseFloat(numMatch[1].replace(',','.'));if(amt>0){$('aAmt').value=amt;}}
-  // Extract concept from filename cleaned up
-  var concept=file.name.replace(/\.[^.]+$/,'').replace(/[_\-]/g,' ').replace(/\d{8,}/g,'').replace(/\s+/g,' ').trim();
-  if(!$('aDesc').value&&concept)$('aDesc').value=concept;
-  toast('Documento cargado. Rellena el importe y pulsa Proponer.','ok');
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var dataUrl=ev.target.result;
+    // Show preview
+    if(isImg){
+      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">📎</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB</div></div></div><img src="'+dataUrl+'" style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid var(--bd);display:block;margin:0 auto"><div id="ocrStatus" style="margin-top:8px;text-align:center;font-size:11px;color:var(--pri);font-weight:600">🔍 Leyendo factura con IA...</div></div>';
+    }else{
+      info.innerHTML='<div style="background:var(--priLt);border-radius:6px;padding:10px 12px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:24px">📄</span><div><div style="font-weight:600;font-size:12px">'+h(file.name)+'</div><div style="font-size:10px;color:var(--txM)">'+Math.round(file.size/1024)+' KB</div></div></div><div id="ocrStatus" style="margin-top:8px;font-size:11px;color:var(--pri);font-weight:600">🔍 Leyendo documento con IA...</div></div>';
+    }
+    // OCR with Claude Vision API
+    var base64=dataUrl.split(',')[1];
+    var mediaType=file.type||'image/jpeg';
+    fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
+          {type:'text',text:'Analiza esta imagen de factura o ticket. Extrae los datos en JSON puro (sin markdown, sin backticks):\n{"proveedor":"nombre","cif":"CIF/NIF","fecha":"YYYY-MM-DD","concepto":"descripción breve","base":0.00,"iva_pct":21,"iva_cuota":0.00,"total":0.00}\nSi no encuentras algún dato, pon null. Importes con 2 decimales.'}
+        ]}]
+      })
+    }).then(function(r){return r.json();}).then(function(data){
+      var txt=(data.content||[]).map(function(c){return c.text||'';}).join('');
+      var clean=txt.replace(/```json|```/g,'').trim();
+      try{
+        var ocr=JSON.parse(clean);
+        var ocrEl=$('ocrStatus');
+        if(ocrEl){
+          var parts=[];
+          if(ocr.proveedor)parts.push('<strong>Proveedor:</strong> '+h(ocr.proveedor));
+          if(ocr.cif)parts.push('<strong>CIF:</strong> '+ocr.cif);
+          if(ocr.base)parts.push('<strong>Base:</strong> '+fmt(ocr.base)+'€');
+          if(ocr.iva_cuota)parts.push('<strong>IVA:</strong> '+fmt(ocr.iva_cuota)+'€');
+          if(ocr.total)parts.push('<strong>Total:</strong> '+fmt(ocr.total)+'€');
+          ocrEl.innerHTML='<div style="background:#E8F8ED;border-radius:4px;padding:6px 8px;text-align:left;font-size:10px"><div style="font-weight:700;color:var(--ok);margin-bottom:3px">✓ Datos extraídos:</div>'+parts.join(' · ')+'</div>';
+        }
+        if(ocr.concepto&&!$('aDesc').value)$('aDesc').value=(ocr.proveedor||'')+' — '+(ocr.concepto||'');
+        if(ocr.total&&!$('aAmt').value)$('aAmt').value=ocr.total;
+        if(ocr.fecha)$('aDate').value=ocr.fecha;
+        if(ocr.iva_pct===10)$('aIva').value='reducido';
+        else if(ocr.iva_pct===4)$('aIva').value='super';
+        else if(ocr.iva_pct===0)$('aIva').value='exento';
+      }catch(e){
+        var ocrEl=$('ocrStatus');if(ocrEl)ocrEl.innerHTML='<span style="color:var(--am)">⚠ No se pudieron extraer datos automáticamente</span>';
+      }
+    }).catch(function(e){
+      var ocrEl=$('ocrStatus');if(ocrEl)ocrEl.innerHTML='<span style="color:var(--am)">⚠ OCR no disponible — rellena manualmente</span>';
+    });
+  };
+  reader.readAsDataURL(file);
 }
 
 function proposeEntry(){
@@ -572,10 +603,36 @@ function renderPnL(c){
   '</tbody></table></div></div>';
 }
 function exportPnLExcel(){
-  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});var g={},ing={};
-  all.forEach(function(e){e.lines.forEach(function(l){var a=am[l.a];var gr=a?a.g:parseInt((l.a||'')[0])||0;if(gr===6){if(!g[l.a])g[l.a]={name:a?a.name:l.a,t:0};g[l.a].t+=l.d-l.h;}if(gr===7){if(!ing[l.a])ing[l.a]={name:a?a.name:l.a,t:0};ing[l.a].t+=l.h-l.d;}});});
-  var rows=Object.entries(ing).map(function(x){return [x[0],x[1].name,'Ingreso',x[1].t];}).concat(Object.entries(g).map(function(x){return [x[0],x[1].name,'Gasto',x[1].t];}));
-  exportExcel(rows,['Cuenta','Nombre','Tipo','Importe'],'pyg');
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var s={};all.forEach(function(e){e.lines.forEach(function(l){if(!s[l.a])s[l.a]=0;s[l.a]+=l.d-l.h;});});
+  function sumPfx(pfx,inv){var t=0;Object.entries(s).forEach(function(x){for(var i=0;i<pfx.length;i++){if(x[0].startsWith(pfx[i])){t+=inv?-x[1]:x[1];break;}}});return t;}
+  function detPfx(pfx,inv){var items=[];Object.entries(s).forEach(function(x){for(var i=0;i<pfx.length;i++){if(x[0].startsWith(pfx[i])){var v=inv?-x[1]:x[1];if(Math.abs(v)>0.01)items.push([x[0],am[x[0]]?am[x[0]].name:x[0],v]);break;}}});return items.sort(function(a,b){return a[0].localeCompare(b[0]);});}
+  var cifNeg=sumPfx(['700','701','702','703','704','705','706','708','709'],true);
+  var aprov=sumPfx(['600','601','602','606','607','608','609'],false);
+  var gtosPer=sumPfx(['640','641','642','643','644','645','649'],false);
+  var otrosGE=sumPfx(['620','621','622','623','624','625','626','627','628','629','631','634','636','639','650','651','659'],false);
+  var amort=sumPfx(['680','681','682'],false);
+  var otrosIE=sumPfx(['740','747','750','751','752','753','754','755','759'],true);
+  var resExpl=cifNeg-aprov-gtosPer-otrosGE-amort+otrosIE;
+  var ingFin=sumPfx(['760','761','762','769'],true);var gtosFin=sumPfx(['660','661','662','664','665','669'],false);
+  var resFin=ingFin-gtosFin;var resAI=resExpl+resFin;var impBen=sumPfx(['630','633','638'],false);var resEj=resAI-impBen;
+  var rows=[];
+  rows.push(['','1. IMPORTE NETO CIFRA DE NEGOCIOS','',cifNeg]);
+  detPfx(['700','701','702','703','704','705','706','708','709'],true).forEach(function(x){rows.push([x[0],x[1],'',x[2]]);});
+  rows.push(['','4. APROVISIONAMIENTOS','',-aprov]);
+  detPfx(['600','601','602','606','607','608','609'],false).forEach(function(x){rows.push([x[0],x[1],'',-x[2]]);});
+  rows.push(['','6. GASTOS DE PERSONAL','',-gtosPer]);
+  detPfx(['640','641','642','643','644','645','649'],false).forEach(function(x){rows.push([x[0],x[1],'',-x[2]]);});
+  rows.push(['','7. OTROS GASTOS DE EXPLOTACIÓN','',-otrosGE]);
+  detPfx(['620','621','622','623','624','625','626','627','628','629','631','634','636','639','650','651','659'],false).forEach(function(x){rows.push([x[0],x[1],'',-x[2]]);});
+  if(amort>0){rows.push(['','8. AMORTIZACIÓN','',-amort]);detPfx(['680','681','682'],false).forEach(function(x){rows.push([x[0],x[1],'',-x[2]]);});}
+  if(otrosIE>0){rows.push(['','5. OTROS INGRESOS EXPLOTACIÓN','',otrosIE]);detPfx(['740','747','750','751','752','753','754','755','759'],true).forEach(function(x){rows.push([x[0],x[1],'',x[2]]);});}
+  rows.push(['','A) RESULTADO DE EXPLOTACIÓN','',resExpl]);
+  if(ingFin>0||gtosFin>0){rows.push(['','INGRESOS FINANCIEROS','',ingFin]);rows.push(['','GASTOS FINANCIEROS','',-gtosFin]);rows.push(['','B) RESULTADO FINANCIERO','',resFin]);}
+  rows.push(['','C) RESULTADO ANTES DE IMPUESTOS','',resAI]);
+  if(impBen>0)rows.push(['','IMPUESTO SOBRE BENEFICIOS','',-impBen]);
+  rows.push(['','D) RESULTADO DEL EJERCICIO','',resEj]);
+  exportExcel(rows,['Cuenta','Concepto','','Importe €'],'pyg_pgc2008');
 }
 
 // ═══ BALANCE — PGC 2008 abreviado ═══
