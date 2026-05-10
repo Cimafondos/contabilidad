@@ -94,10 +94,14 @@ async function api(path,opts){
 }
 
 var state={user:null,company:null,view:'dash',tab:'inicio',accounts:[],entries:[],rules:[],toast:null,
-  ejercicio:new Date().getFullYear(),dateFrom:'',dateTo:'',integrity:null};
+  ejercicio:new Date().getFullYear(),dateFrom:'',dateTo:'',integrity:null,closedPeriods:[]};
 var $=function(id){return document.getElementById(id);};
 
 function initDates(){state.dateFrom=state.ejercicio+'-01-01';state.dateTo=state.ejercicio+'-12-31';}
+function loadClosedPeriods(){try{var d=localStorage.getItem('closed_'+state.company.id);if(d)state.closedPeriods=JSON.parse(d);}catch(e){state.closedPeriods=[];}}
+function saveClosedPeriods(){try{localStorage.setItem('closed_'+state.company.id,JSON.stringify(state.closedPeriods));}catch(e){}}
+function isPeriodClosed(dateStr){if(!dateStr||!state.closedPeriods.length)return false;var ym=dateStr.slice(0,7);return state.closedPeriods.indexOf(ym)>=0;}
+function togglePeriod(ym){var i=state.closedPeriods.indexOf(ym);if(i>=0)state.closedPeriods.splice(i,1);else state.closedPeriods.push(ym);saveClosedPeriods();render();}
 initDates();
 
 function toast(msg,type){state.toast={msg,type:type||'ok'};render();setTimeout(function(){state.toast=null;render();},4000);}
@@ -157,7 +161,7 @@ var TABS=[
 {id:'diario',label:'Diario',groups:[{label:'Consultas',items:[{id:'journal',icon:'📒',label:'Diario'},{id:'ledger',icon:'📖',label:'Mayor'},{id:'trial',icon:'⚖️',label:'Saldos'}]},{label:'Resultados',items:[{id:'pnl',icon:'📈',label:'PyG'},{id:'balance',icon:'🏛️',label:'Balance'}]}]},
 {id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]}]},
 {id:'maestros',label:'Maestros',groups:[{label:'Terceros',items:[{id:'clients',icon:'🏢',label:'Clientes'},{id:'suppliers',icon:'🏭',label:'Proveedores'}]},{label:'Tablas',items:[{id:'banks',icon:'🏦',label:'Bancos'}]}]},
-{id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]}]}
+{id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'periods',icon:'🔒',label:'Periodos'},{id:'trash',icon:'🗑️',label:'Papelera'}]}]}
 ];
 
 function setView(v){if(v==='newEntry'){showAssistant();return;}if(v==='manualEntry'){showEntryModal();return;}state.view=v;render();}
@@ -217,6 +221,8 @@ function renderView(){
   else if(v==='suppliers')renderMaster(c,'supplier','Proveedores','🏭');
   else if(v==='banks')renderMaster(c,'bank','Bancos','🏦');
   else if(v==='import')renderImport(c);
+  else if(v==='trash')renderTrash(c);
+  else if(v==='periods')renderPeriods(c);
   else c.innerHTML='<div class="empty"><div style="font-size:40px;margin-bottom:10px">🚧</div>Próximamente</div>';
 }
 
@@ -226,7 +232,7 @@ function renderLogin(){
 }
 async function doLogin(){
   var u=$('lu').value,p=$('lp').value;
-  try{var r=await api('/api/login',{method:'POST',body:{username:u,password:p}});state.user=r.user;state.company=r.company;await loadData();checkIntegrity();
+  try{var r=await api('/api/login',{method:'POST',body:{username:u,password:p}});state.user=r.user;state.company=r.company;await loadData();checkIntegrity();loadClosedPeriods();
     // Auto-backup silencioso al entrar
     autoBackup();
     render();
@@ -322,7 +328,7 @@ function exportJournalPDF(){
   var rows=[];all.forEach(function(e,i){e.lines.forEach(function(l,li){rows.push({cells:[{v:li===0?i+1:''},{v:li===0?fmtD(e.date):''},{v:l.a},{v:li===0?h(e.concept):''},{v:l.d>0?fmt(l.d):'',cls:'r'},{v:l.h>0?fmt(l.h):'',cls:'r'}]});});});
   exportPDF('Libro Diario',['Nº','Fecha','Cuenta','Concepto','Debe','Haber'],rows);
 }
-async function deleteEntry(id){if(!confirm('¿Eliminar asiento?'))return;await api('/api/entries/'+state.company.id+'/'+id,{method:'DELETE'});await loadData();checkIntegrity();toast('Asiento eliminado');render();}
+async function deleteEntry(id){var entry=state.entries.find(function(e){return e.id===id;});if(entry&&isPeriodClosed(entry.date)){toast('⛔ Periodo cerrado — no se puede borrar','error');return;}if(!confirm('¿Eliminar asiento?'))return;await api('/api/entries/'+state.company.id+'/'+id,{method:'DELETE'});await loadData();checkIntegrity();toast('Asiento eliminado');render();}
 function editEntry(id){var e=state.entries.find(function(x){return x.id===id;});if(e)showEntryModal(e,'edit');}
 function dupEntry(id){var e=state.entries.find(function(x){return x.id===id;});if(e)showEntryModal(e,'dup');}
 
@@ -388,6 +394,7 @@ function updateBalance(){
 }
 async function saveEntry(){
   var date=$('eDate').value;var concept=$('eConcept').value;
+  if(isPeriodClosed(date)){toast('⛔ Periodo cerrado — no se puede crear/editar asientos en '+date.slice(0,7),'error');return;}
   var lines=entryLines.filter(function(l){return l.a;}).map(function(l){return {a:l.a,d:parseFloat(l.d)||0,h:parseFloat(l.h)||0};});
   if(!lines.length||!concept){toast('Concepto y cuentas obligatorios','error');return;}
   // Validate balance
@@ -493,7 +500,7 @@ function proposeEntry(){
 
 async function saveAssistEntry(){
   var d=window._assistData;if(!d)return;
-  // Validate balance
+  if(isPeriodClosed(d.date)){toast('⛔ Periodo cerrado — no se puede contabilizar en '+d.date.slice(0,7),'error');return;}
   var tD=d.lines.reduce(function(s,l){return s+l.d;},0);var tH=d.lines.reduce(function(s,l){return s+l.h;},0);
   if(Math.abs(tD-tH)>0.01){toast('El asiento no cuadra','error');return;}
   await api('/api/entries/'+state.company.id,{method:'POST',body:{id:'sm_'+uid(),date:d.date,concept:d.concept,type:'assistant',lines:d.lines}});
@@ -1067,6 +1074,56 @@ function renderSalesMap(c){
     return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td>'+x[1].clients.length+'</td><td style="text-align:right" class="amt-pos">'+fmt(x[1].total)+'€</td></tr>';
   }).join('')+'</tbody></table>'
   :'<div class="empty"><div style="font-size:40px;margin-bottom:10px">🗺️</div><div style="font-weight:600;margin-bottom:6px">Mapa de ventas</div><div style="color:var(--txM);font-size:12px">Añade clientes con provincia en <strong>Maestros → Clientes</strong><br>y asígnales una cuenta contable del grupo 7 para ver las ventas aquí.</div></div>')+'</div></div>';
+}
+
+// ═══ PERIODOS — Cerrar/abrir meses ═══
+function renderPeriods(c){
+  var MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var ej=state.ejercicio;
+  c.innerHTML='<div class="card"><div class="card-h"><span>🔒 Periodos contables — Ejercicio '+ej+'</span></div><div class="card-b">'+
+  '<div style="font-size:11px;color:var(--txM);margin-bottom:12px">Los periodos cerrados no permiten crear, editar ni borrar asientos. Haz clic para abrir/cerrar.</div>'+
+  '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'+
+  MESES.map(function(m,i){
+    var ym=ej+'-'+String(i+1).padStart(2,'0');
+    var closed=state.closedPeriods.indexOf(ym)>=0;
+    // Count entries in this month
+    var count=state.entries.filter(function(e){return e.date&&e.date.startsWith(ym);}).length;
+    return '<div style="border:2px solid '+(closed?'var(--rd)':'var(--ok)')+';border-radius:6px;padding:12px;text-align:center;cursor:pointer;background:'+(closed?'#FDF0F0':'#E8F8ED')+';transition:all 0.15s" onclick="togglePeriod(\''+ym+'\')">'+
+    '<div style="font-size:18px;margin-bottom:4px">'+(closed?'🔒':'🔓')+'</div>'+
+    '<div style="font-weight:600;font-size:12px">'+m+'</div>'+
+    '<div style="font-size:10px;color:var(--txM)">'+count+' asientos</div>'+
+    '<div style="font-size:9px;margin-top:4px;font-weight:600;color:'+(closed?'var(--rd)':'var(--ok)')+'">'+(closed?'CERRADO':'ABIERTO')+'</div></div>';
+  }).join('')+'</div></div></div>';
+}
+
+// ═══ PAPELERA — Asientos eliminados ═══
+function renderTrash(c){
+  // Get ALL entries including deleted from server
+  api('/api/entries/'+state.company.id).then(function(allEntries){
+    var deleted=allEntries.filter(function(e){return e.del||e.deleted;});
+    var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+    c.innerHTML='<div class="card"><div class="card-h"><span>🗑️ Papelera — '+deleted.length+' asientos eliminados</span>'+(deleted.length?'<button class="btn btn-r" style="font-size:10px" onclick="emptyTrash()">Vaciar papelera</button>':'')+'</div>'+
+    (deleted.length?'<div class="scr"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Líneas</th><th style="text-align:right">Importe</th><th style="width:80px">Acción</th></tr></thead><tbody>'+
+    deleted.map(function(e,i){
+      var td=0;(e.lines||[]).forEach(function(l){td+=(l.d||0);});
+      return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px">'+fmtD(e.date)+'</td><td>'+h(e.concept||'')+'</td><td style="font-size:10px;color:var(--txM)">'+(e.lines||[]).length+' líneas</td><td style="text-align:right">'+fmt(td)+'€</td><td><button class="btn btn-p" style="font-size:9px;padding:3px 8px" onclick="restoreEntry(\''+e.id+'\')">♻️ Restaurar</button></td></tr>';
+    }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:40px;margin-bottom:10px">🗑️</div><div style="font-weight:600;margin-bottom:4px">Papelera vacía</div><div style="font-size:11px;color:var(--txM)">Los asientos eliminados aparecerán aquí y podrás restaurarlos</div></div>')+'</div>';
+  });
+}
+async function restoreEntry(id){
+  if(!confirm('¿Restaurar este asiento?'))return;
+  try{
+    // Re-save entry with deleted=0 (POST overwrites with deleted=0)
+    var allEntries=await api('/api/entries/'+state.company.id);
+    var entry=allEntries.find(function(e){return e.id===id;});
+    if(entry){
+      await api('/api/entries/'+state.company.id,{method:'POST',body:{id:entry.id,date:entry.date,concept:entry.concept,type:entry.type||'manual',lines:(entry.lines||[]).map(function(l){return {a:l.a,d:l.d||0,h:l.h||0};})}});
+      await loadData();checkIntegrity();toast('Asiento restaurado');render();
+    }
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+function emptyTrash(){
+  toast('⚠️ El vaciado permanente no está habilitado. Los datos borrados se mantienen por seguridad.','error');
 }
 
 // ═══ BACKUP ═══
