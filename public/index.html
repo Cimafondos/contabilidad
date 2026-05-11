@@ -296,7 +296,7 @@ function changeEjercicio(y){state.ejercicio=parseInt(y);initDates();render();}
 
 // RENDER
 function render(){
-  if(!state.user)return renderLogin();
+  if(!state.user){try{renderLogin();}catch(e){$('app').innerHTML='<div style="padding:40px;text-align:center"><h2>Error de carga</h2><p>'+e.message+'</p><button onclick="location.reload()">Recargar</button></div>';}return;}
   var app=$('app');
   var tab=TABS.find(function(t){return t.id===state.tab;})||TABS[0];
   var intBadge=state.integrity?(state.integrity.ok?'<span class="integrity-ok">✓ OK</span>':'<span class="integrity-err">✗ '+state.integrity.errors.length+' errores</span>'):'';
@@ -384,7 +384,7 @@ async function doLogin(){
     autoBackupIfNeeded();dailyIntegrityCheck();render();
   }catch(e){
     // Fallback: intentar login contra usuarios locales (por si el servidor no responde)
-    var users=getUsers();
+    var users=[];try{users=getUsers();}catch(e2){users=[];}
     var localUser=users.find(function(usr){return usr.user===u&&usr.pass===p;});
     if(localUser){
       state.user={name:localUser.name,role:localUser.role};
@@ -3373,8 +3373,8 @@ renderView=function(){
 
 function quickDemo(){$("lu").value="admin";$("lp").value="admin";doLogin().then(function(){loadDemo();});}
 // Init
-loadMasters();
-render();
+try{loadMasters();}catch(e){console.error('loadMasters error:',e);}
+try{render();}catch(e){console.error('render error:',e);renderLogin();}
 </script>
 </body>
 </html>
