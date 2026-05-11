@@ -1367,6 +1367,272 @@ function processImportRows(rows){
   showImportResults(txns);
 }
 
+// ═══ IMPORTAR FACTURAS DESDE GESTOR DOCUMENTAL ═══
+function importFacturasExcel(file,tipo){
+  if(!file){toast('Selecciona un archivo','error');return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=new Uint8Array(e.target.result);
+      var wb=XLSX.read(data,{type:'array'});
+      // Find the data sheet (not 'Resumen IVA')
+      var sheetName=wb.SheetNames.find(function(s){return s!=='Resumen IVA';})||wb.SheetNames[0];
+      var ws=wb.Sheets[sheetName];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
+      if(rows.length<2){toast('Sin datos en la hoja '+sheetName,'error');return;}
+      processFacturasRows(rows,tipo);
+    }catch(err){toast('Error leyendo archivo: '+err.message,'error');}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function processFacturasRows(rows,tipo){
+  var header=rows[0].map(function(c){return String(c||'').trim();});
+  // Map columns
+  var colMap={};
+  header.forEach(function(h,i){
+    var hl=h.toLowerCase();
+    if(hl.indexOf('nº factura')>=0||hl.indexOf('n factura')>=0||hl==='nº factura')colMap.numFact=i;
+    if(hl.indexOf('fecha contable')>=0)colMap.fecha=i;
+    if(hl.indexOf('fecha vencimiento')>=0)colMap.vencimiento=i;
+    if(hl.indexOf('proveedor')>=0)colMap.tercero=i;
+    if(hl==='cif')colMap.cif=i;
+    if(hl.indexOf('concepto')>=0)colMap.concepto=i;
+    if(hl.indexOf('tipo documento')>=0)colMap.tipoDoc=i;
+    if(hl==='empresa factura')colMap.empresa=i;
+    if(hl.indexOf('base 21')>=0)colMap.base21=i;
+    if(hl.indexOf('iva 21')>=0)colMap.iva21=i;
+    if(hl.indexOf('base 10')>=0)colMap.base10=i;
+    if(hl.indexOf('iva 10')>=0)colMap.iva10=i;
+    if(hl.indexOf('base 4')>=0)colMap.base4=i;
+    if(hl.indexOf('iva 4')>=0)colMap.iva4=i;
+    if(hl.indexOf('base 0')>=0)colMap.base0=i;
+    if(hl.indexOf('retenc')>=0||hl.indexOf('retención')>=0)colMap.retencion=i;
+    if(hl.indexOf('r. equiv')>=0||hl.indexOf('recargo')>=0)colMap.recargo=i;
+    if(hl==='total')colMap.total=i;
+  });
+  console.log('Column map:',colMap);
+
+  // Parse each row into a factura
+  var facturas=[];
+  for(var i=1;i<rows.length;i++){
+    var r=rows[i];
+    if(!r||!r[colMap.numFact])continue;
+    var numFact=String(r[colMap.numFact]||'').trim();
+    if(!numFact||numFact==='TOTALES:'||numFact.indexOf('TOTAL')>=0)continue;
+
+    var fechaRaw=String(r[colMap.fecha]||'');
+    var fecha=fechaRaw.slice(0,10); // ISO format from gestor
+    if(!fecha.match(/^\d{4}-/))fecha=parseDate(fechaRaw);
+
+    var terceroName=String(r[colMap.tercero]||'').trim();
+    var cif=String(r[colMap.cif]||'').trim();
+    var concepto=String(r[colMap.concepto]||'').trim();
+    var tipoDoc=String(r[colMap.tipoDoc]||'').trim();
+    var empresaOrigen=String(r[colMap.empresa]||'').trim();
+
+    // Parse amounts - handle string numbers with comma/dot
+    function parseAmt(v){
+      if(v===null||v===undefined||v==='')return 0;
+      var s=String(v).replace(/\s/g,'');
+      // Handle "15.500,00" format (Spanish) and "15500.00" format
+      if(s.indexOf(',')>=0&&s.indexOf('.')>=0){
+        if(s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(/\./g,'').replace(',','.');
+        else s=s.replace(/,/g,'');
+      }else if(s.indexOf(',')>=0){s=s.replace(',','.');}
+      return parseFloat(s)||0;
+    }
+
+    var fact={
+      numFact:numFact, fecha:fecha, tercero:terceroName, cif:cif,
+      concepto:concepto, tipoDoc:tipoDoc, empresa:empresaOrigen,
+      base21:parseAmt(r[colMap.base21]), iva21:parseAmt(r[colMap.iva21]),
+      base10:parseAmt(r[colMap.base10]), iva10:parseAmt(r[colMap.iva10]),
+      base4:parseAmt(r[colMap.base4]), iva4:parseAmt(r[colMap.iva4]),
+      base0:parseAmt(r[colMap.base0]),
+      retencion:parseAmt(r[colMap.retencion]),
+      recargo:parseAmt(r[colMap.recargo]),
+      total:parseAmt(r[colMap.total]),
+      tipo:tipo,
+      isAbono:tipoDoc.indexOf('ABONO')>=0
+    };
+    facturas.push(fact);
+  }
+
+  // Check for duplicates against existing entries
+  var existingNums={};
+  state.entries.forEach(function(e){
+    if(e.concept){
+      var m=e.concept.match(/\[([^\]]+)\]/);
+      if(m)existingNums[m[1]]=true;
+    }
+  });
+
+  var nuevas=[],duplicadas=[];
+  facturas.forEach(function(f){
+    var key=f.numFact+'_'+f.cif;
+    if(existingNums[f.numFact]||existingNums[key]){
+      duplicadas.push(f);
+    }else{
+      nuevas.push(f);
+    }
+  });
+
+  // Show results
+  showFacturasImportResult(nuevas,duplicadas,tipo);
+}
+
+function showFacturasImportResult(nuevas,duplicadas,tipo){
+  var res=$('impResult');if(!res)return;
+  var totalNuevas=nuevas.reduce(function(s,f){return s+Math.abs(f.total);},0);
+
+  res.innerHTML='<div class="card" style="border:2px solid var(--pri)"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 Resultado importación — '+(tipo==='recibida'?'Facturas recibidas':'Facturas emitidas')+'</span></div><div class="card-b">'+
+  '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+nuevas.length+'</div><div class="stat-l">Nuevas para importar</div></div><div class="stat"><div class="stat-v" style="color:var(--txM)">'+duplicadas.length+'</div><div class="stat-l">Duplicadas (saltadas)</div></div><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(totalNuevas)+'€</div><div class="stat-l">Importe total</div></div></div>'+
+  (nuevas.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Nº Factura</th><th>Fecha</th><th>'+(tipo==='recibida'?'Proveedor':'Cliente')+'</th><th>CIF</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Tipo</th></tr></thead><tbody>'+
+  nuevas.map(function(f,i){
+    var totalBase=f.base21+f.base10+f.base4+f.base0;
+    var totalIva=f.iva21+f.iva10+f.iva4;
+    return '<tr class="'+(i%2?'alt':'')+'" style="'+(f.isAbono?'color:var(--rd)':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.numFact)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="font-size:9px;color:var(--txM)">'+h(f.cif)+'</td><td style="text-align:right">'+fmt(totalBase)+'€</td><td style="text-align:right">'+fmt(totalIva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.total)+'€</td><td style="font-size:9px"><span class="badge '+(f.isAbono?'badge-r':'badge-g')+'">'+(f.isAbono?'Abono':'Factura')+'</span></td></tr>';
+  }).join('')+'</tbody></table></div>'+
+  '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button class="btn btn-d" onclick="clearImpResult()">Cancelar</button><button class="btn btn-p" style="font-size:13px;padding:8px 20px" onclick="contabilizarFacturas()">✓ Contabilizar '+nuevas.length+' facturas</button></div>':'<div class="empty">No hay facturas nuevas para importar</div>')+
+  (duplicadas.length?'<div style="margin-top:8px;padding:8px;background:#FFF8E1;border-radius:6px;font-size:11px;color:var(--am)">⚠ '+duplicadas.length+' facturas ya contabilizadas: '+duplicadas.map(function(f){return f.numFact;}).join(', ')+'</div>':'')+
+  '</div></div>';
+
+  // Store for contabilizar
+  window._facturasToImport=nuevas;
+  window._facturasType=tipo;
+}
+
+function clearImpResult(){var el=$('impResult');if(el)el.innerHTML='';}
+async function contabilizarFacturas(){
+  var facturas=window._facturasToImport;
+  var tipo=window._facturasType;
+  if(!facturas||!facturas.length){toast('No hay facturas','error');return;}
+
+  var created=0,provsCreated=0,clientsCreated=0;
+  loadMasters();
+
+  for(var fi=0;fi<facturas.length;fi++){
+    var f=facturas[fi];
+    var lines=[];
+    var totalBase=f.base21+f.base10+f.base4+f.base0;
+    var totalIva=f.iva21+f.iva10+f.iva4;
+
+    if(tipo==='recibida'){
+      // FACTURA RECIBIDA: Gasto(D) + IVA soportado(D) + Proveedor(H) - Retención
+      var cuentaGasto='60000000'; // Por defecto compras
+      // If it's services, use 62X
+      if(f.concepto&&f.concepto.toLowerCase().indexOf('asesor')>=0)cuentaGasto='62300000';
+
+      // Bases por tipo IVA → cuenta de gasto
+      if(f.base21!==0)lines.push({a:cuentaGasto,d:Math.max(f.base21,0),h:Math.max(-f.base21,0)});
+      if(f.base10!==0)lines.push({a:cuentaGasto,d:Math.max(f.base10,0),h:Math.max(-f.base10,0)});
+      if(f.base4!==0)lines.push({a:cuentaGasto,d:Math.max(f.base4,0),h:Math.max(-f.base4,0)});
+      if(f.base0!==0)lines.push({a:cuentaGasto,d:Math.max(f.base0,0),h:Math.max(-f.base0,0)});
+
+      // IVA soportado
+      if(f.iva21!==0)lines.push({a:'47200000',d:Math.max(f.iva21,0),h:Math.max(-f.iva21,0)});
+      if(f.iva10!==0)lines.push({a:'47200000',d:Math.max(f.iva10,0),h:Math.max(-f.iva10,0)});
+      if(f.iva4!==0)lines.push({a:'47200000',d:Math.max(f.iva4,0),h:Math.max(-f.iva4,0)});
+
+      // Retención IRPF
+      if(f.retencion&&f.retencion!==0)lines.push({a:'47510000',d:0,h:Math.abs(f.retencion)});
+
+      // Recargo equivalencia
+      if(f.recargo&&f.recargo!==0)lines.push({a:'47200000',d:Math.max(f.recargo,0),h:Math.max(-f.recargo,0)});
+
+      // Proveedor (haber = lo que debemos)
+      var totalHaber=Math.abs(f.total);
+      if(f.isAbono){
+        lines.push({a:'40000000',d:totalHaber,h:0});
+      }else{
+        lines.push({a:'40000000',d:0,h:totalHaber});
+      }
+
+      // Auto-create supplier if not exists
+      var provExists=masters.supplier.some(function(s){return s.cif===f.cif||s.name===f.tercero;});
+      if(!provExists&&f.tercero){
+        var provCode='P'+String(masters.supplier.length+1).padStart(3,'0');
+        masters.supplier.push({code:provCode,name:f.tercero,cif:f.cif,address:'',cp:'',city:'',province:'',country:'ES',account:'40000000',payment:'',days:'',contact:'',phone:'',email:'',notes:'Auto-importado'});
+        saveMasters('supplier');
+        provsCreated++;
+      }
+
+    }else{
+      // FACTURA EMITIDA: Cliente(D) + Ingreso(H) + IVA repercutido(H)
+      if(f.base21!==0)lines.push({a:'70000000',d:Math.max(-f.base21,0),h:Math.max(f.base21,0)});
+      if(f.base10!==0)lines.push({a:'70000000',d:Math.max(-f.base10,0),h:Math.max(f.base10,0)});
+      if(f.base4!==0)lines.push({a:'70000000',d:Math.max(-f.base4,0),h:Math.max(f.base4,0)});
+      if(f.base0!==0)lines.push({a:'70000000',d:Math.max(-f.base0,0),h:Math.max(f.base0,0)});
+
+      // IVA repercutido
+      if(f.iva21!==0)lines.push({a:'47700000',d:Math.max(-f.iva21,0),h:Math.max(f.iva21,0)});
+      if(f.iva10!==0)lines.push({a:'47700000',d:Math.max(-f.iva10,0),h:Math.max(f.iva10,0)});
+      if(f.iva4!==0)lines.push({a:'47700000',d:Math.max(-f.iva4,0),h:Math.max(f.iva4,0)});
+
+      // Cliente (debe = lo que nos deben)
+      var totalDebe=Math.abs(f.total);
+      lines.push({a:'43000000',d:totalDebe,h:0});
+
+      // For emitidas, the "tercero" is actually the client company name
+      // and "empresa" is who issued it (the client of Valentia)
+      var clientName=f.empresa||f.tercero;
+      var clientCif=f.cif;
+      var cliExists=masters.client.some(function(c2){return c2.cif===clientCif||c2.name===clientName;});
+      if(!cliExists&&clientName){
+        var cliCode='C'+String(masters.client.length+1).padStart(3,'0');
+        masters.client.push({code:cliCode,name:clientName,cif:clientCif,address:'',cp:'',city:'',province:'',country:'ES',account:'43000000',payment:'',days:'',contact:'',phone:'',email:'',notes:'Auto-importado'});
+        saveMasters('client');
+        clientsCreated++;
+      }
+    }
+
+    // Consolidate lines with same account
+    var consolidated={};
+    lines.forEach(function(l){
+      if(!consolidated[l.a])consolidated[l.a]={a:l.a,d:0,h:0};
+      consolidated[l.a].d+=l.d;
+      consolidated[l.a].h+=l.h;
+    });
+    var finalLines=Object.values(consolidated).filter(function(l){return l.d>0.001||l.h>0.001;});
+
+    // Round to 2 decimals
+    finalLines.forEach(function(l){l.d=Math.round(l.d*100)/100;l.h=Math.round(l.h*100)/100;});
+
+    // Verify balance
+    var tD=finalLines.reduce(function(s,l){return s+l.d;},0);
+    var tH=finalLines.reduce(function(s,l){return s+l.h;},0);
+    if(Math.abs(tD-tH)>0.02){
+      console.log('Descuadre en factura '+f.numFact+': D='+tD+' H='+tH+' diff='+(tD-tH));
+      // Auto-fix rounding: adjust largest line
+      var diff=Math.round((tD-tH)*100)/100;
+      if(Math.abs(diff)<=0.02){
+        var maxLine=finalLines.reduce(function(a,b){return (a.d+a.h)>(b.d+b.h)?a:b;});
+        if(diff>0)maxLine.h+=diff; else maxLine.d+=(-diff);
+      }
+    }
+
+    var conceptStr=(f.isAbono?'Abono ':'Fra. ')+h(f.tercero)+' ['+f.numFact+']';
+    await api('/api/entries/'+state.company.id,{method:'POST',body:{
+      id:(tipo==='recibida'?'fr_':'fe_')+uid(),
+      date:f.fecha,
+      concept:conceptStr,
+      type:'import_factura',
+      lines:finalLines
+    }});
+    created++;
+  }
+
+  await loadData();checkIntegrity();
+  auditLog('importar_facturas',tipo+': '+created+' facturas');
+  var msg='✓ '+created+' facturas contabilizadas';
+  if(provsCreated>0)msg+=' · '+provsCreated+' proveedores nuevos';
+  if(clientsCreated>0)msg+=' · '+clientsCreated+' clientes nuevos';
+  if(duplicadas&&duplicadas.length)msg+=' · '+duplicadas.length+' duplicadas saltadas';
+  toast(msg,'ok');
+  render();
+}
+
 function parseDate(s){
   if(!s)return '';s=String(s).trim();
   var m;
