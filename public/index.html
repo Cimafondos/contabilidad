@@ -370,31 +370,57 @@ function renderLogin(){
 }
 async function doLogin(){
   var u=$('lu').value,p=$('lp').value;
-  // Acceso de emergencia: usuario "master" con contraseña "cimafondos2026"
+  if(!u){var el=$('lerr');if(el)el.textContent='Escribe un usuario';return;}
+  console.log('Login attempt:',u);
+  // Acceso de emergencia
   if(u==='master'&&p==='cimafondos2026'){
+    console.log('Emergency access');
     state.user={name:'Administrador',role:'admin'};
     state.company={id:'default',name:'Cimafondos S.L.'};
-    try{await loadData();}catch(e){state.accounts=[];state.entries=[];state.rules=[];}
-    checkIntegrity();loadClosedPeriods();autoBackupIfNeeded();dailyIntegrityCheck();render();
-    toast('⚠️ Acceso de emergencia (master)','ok');return;
+    try{await loadData();}catch(e){console.log('loadData failed, using empty:',e);state.accounts=[];state.entries=[];state.rules=[];}
+    try{checkIntegrity();}catch(e){}
+    try{loadClosedPeriods();}catch(e){}
+    render();return;
   }
+  // Login normal contra servidor
+  var loginOk=false;
   try{
+    console.log('Trying server login...');
     var r=await api('/api/login',{method:'POST',body:{username:u,password:p}});
-    state.user=r.user;state.company=r.company;await loadData();checkIntegrity();loadClosedPeriods();
-    autoBackupIfNeeded();dailyIntegrityCheck();render();
+    console.log('Server response:',r);
+    if(r&&r.user){
+      state.user=r.user;state.company=r.company;
+      try{await loadData();}catch(e){console.log('loadData error:',e);}
+      try{checkIntegrity();}catch(e){}
+      try{loadClosedPeriods();}catch(e){}
+      try{autoBackupIfNeeded();}catch(e){}
+      try{dailyIntegrityCheck();}catch(e){}
+      loginOk=true;
+    }
   }catch(e){
-    // Fallback: intentar login contra usuarios locales (por si el servidor no responde)
-    var users=[];try{users=getUsers();}catch(e2){users=[];}
+    console.log('Server login failed:',e.message);
+  }
+  // Fallback local
+  if(!loginOk){
+    console.log('Trying local login...');
+    var users=[];try{users=getUsers();}catch(e){}
     var localUser=users.find(function(usr){return usr.user===u&&usr.pass===p;});
     if(localUser){
+      console.log('Local user found:',localUser.name);
       state.user={name:localUser.name,role:localUser.role};
       state.company={id:'default',name:'Cimafondos S.L.'};
-      try{await loadData();}catch(e2){state.accounts=[];state.entries=[];state.rules=[];}
-      checkIntegrity();loadClosedPeriods();autoBackupIfNeeded();dailyIntegrityCheck();render();
-      toast('Conectado (modo local)','ok');
-    }else{
-      $('lerr').textContent='Usuario o contraseña incorrectos';
+      try{await loadData();}catch(e){state.accounts=[];state.entries=[];state.rules=[];}
+      try{checkIntegrity();}catch(e){}
+      try{loadClosedPeriods();}catch(e){}
+      loginOk=true;
     }
+  }
+  if(loginOk){
+    console.log('Login OK, rendering...');
+    render();
+  }else{
+    console.log('Login failed');
+    var el=$('lerr');if(el)el.textContent='Usuario o contraseña incorrectos';
   }
 }
 function logout(){
@@ -3161,6 +3187,18 @@ function getAuditLog(){
 
 // ═══ BACKUP ═══
 // Auto-backup silencioso (guarda en localStorage sin descargar fichero)
+function autoBackupIfNeeded(){
+  try{
+    if(!state.company||!state.entries)return;
+    var key='backup_auto_'+state.company.id;
+    var lastDate=localStorage.getItem(key+'_date');
+    if(lastDate){
+      var diff=(new Date()-new Date(lastDate))/(1000*60*60);
+      if(diff<2)return;
+    }
+    autoBackup();
+  }catch(e){}
+}
 function autoBackup(){
   try{
     if(!state.company||!state.entries||!state.entries.length)return;
