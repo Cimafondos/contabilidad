@@ -150,6 +150,17 @@ function acSelect(id,code,onselect){
 }
 function acGetCode(id){var v=$(id)?$(id).value:'';return v.split(' ')[0]||'';}
 
+// ═══ COLUMN FILTER & SORT ═══
+var colFilters={};var colSort={key:'',dir:'asc'};
+function colFilterInput(col,placeholder){
+  return '<input class="inp" style="font-size:9px;padding:2px 4px;margin-top:2px;width:100%" placeholder="'+placeholder+'" oninput="colFilters[\''+col+'\']=this.value.toLowerCase();render();">';
+}
+function colSortBtn(col,label){
+  var arrow=colSort.key===col?(colSort.dir==='asc'?' ▲':' ▼'):'';
+  return '<span style="cursor:pointer" onclick="if(colSort.key===\''+col+'\')colSort.dir=colSort.dir===\'asc\'?\'desc\':\'asc\';else{colSort.key=\''+col+'\';colSort.dir=\'asc\';}render();">'+label+arrow+'</span>';
+}
+function matchFilter(val,col){if(!colFilters[col])return true;return String(val||'').toLowerCase().indexOf(colFilters[col])>=0;}
+
 // Integrity check
 function checkIntegrity(){
   var errors=[];
@@ -337,9 +348,9 @@ function renderDash(c){
   '<div class="grid-2"><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">📊 Ingresos vs Gastos mensuales</div><canvas id="chartIG"></canvas></div><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">🍩 Distribución de gastos</div><div style="display:flex;justify-content:center;align-items:center;height:210px"><canvas id="chartGasto"></canvas></div></div></div>'+
   '<div class="grid-2"><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">🏦 Evolución tesorería</div><canvas id="chartTes"></canvas></div><div class="card" style="min-height:260px"><div class="card-h">📒 Últimos asientos</div><div class="scr" style="max-height:220px"><table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
   all.slice(-10).reverse().map(function(e,i){var t=e.lines.reduce(function(s,l){return s+l.d;},0);return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px">'+fmtD(e.date)+'</td><td>'+h(e.concept)+'</td><td style="text-align:right" class="amt-pos">'+fmt(t)+'€</td></tr>';}).join('')+'</tbody></table></div></div></div>'+
-  '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--rd)">🏭 Top proveedores</div><table><tbody>'+
-  topProv.map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right" class="amt-neg">'+fmt(x[1])+'€</td></tr>';}).join('')+'</tbody></table></div><div class="card"><div class="card-h" style="color:var(--ok)">🏢 Top clientes</div><table><tbody>'+
-  topCli.map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right" class="amt-pos">'+fmt(x[1])+'€</td></tr>';}).join('')+'</tbody></table></div></div>';
+  '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--rd)">📊 Top gastos por categoría</div><table><tbody>'+
+  topProv.map(function(x,i){var pct=tg>0?Math.round(x[1]/tg*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right" class="amt-neg">'+fmt(x[1])+'€</td><td style="text-align:right;font-size:10px;color:var(--txM)">'+pct+'%</td></tr>';}).join('')+'</tbody></table></div><div class="card"><div class="card-h" style="color:var(--ok)">🏢 Top clientes</div><table><tbody>'+
+  topCli.map(function(x,i){var pct=ti>0?Math.round(x[1]/ti*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right" class="amt-pos">'+fmt(x[1])+'€</td><td style="text-align:right;font-size:10px;color:var(--txM)">'+pct+'%</td></tr>';}).join('')+'</tbody></table></div></div>';
 
   // Render charts
   setTimeout(function(){
@@ -361,7 +372,7 @@ function renderJournal(c){
   var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var td=0,th=0;all.forEach(function(e){e.lines.forEach(function(l){td+=l.d;th+=l.h;});});
   c.innerHTML=dateFilterHTML()+'<div class="card"><div class="card-h"><span>📒 Diario — '+all.length+' asientos</span><div style="display:flex;gap:4px"><button class="btn btn-d" style="font-size:10px" onclick="exportJournalExcel()">📊 Excel</button><button class="btn btn-d" style="font-size:10px" onclick="exportJournalPDF()">📄 PDF</button></div></div>'+
-  (all.length?'<table><thead><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="width:90px">Acc.</th></tr></thead><tbody><tr class="total"><td colspan="4">TOTALES ('+all.length+' asientos)</td><td style="text-align:right">'+fmt(td)+'</td><td style="text-align:right">'+fmt(th)+'</td><td><span class="badge '+(Math.abs(td-th)<1?'badge-g':'badge-r')+'">'+(Math.abs(td-th)<1?'✓':'✗')+'</span></td></tr></tbody></table><div class="scr"><table><thead><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="width:90px">Acc.</th></tr></thead><tbody>'+
+  (all.length?'<table><thead><tr><th>Nº</th><th>'+colSortBtn('date','Fecha')+'</th><th>Cuenta</th><th>'+colSortBtn('concept','Concepto')+'</th><th style="text-align:right">'+colSortBtn('debe','Debe')+'</th><th style="text-align:right">'+colSortBtn('haber','Haber')+'</th><th style="width:90px">Acc.</th></tr><tr style="background:#f8f9fa"><td></td><td>'+colFilterInput('date','Fecha...')+'</td><td>'+colFilterInput('cuenta','Cuenta...')+'</td><td>'+colFilterInput('concept','Concepto...')+'</td><td></td><td></td><td></td></tr></thead><tbody><tr class="total"><td colspan="4">TOTALES ('+all.length+' asientos)</td><td style="text-align:right">'+fmt(td)+'</td><td style="text-align:right">'+fmt(th)+'</td><td><span class="badge '+(Math.abs(td-th)<1?'badge-g':'badge-r')+'">'+(Math.abs(td-th)<1?'✓':'✗')+'</span></td></tr></tbody></table><div class="scr"><table><thead><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="width:90px">Acc.</th></tr></thead><tbody>'+
   all.map(function(e,i){return e.lines.map(function(l,li){return '<tr class="'+(i%2?'alt':'')+'" style="'+(li===0?'border-top:2px solid var(--bd)':'')+'">'+
   (li===0?'<td style="font-weight:600;color:var(--txM)" rowspan="'+e.lines.length+'">'+(i+1)+'</td><td style="font-size:10px" rowspan="'+e.lines.length+'">'+fmtD(e.date)+'</td>':'')+
   '<td><span class="acct">'+l.a+'</span> <span style="color:var(--txM);font-size:10px">'+(am[l.a]?am[l.a].name:'')+'</span></td>'+
@@ -453,7 +464,7 @@ function saveDraftsStorage(){try{localStorage.setItem('cf_drafts_'+(state.compan
 
 function saveDraft(){
   var date=$('eDate').value;var concept=$('eConcept').value;
-  var lines=entryLines.filter(function(l){return l.a;}).map(function(l){return {a:l.a,d:parseFloat(l.d)||0,h:parseFloat(l.h)||0};});
+  var lines=entryLines.filter(function(l){return l.a&&l.a.trim();}).map(function(l){return {a:l.a.split(' ')[0],d:parseFloat(l.d)||0,h:parseFloat(l.h)||0};});
   if(!concept){toast('Pon un concepto','error');return;}
   loadDrafts();
   drafts.push({id:'draft_'+uid(),date:date,concept:concept,lines:lines,created:new Date().toISOString()});
@@ -464,7 +475,7 @@ function saveDraft(){
 
 function saveAsPlantilla(){
   var concept=$('eConcept').value;
-  var lines=entryLines.filter(function(l){return l.a;}).map(function(l){return {a:l.a,d:parseFloat(l.d)||0,h:parseFloat(l.h)||0};});
+  var lines=entryLines.filter(function(l){return l.a&&l.a.trim();}).map(function(l){return {a:l.a.split(' ')[0],d:parseFloat(l.d)||0,h:parseFloat(l.h)||0};});
   if(lines.length<2){toast('Mínimo 2 líneas','error');return;}
   var name=prompt('Nombre de la plantilla:',concept||'');
   if(!name)return;
@@ -477,7 +488,7 @@ function saveAsPlantilla(){
 async function saveEntry(){
   var date=$('eDate').value;var concept=$('eConcept').value;
   if(isPeriodClosed(date)){toast('⛔ Periodo cerrado — no se puede crear/editar asientos en '+date.slice(0,7),'error');return;}
-  var lines=entryLines.filter(function(l){return l.a;}).map(function(l){return {a:l.a,d:parseFloat(l.d)||0,h:parseFloat(l.h)||0};});
+  var lines=entryLines.filter(function(l){return l.a&&l.a.trim();}).map(function(l){return {a:l.a.split(' ')[0],d:parseFloat(l.d)||0,h:parseFloat(l.h)||0};});
   if(!lines.length||!concept){toast('Concepto y cuentas obligatorios','error');return;}
   // Validate balance
   var tD=lines.reduce(function(s,l){return s+l.d;},0);var tH=lines.reduce(function(s,l){return s+l.h;},0);
@@ -498,7 +509,7 @@ function showAssistant(){
   bg.innerHTML='<div class="modal" style="max-width:840px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">🤖 Asistente contable</span><button class="btn btn-d" onclick="document.getElementById(\'assistModal\').remove()">✕</button></div><div class="card-b">'+
   '<div style="border:2px dashed var(--bd);border-radius:6px;padding:16px;text-align:center;cursor:pointer;color:var(--txM);margin-bottom:12px" onclick="$(\'aFile\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--pri)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';handleAssistFiles(event.dataTransfer.files)"><div style="font-size:24px">📄</div><div style="font-weight:600;color:var(--tx)">Arrastra factura/ticket o haz clic</div><div style="font-size:10px">PDF · Imagen · Una o varias a la vez</div><input id="aFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple style="display:none" onchange="handleAssistFiles(this.files)"></div>'+
   '<div id="aFileInfo"></div>'+
-  '<div class="lbl">✍️ Describe el gasto (texto o voz)</div><div style="display:flex;gap:6px;margin-bottom:10px"><input class="inp" id="aDesc" placeholder="Notario escritura 1200 euros pagado por Pepe" style="flex:1" oninput="extractFromDesc()"><button class="btn btn-d" id="aVoiceBtn" onclick="toggleVoice()" title="Hablar">🎤</button></div>'+
+  '<div class="lbl">✍️ Describe el gasto (texto o voz)</div><div style="display:flex;gap:6px;margin-bottom:10px"><input class="inp" id="aDesc" placeholder="Ej: comida restaurante 35 euros pagado Pepe" style="flex:1" oninput="extractFromDesc()" onchange="extractFromDesc()" onpaste="setTimeout(extractFromDesc,100)"><button class="btn btn-d" id="aVoiceBtn" onclick="toggleVoice()" title="Hablar">🎤</button></div>'+
   '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><div style="width:100px"><div class="lbl">Importe €</div><input class="inp" id="aAmt" style="text-align:right" placeholder="0"></div><div style="width:90px"><div class="lbl">IVA</div><select class="sel" id="aIva" style="width:100%">'+IVA.map(function(r){return '<option value="'+r.id+'">'+r.l+'</option>';}).join('')+'</select></div><div style="width:120px"><div class="lbl">Fecha</div><input type="date" class="inp" id="aDate" value="'+today()+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div></div>'+
   '<div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:6px;padding:8px 12px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">👤</span><div style="flex:1"><div style="font-size:11px;font-weight:700;color:#E65100;margin-bottom:3px">¿Quién ha pagado?</div><select class="sel" id="aPaidBy" style="width:100%;font-size:13px;padding:8px 10px;font-weight:600"><option value="">💳 Banco (cuenta empresa)</option>'+SOCIOS.map(function(s){return '<option value="'+s.a+'">👤 '+s.n+'</option>';}).join('')+'</select></div></div></div>'+
   '<button class="btn btn-p" style="width:100%;justify-content:center;padding:9px" onclick="proposeEntry()">🔍 Proponer asiento</button>'+
@@ -631,35 +642,41 @@ function extractFromDesc(){
 function proposeEntry(){
   var desc=$('aDesc').value;var amt=parseFloat($('aAmt').value)||0;var ivaType=$('aIva').value;var date=$('aDate').value;var paidBy=$('aPaidBy').value;
   if(!desc){toast('Escribe qué es el gasto','error');return;}
-  // Force extract amount from description
-  var rawAmt=$('aAmt').value;
-  if(!rawAmt||rawAmt==='0'||rawAmt===''){
-    var mx=desc.match(/(\d+[\.,]?\d*)\s*(euros?|€|eur)/i);
-    if(!mx)mx=desc.match(/(\d+[\.,]\d{2})/);
-    if(!mx)mx=desc.match(/(\d{2,5})(?!\d)/);
-    if(mx){var vx=parseFloat(mx[1].replace(',','.'));if(vx>=5&&vx<100000){amt=vx;$('aAmt').value=vx;}}
+  // ── EXTRACT AMOUNT from description ──
+  if(!amt||amt<=0){
+    // Pattern 1: "1200 euros" or "35€"
+    var words=desc.split(/\s+/);
+    for(var wi=0;wi<words.length;wi++){
+      var w=words[wi].replace(/[€]/g,'');
+      var nv=parseFloat(w.replace(',','.'));
+      if(nv>=1&&nv<1000000){
+        var next=(words[wi+1]||'').toLowerCase();
+        if(next.match(/^(euros?|eur|€)$/i)||w.indexOf('€')>=0||w.match(/^\d+[,.]\d{2}$/)){
+          amt=nv;$('aAmt').value=amt;break;
+        }
+      }
+    }
+    // Pattern 2: any number >= 5 if nothing found yet
+    if(!amt||amt<=0){
+      for(var wi2=0;wi2<words.length;wi2++){
+        var nv2=parseFloat(words[wi2].replace(',','.'));
+        if(nv2>=5&&nv2<100000&&!words[wi2].match(/^\d{6,}$/)){
+          amt=nv2;$('aAmt').value=amt;break;
+        }
+      }
+    }
   }
-  // ── SMART EXTRACT from description ──
-  // 1. Extract amount: "35 euros", "1200€", "96,80", "factura 850.50"
-  if(!amt){
-    var p1=desc.match(/(\d+[\.,]?\d*)\s*(euros?|€|eur)/i);
-    if(p1){amt=parseFloat(p1[1].replace(',','.'));if(amt>0)$('aAmt').value=amt;}
+  // 2. ALWAYS extract payer from text (override selector)
+  var txt=desc.toLowerCase();var foundPayer=false;
+  var payMatch=txt.match(/pag(?:ado|a|ó)\s+(?:por\s+)?(\w+)/i);
+  if(payMatch){
+    var pn=payMatch[1].toLowerCase();
+    for(var j=0;j<SOCIOS.length;j++){if(SOCIOS[j].n.toLowerCase()===pn){paidBy=SOCIOS[j].a;$('aPaidBy').value=paidBy;foundPayer=true;break;}}
   }
-  if(!amt){
-    var p2=desc.match(/(\d+[\.,]\d{2})/);
-    if(p2){amt=parseFloat(p2[1].replace(',','.'));if(amt>0)$('aAmt').value=amt;}
+  if(!foundPayer){
+    for(var j2=0;j2<SOCIOS.length;j2++){if(txt.indexOf(SOCIOS[j2].n.toLowerCase())>=0){paidBy=SOCIOS[j2].a;$('aPaidBy').value=paidBy;foundPayer=true;break;}}
   }
-  if(!amt){
-    var p3=desc.match(/(\d{2,5})(?!\d)/);
-    if(p3){var v3=parseFloat(p3[1]);if(v3>=5&&v3<100000){amt=v3;$('aAmt').value=amt;}}
-  }
-  // 2. Extract payer: "pagado Pepe", "paga Santi"
-  if(!paidBy){
-    var txt=desc.toLowerCase();
-    var payMatch=txt.match(/pag(?:ado|a|ó)\s+(?:por\s+)?(\w+)/i);
-    if(payMatch){for(var j=0;j<SOCIOS.length;j++){if(SOCIOS[j].n.toLowerCase()===payMatch[1].toLowerCase()){paidBy=SOCIOS[j].a;$('aPaidBy').value=paidBy;break;}}}
-    if(!paidBy){for(var j2=0;j2<SOCIOS.length;j2++){if(txt.indexOf(SOCIOS[j2].n.toLowerCase())>=0){paidBy=SOCIOS[j2].a;$('aPaidBy').value=paidBy;break;}}}
-  }
+  if(!foundPayer){paidBy=$('aPaidBy').value;}
   // 3. Match rules for account + IVA
   var st=desc.toUpperCase();var acct='62900000',rn='Otros servicios',riv=null;
   for(var i=0;i<state.rules.length;i++){var r=state.rules[i];try{if(new RegExp(r.p,'i').test(st)){acct=r.a;rn=r.d;riv=r.iv;break;}}catch(e){}}
@@ -1795,6 +1812,7 @@ function sendChat(){
 
 // ═══ PANEL ADMINISTRACIÓN ═══
 function renderAdmin(c){
+  var empresas=getEmpresas();
   c.innerHTML='<div class="card"><div class="card-h"><span>👤 Panel de administración</span></div><div class="card-b">'+
   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
   '<div class="card"><div class="card-h">👥 Usuarios</div><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th></tr></thead><tbody>'+
@@ -1803,9 +1821,9 @@ function renderAdmin(c){
   '<tr><td style="font-weight:600">pepe</td><td>Pepe</td><td><span class="badge badge-b">Usuario</span></td></tr>'+
   '<tr class="alt"><td style="font-weight:600">santi</td><td>Santi</td><td><span class="badge badge-b">Usuario</span></td></tr>'+
   '</tbody></table></div>'+
-  '<div class="card"><div class="card-h">🏢 Empresas</div><table><thead><tr><th>Empresa</th><th>CIF</th><th>Estado</th></tr></thead><tbody>'+
-  '<tr><td style="font-weight:600">'+h(state.company?state.company.name:'')+'</td><td>—</td><td><span class="badge badge-g">Activa</span></td></tr>'+
-  '</tbody></table><div style="padding:8px;font-size:11px;color:var(--txM)">La multiempresa real (Cimafondos + Fanessi) requiere cambios en el servidor.</div></div>'+
+  '<div class="card"><div class="card-h">🏢 Empresas — '+empresas.length+'<button class="btn btn-p" style="margin-left:auto;font-size:10px" onclick="newEmpresa()">+ Nueva</button></div><table><thead><tr><th>Empresa</th><th>CIF</th><th>Estado</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
+  empresas.map(function(em,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(em.name)+'</td><td style="font-size:10px">'+h(em.cif||'—')+'</td><td><span class="badge '+(em.activa?'badge-g':'badge-a')+'">'+(em.activa?'Activa':'Inactiva')+'</span></td><td style="white-space:nowrap"><button class="abtn" onclick="editEmpresa('+i+')">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteEmpresa('+i+')">🗑</button></td></tr>';}).join('')+
+  '</tbody></table></div>'+
   '</div>'+
   '<div class="card" style="margin-top:8px"><div class="card-h">📊 Estadísticas del sistema</div><div class="card-b"><div class="row">'+
   '<div class="stat"><div class="stat-v" style="color:var(--bl)">'+state.entries.length+'</div><div class="stat-l">Asientos</div></div>'+
@@ -1818,6 +1836,55 @@ function renderAdmin(c){
   '<div style="display:flex;gap:8px"><button class="btn btn-r" onclick="borrarDatosEmpresa()">🗑 Borrar TODOS los datos</button><button class="btn btn-d" onclick="exportarTodoCSV()">📊 Exportar todo CSV</button></div>'+
   '</div></div></div></div>';
 }
+function getEmpresas(){try{return JSON.parse(localStorage.getItem('cf_empresas')||'[]');}catch(e){return [];}}
+function saveEmpresas(arr){try{localStorage.setItem('cf_empresas',JSON.stringify(arr));}catch(e){}}
+function initEmpresas(){var em=getEmpresas();if(!em.length){em=[{name:state.company?state.company.name:'Cimafondos S.L.',cif:'',direccion:'',cp:'',ciudad:'Valencia',provincia:'Valencia',activa:true}];saveEmpresas(em);}}
+function newEmpresa(){
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='empModal';
+  var h2='<div class="modal" style="max-width:500px"><div class="card-h"><span>🏢 Nueva empresa</span><button class="btn btn-d" onclick="$(\'empModal\').remove()">✕</button></div><div class="card-b">';
+  h2+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  h2+='<div style="grid-column:span 2"><div class="lbl">Nombre empresa *</div><input class="inp" id="empName"></div>';
+  h2+='<div><div class="lbl">CIF/NIF</div><input class="inp" id="empCif"></div>';
+  h2+='<div><div class="lbl">Dirección</div><input class="inp" id="empDir"></div>';
+  h2+='<div><div class="lbl">CP</div><input class="inp" id="empCp"></div>';
+  h2+='<div><div class="lbl">Ciudad</div><input class="inp" id="empCiudad"></div>';
+  h2+='<div><div class="lbl">Provincia</div><input class="inp" id="empProv"></div>';
+  h2+='<div><div class="lbl">Activa</div><select class="sel" id="empActiva" style="width:100%"><option value="1">Sí</option><option value="0">No</option></select></div>';
+  h2+='</div>';
+  h2+='<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-d" onclick="$(\'empModal\').remove()">Cancelar</button><button class="btn btn-p" onclick="saveEmpresa(-1)">💾 Guardar</button></div></div></div>';
+  bg.innerHTML=h2;document.body.appendChild(bg);
+}
+function editEmpresa(idx){
+  var empresas=getEmpresas();var em=empresas[idx];if(!em)return;
+  newEmpresa();
+  setTimeout(function(){
+    if($('empName'))$('empName').value=em.name||'';
+    if($('empCif'))$('empCif').value=em.cif||'';
+    if($('empDir'))$('empDir').value=em.direccion||'';
+    if($('empCp'))$('empCp').value=em.cp||'';
+    if($('empCiudad'))$('empCiudad').value=em.ciudad||'';
+    if($('empProv'))$('empProv').value=em.provincia||'';
+    if($('empActiva'))$('empActiva').value=em.activa?'1':'0';
+    // Change save button to update
+    var btns=document.querySelectorAll('#empModal .btn-p');
+    if(btns.length)btns[btns.length-1].setAttribute('onclick','saveEmpresa('+idx+')');
+  },50);
+}
+function saveEmpresa(idx){
+  var name=$('empName').value;if(!name){toast('Nombre obligatorio','error');return;}
+  var item={name:name,cif:$('empCif').value,direccion:$('empDir').value,cp:$('empCp').value,ciudad:$('empCiudad').value,provincia:$('empProv').value,activa:$('empActiva').value==='1'};
+  var empresas=getEmpresas();
+  if(idx>=0)empresas[idx]=item;else empresas.push(item);
+  saveEmpresas(empresas);$('empModal').remove();
+  auditLog(idx>=0?'editar_empresa':'nueva_empresa',name);toast('Empresa guardada');render();
+}
+function deleteEmpresa(idx){
+  var empresas=getEmpresas();if(empresas.length<=1){toast('No puedes borrar la última empresa','error');return;}
+  if(!confirm('¿Eliminar empresa '+empresas[idx].name+'?'))return;
+  empresas.splice(idx,1);saveEmpresas(empresas);toast('Empresa eliminada');render();
+}
+initEmpresas();
+
 function borrarDatosEmpresa(){
   var nombre=prompt('Escribe el nombre de la empresa para confirmar el borrado TOTAL:');
   if(!nombre||nombre!==state.company.name){toast('Nombre incorrecto. Borrado cancelado.','error');return;}
@@ -2367,7 +2434,7 @@ function renderPlantillaLines(){
   var el=$('plLines');if(!el)return;
   el.innerHTML='<table style="font-size:11px"><thead><tr><th>Cuenta</th><th style="width:100px">Debe</th><th style="width:100px">Haber</th><th style="width:30px"></th></tr></thead><tbody>'+
   window._plLines.map(function(l,i){
-    return '<tr><td><input class="inp" id="pl_a'+i+'" value="'+h(l.a)+'" placeholder="Cuenta 8díg" style="font-size:11px"></td><td><input class="inp" id="pl_d'+i+'" value="'+l.d+'" style="text-align:right;font-size:11px" placeholder="0"></td><td><input class="inp" id="pl_h'+i+'" value="'+l.h+'" style="text-align:right;font-size:11px" placeholder="0"></td><td>'+(window._plLines.length>2?'<button class="abtn" onclick="window._plLines.splice('+i+',1);renderPlantillaLines()">✕</button>':'')+'</td></tr>';
+    return '<tr><td>'+acSearchHTML('pl_a'+i,l.a,'')+'</td><td><input class="inp" id="pl_d'+i+'" value="'+l.d+'" style="text-align:right;font-size:11px" placeholder="0"></td><td><input class="inp" id="pl_h'+i+'" value="'+l.h+'" style="text-align:right;font-size:11px" placeholder="0"></td><td>'+(window._plLines.length>2?'<button class="abtn" onclick="window._plLines.splice('+i+',1);renderPlantillaLines()">\u2715</button>':'')+'</td></tr>';
   }).join('')+'</tbody></table>';
 }
 
@@ -2387,7 +2454,7 @@ function savePlantilla(){
   var lines=[];
   for(var i=0;i<window._plLines.length;i++){
     var a=$('pl_a'+i),d=$('pl_d'+i),h2=$('pl_h'+i);
-    var code=a?a.value.replace(/[^0-9]/g,''):'';
+    var code=acGetCode('pl_a'+i).replace(/[^0-9]/g,'');
     if(code){
       if(code.length<8)code=code+('00000000').slice(code.length);
       lines.push({a:code,d:parseFloat(d?d.value:0)||0,h:parseFloat(h2?h2.value:0)||0});
