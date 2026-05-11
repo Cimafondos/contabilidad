@@ -246,7 +246,7 @@ function render(){
   var tab=TABS.find(function(t){return t.id===state.tab;})||TABS[0];
   var intBadge=state.integrity?(state.integrity.ok?'<span class="integrity-ok">✓ OK</span>':'<span class="integrity-err">✗ '+state.integrity.errors.length+' errores</span>'):'';
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
-  '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div><span style="font-weight:600">'+h(state.company.name)+'</span><span style="opacity:0.7">— v6.3</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div><span style="font-weight:600">'+h(state.company.name)+'</span><span style="opacity:0.7">— v6.3</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="startGlobalVoice()" title="Pedir por voz" id="globalMicBtn">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){return '<div class="rgroup"><div class="rgroup-btns">'+g.items.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
@@ -664,7 +664,16 @@ function extractFromDesc(){
   }
   // 3. Match rule for IVA type
   var st=desc.toUpperCase();
-  for(var i=0;i<state.rules.length;i++){var r=state.rules[i];try{if(new RegExp(r.p,'i').test(st)){if(r.iv&&r.iv!=='na')$('aIva').value=r.iv;break;}}catch(e){}}
+  var ruleMatched=false;
+  for(var i=0;i<state.rules.length;i++){var r=state.rules[i];try{if(new RegExp(r.p,'i').test(st)){if(r.iv&&r.iv!=='na')$('aIva').value=r.iv;ruleMatched=true;break;}}catch(e){}}
+  // Auto-detect IVA for common cases if no rule matched
+  if(!ruleMatched){
+    var dl=desc.toLowerCase();
+    if(dl.match(/comida|restaurante|menú|menu|bar |cafetería|cafeteria|hostelería|hosteleria|catering/))$('aIva').value='reducido';
+    else if(dl.match(/alquiler|arrendamiento|renta/))$('aIva').value='general';
+    else if(dl.match(/notari|registr|abogad|procurad|gestor/))$('aIva').value='general';
+    else $('aIva').value='general';
+  }
 }
 
 function proposeEntry(){
@@ -1833,39 +1842,65 @@ function sendChat(){
     if(code.startsWith('430'))clientes+=val;
     if(code.startsWith('400')||code.startsWith('410'))proveedores+=(-val);
   });
-  var ql=q.toLowerCase();var answer='No tengo suficiente información para responder. Prueba a preguntar sobre IVA, resultado, tesorería, proveedores o clientes.';
+  var ql=q.toLowerCase();var answer='';
+  var am2={};state.accounts.forEach(function(a){am2[a.code]=a;});
+  // Navigation commands
+  var navMap={'diario':'journal','mayor':'ledger','saldos':'trial','sumas':'trial','balance':'balance','pyg':'pnl','perdidas':'pnl','ganancias':'pnl','iva':'libroiva','libro iva':'libroiva','factura':'facturas','socio':'socios','proveedor':'analisis','tesoreria':'posicion','tesorería':'posicion','concilia':'conciliacion','expediente':'expedientes','prevision':'prevision','previsión':'prevision','config':'planCuentas','plan cuenta':'planCuentas','regla':'rules','auditoria':'audit','auditoría':'audit','backup':'backups'};
+  var navigated=false;
+  Object.keys(navMap).forEach(function(key){
+    if(!navigated&&ql.indexOf(key)>=0&&(ql.indexOf('sacame')>=0||ql.indexOf('sácame')>=0||ql.indexOf('abre')>=0||ql.indexOf('abrir')>=0||ql.indexOf('ir a')>=0||ql.indexOf('vamos a')>=0||ql.indexOf('muestra')>=0||ql.indexOf('enseña')>=0||ql.indexOf('enséña')>=0||ql.indexOf('ver ')>=0||ql.indexOf('dame')>=0||ql.indexOf('lleva')>=0)){
+      setView(navMap[key]);answer='✅ Navegando a <strong>'+key+'</strong>...';navigated=true;
+    }
+  });
+  if(!navigated){
   if(ql.indexOf('iva')>=0&&(ql.indexOf('pagar')>=0||ql.indexOf('cuanto')>=0||ql.indexOf('cuánto')>=0||ql.indexOf('liquidar')>=0)){
     var liq=ivaRep-ivaSop;answer='<strong>Liquidación IVA '+state.ejercicio+':</strong><br>IVA Repercutido: '+fmt(ivaRep)+'€<br>IVA Soportado: '+fmt(ivaSop)+'€<br><strong>Resultado: '+fmt(Math.abs(liq))+'€ '+(liq>=0?'a pagar':'a devolver')+'</strong>';
+  }else if(ql.indexOf('vendido')>=0||ql.indexOf('venta')>=0||ql.indexOf('ventas')>=0||ql.indexOf('ingreso')>=0||ql.indexOf('facturado')>=0){
+    answer='<strong>Ventas/Ingresos del ejercicio '+state.ejercicio+':</strong><br>Total facturado: <strong style="color:var(--ok)">'+fmt(ingresos)+'€</strong><br>Nº asientos de venta: '+all.filter(function(e){return e.lines.some(function(l){return parseInt((l.a||'')[0])===7;});}).length;
   }else if(ql.indexOf('resultado')>=0||ql.indexOf('beneficio')>=0||ql.indexOf('perdida')>=0||ql.indexOf('pérdida')>=0||ql.indexOf('ganancia')>=0){
     var res=ingresos-gastos;answer='<strong>Resultado del ejercicio '+state.ejercicio+':</strong><br>Ingresos: '+fmt(ingresos)+'€<br>Gastos: '+fmt(gastos)+'€<br><strong>'+(res>=0?'Beneficio':'Pérdida')+': '+fmt(Math.abs(res))+'€</strong>';
-  }else if(ql.indexOf('banco')>=0||ql.indexOf('tesoreria')>=0||ql.indexOf('tesorería')>=0||ql.indexOf('saldo')>=0||ql.indexOf('dinero')>=0){
+  }else if(ql.indexOf('banco')>=0||ql.indexOf('tesoreria')>=0||ql.indexOf('tesorería')>=0||ql.indexOf('saldo')>=0||ql.indexOf('dinero')>=0||ql.indexOf('disponible')>=0){
     answer='<strong>Tesorería:</strong><br>Banco: '+fmt(banco)+'€<br>Caja: '+fmt(caja)+'€<br><strong>Total disponible: '+fmt(banco+caja)+'€</strong>';
-  }else if(ql.indexOf('proveedor')>=0||ql.indexOf('debo')>=0||ql.indexOf('pagar')>=0||ql.indexOf('deuda')>=0){
+  }else if(ql.indexOf('proveedor')>=0||ql.indexOf('debo')>=0||ql.indexOf('deuda')>=0){
     answer='<strong>Proveedores/Acreedores:</strong><br>Pendiente de pago: <strong style="color:var(--rd)">'+fmt(proveedores)+'€</strong>';
   }else if(ql.indexOf('cliente')>=0||ql.indexOf('cobrar')>=0||ql.indexOf('cobro')>=0||ql.indexOf('deben')>=0){
     answer='<strong>Clientes:</strong><br>Pendiente de cobro: <strong style="color:var(--ok)">'+fmt(clientes)+'€</strong>';
   }else if(ql.indexOf('asiento')>=0||ql.indexOf('cuantos')>=0||ql.indexOf('cuántos')>=0){
     answer='<strong>Asientos:</strong><br>Total en '+state.ejercicio+': <strong>'+all.length+' asientos</strong>';
-  }else if(ql.indexOf('gasto')>=0&&(ql.indexOf('mayor')>=0||ql.indexOf('principal')>=0||ql.indexOf('más')>=0||ql.indexOf('mas')>=0)){
-    var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  }else if(ql.indexOf('gasto')>=0){
     var topG=Object.entries(s).filter(function(x){return parseInt(x[0][0])===6&&x[1]>0;}).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
-    answer='<strong>Top 5 gastos:</strong><br>'+topG.map(function(x,i){return (i+1)+'. '+(am[x[0]]?am[x[0]].name:x[0])+': <strong>'+fmt(x[1])+'€</strong>';}).join('<br>');
-  }
+    answer='<strong>Gastos '+state.ejercicio+' ('+fmt(gastos)+'€ total):</strong><br>'+topG.map(function(x,i){return (i+1)+'. '+(am2[x[0]]?am2[x[0]].name:x[0])+': <strong>'+fmt(x[1])+'€</strong>';}).join('<br>');
+  }else if(ql.indexOf('resumen')>=0||ql.indexOf('como estamos')>=0||ql.indexOf('cómo estamos')>=0||ql.indexOf('situacion')>=0||ql.indexOf('situación')>=0){
+    var res2=ingresos-gastos;
+    answer='<strong>📊 Resumen '+state.ejercicio+':</strong><br>'+
+    '📈 Ventas: '+fmt(ingresos)+'€<br>📉 Gastos: '+fmt(gastos)+'€<br>'+
+    (res2>=0?'💰':'⚠️')+' Resultado: <strong style="color:'+(res2>=0?'var(--ok)':'var(--rd)')+'">'+fmt(res2)+'€</strong><br>'+
+    '🏦 Banco: '+fmt(banco)+'€ | Caja: '+fmt(caja)+'€<br>'+
+    '📤 IVA: '+fmt(Math.abs(ivaRep-ivaSop))+'€ '+(ivaRep-ivaSop>=0?'a pagar':'a devolver')+'<br>'+
+    '👥 Clientes pte cobro: '+fmt(clientes)+'€<br>'+
+    '🏭 Proveedores pte pago: '+fmt(proveedores)+'€';
+  }else{
+    answer='No he entendido la pregunta. Prueba con:<br>• "¿Cuánto he vendido?" / "ventas"<br>• "¿Cuánto IVA debo?" / "liquidación IVA"<br>• "Resultado" / "beneficio"<br>• "Tesorería" / "saldo banco"<br>• "Clientes" / "cobros pendientes"<br>• "Gastos" / "principales gastos"<br>• "Resumen" / "¿Cómo estamos?"<br>• "Sácame el balance de sumas y saldos"<br>• "Abre el diario"';
+  }}
   chatHistory.push({role:'bot',text:answer});
   input.value='';render();
   setTimeout(function(){var msgs=$('chatMessages');if(msgs)msgs.scrollTop=msgs.scrollHeight;},100);
 }
 
 // ═══ PANEL ADMINISTRACIÓN ═══
+function getUsers(){try{return JSON.parse(localStorage.getItem('cf_users')||'[]');}catch(e){return [];}}
+function saveUsers(u){try{localStorage.setItem('cf_users',JSON.stringify(u));}catch(e){}}
+function initUsers(){var u=getUsers();if(!u.length){u=[{user:'admin',name:'Administrador',role:'admin',pass:'admin',empresas:[]},{user:'javier',name:'Javier',role:'user',pass:'1234',empresas:[]},{user:'pepe',name:'Pepe',role:'user',pass:'1234',empresas:[]},{user:'santi',name:'Santi',role:'user',pass:'1234',empresas:[]}];saveUsers(u);}}
+initUsers();
 function renderAdmin(c){
-  var empresas=getEmpresas();
+  var empresas=getEmpresas();var users=getUsers();
   c.innerHTML='<div class="card"><div class="card-h"><span>👤 Panel de administración</span></div><div class="card-b">'+
   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
-  '<div class="card"><div class="card-h">👥 Usuarios</div><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th></tr></thead><tbody>'+
-  '<tr><td style="font-weight:600">admin</td><td>Administrador</td><td><span class="badge badge-r">Admin</span></td></tr>'+
-  '<tr class="alt"><td style="font-weight:600">javier</td><td>Javier</td><td><span class="badge badge-b">Usuario</span></td></tr>'+
-  '<tr><td style="font-weight:600">pepe</td><td>Pepe</td><td><span class="badge badge-b">Usuario</span></td></tr>'+
-  '<tr class="alt"><td style="font-weight:600">santi</td><td>Santi</td><td><span class="badge badge-b">Usuario</span></td></tr>'+
+  '<div class="card"><div class="card-h">👥 Usuarios — '+users.length+'<button class="btn btn-p" style="margin-left:auto;font-size:10px" onclick="newUsuario()">+ Nuevo</button></div><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Empresas</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
+  users.map(function(u,i){
+    var empNames=u.empresas&&u.empresas.length?u.empresas.join(', '):'<span style="color:var(--ok)">Todas</span>';
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(u.user)+'</td><td>'+h(u.name)+'</td><td><span class="badge '+(u.role==='admin'?'badge-r':'badge-b')+'">'+(u.role==='admin'?'Admin':'Usuario')+'</span></td><td style="font-size:10px">'+empNames+'</td><td style="white-space:nowrap"><button class="abtn" onclick="editUsuario('+i+')">✏️</button> '+(u.user!=='admin'?'<button class="abtn" style="color:var(--rd)" onclick="deleteUsuario('+i+')">🗑</button>':'')+'</td></tr>';
+  }).join('')+
   '</tbody></table></div>'+
   '<div class="card"><div class="card-h">🏢 Empresas — '+empresas.length+'<button class="btn btn-p" style="margin-left:auto;font-size:10px" onclick="newEmpresa()">+ Nueva</button></div><table><thead><tr><th>Empresa</th><th>CIF</th><th>Estado</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
   empresas.map(function(em,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(em.name)+'</td><td style="font-size:10px">'+h(em.cif||'—')+'</td><td><span class="badge '+(em.activa?'badge-g':'badge-a')+'">'+(em.activa?'Activa':'Inactiva')+'</span></td><td style="white-space:nowrap"><button class="abtn" onclick="editEmpresa('+i+')">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteEmpresa('+i+')">🗑</button></td></tr>';}).join('')+
@@ -1930,6 +1965,53 @@ function deleteEmpresa(idx){
   empresas.splice(idx,1);saveEmpresas(empresas);toast('Empresa eliminada');render();
 }
 initEmpresas();
+
+function newUsuario(){showUsuarioModal(-1);}
+function editUsuario(idx){showUsuarioModal(idx);}
+function showUsuarioModal(idx){
+  var users=getUsers();var empresas=getEmpresas();
+  var isEdit=idx>=0;var u=isEdit?users[idx]:{user:'',name:'',role:'user',pass:'',empresas:[]};
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='userModal';
+  var h2='<div class="modal" style="max-width:500px"><div class="card-h"><span>'+(isEdit?'✏️ Editar':'➕ Nuevo')+' usuario</span><button class="btn btn-d" onclick="$(\'userModal\').remove()">✕</button></div><div class="card-b">';
+  h2+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  h2+='<div><div class="lbl">Usuario *</div><input class="inp" id="usrUser" value="'+h(u.user)+'" '+(isEdit?'readonly style="background:#f0f0f0"':'')+' placeholder="nombre_usuario"></div>';
+  h2+='<div><div class="lbl">Nombre *</div><input class="inp" id="usrName" value="'+h(u.name)+'" placeholder="Nombre completo"></div>';
+  h2+='<div><div class="lbl">Contraseña</div><input class="inp" id="usrPass" value="'+h(u.pass||'')+'" placeholder="'+(isEdit?'Dejar vacío para no cambiar':'Contraseña')+'"></div>';
+  h2+='<div><div class="lbl">Rol</div><select class="sel" id="usrRole" style="width:100%"><option value="admin"'+(u.role==='admin'?' selected':'')+'>Administrador</option><option value="user"'+(u.role!=='admin'?' selected':'')+'>Usuario</option></select></div>';
+  h2+='<div style="grid-column:span 2"><div class="lbl">Empresas (dejar vacío = todas)</div><div id="usrEmpresas" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">';
+  empresas.forEach(function(em,i){
+    var checked=!u.empresas||!u.empresas.length||u.empresas.indexOf(em.name)>=0;
+    h2+='<label style="display:flex;align-items:center;gap:4px;font-size:11px;padding:4px 8px;border:1px solid var(--bd);border-radius:4px;cursor:pointer"><input type="checkbox" class="usr-emp-chk" value="'+h(em.name)+'" '+(checked?'checked':'')+'>'+h(em.name)+'</label>';
+  });
+  h2+='</div></div></div>';
+  h2+='<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-d" onclick="$(\'userModal\').remove()">Cancelar</button><button class="btn btn-p" onclick="saveUsuario('+idx+')">💾 Guardar</button></div></div></div>';
+  bg.innerHTML=h2;document.body.appendChild(bg);
+}
+function saveUsuario(idx){
+  var user=$('usrUser').value.trim();var name=$('usrName').value.trim();
+  if(!user||!name){toast('Usuario y nombre obligatorios','error');return;}
+  var pass=$('usrPass').value;var role=$('usrRole').value;
+  var empChecks=document.querySelectorAll('.usr-emp-chk');
+  var empresas=[];empChecks.forEach(function(ch){if(ch.checked)empresas.push(ch.value);});
+  var allChecked=empresas.length===empChecks.length;
+  var users=getUsers();
+  if(idx>=0){
+    users[idx].name=name;users[idx].role=role;
+    if(pass)users[idx].pass=pass;
+    users[idx].empresas=allChecked?[]:empresas;
+  }else{
+    if(users.some(function(u){return u.user===user;})){toast('Ese usuario ya existe','error');return;}
+    users.push({user:user,name:name,role:role,pass:pass||'1234',empresas:allChecked?[]:empresas});
+  }
+  saveUsers(users);$('userModal').remove();
+  auditLog(idx>=0?'editar_usuario':'nuevo_usuario',user);toast('Usuario guardado');render();
+}
+function deleteUsuario(idx){
+  var users=getUsers();if(users[idx].user==='admin'){toast('No se puede borrar el admin','error');return;}
+  if(!confirm('¿Eliminar usuario '+users[idx].user+'?'))return;
+  auditLog('borrar_usuario',users[idx].user);
+  users.splice(idx,1);saveUsers(users);toast('Usuario eliminado');render();
+}
 
 function borrarDatosEmpresa(){
   var nombre=prompt('Escribe el nombre de la empresa para confirmar el borrado TOTAL:');
@@ -2087,6 +2169,66 @@ function exportCCAA(){
   Object.entries(s).forEach(function(x){var g=parseInt(x[0][0])||0;if(g===6){gastos+=x[1];rows.push([x[0],am[x[0]]?am[x[0]].name:'',-x[1]]);}});
   rows.push(['','RESULTADO',ingresos-gastos]);
   exportExcel(rows,['','',''],'cuentas_anuales_'+state.ejercicio);
+}
+
+// ═══ ASISTENTE VOZ GLOBAL ═══
+var globalVoiceRecog=null;
+function startGlobalVoice(){
+  if(globalVoiceRecog){globalVoiceRecog.stop();globalVoiceRecog=null;var btn=$('globalMicBtn');if(btn){btn.textContent='🎤';btn.style.background='';}return;}
+  if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){toast('Tu navegador no soporta reconocimiento de voz','error');return;}
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var r=new SR();r.lang='es-ES';r.continuous=false;r.interimResults=false;
+  r.onresult=function(e){
+    var transcript=e.results[0][0].transcript;
+    globalVoiceRecog=null;var btn=$('globalMicBtn');if(btn){btn.textContent='🎤';btn.style.background='';}
+    toast('🎤 "'+transcript+'"','ok');
+    processVoiceCommand(transcript);
+  };
+  r.onerror=function(){globalVoiceRecog=null;var btn=$('globalMicBtn');if(btn){btn.textContent='🎤';btn.style.background='';}toast('No se ha podido escuchar','error');};
+  r.onend=function(){globalVoiceRecog=null;var btn=$('globalMicBtn');if(btn){btn.textContent='🎤';btn.style.background='';}};
+  r.start();globalVoiceRecog=r;
+  var btn=$('globalMicBtn');if(btn){btn.textContent='⏹';btn.style.background='var(--rd)';btn.style.color='#fff';}
+  toast('🎤 Habla ahora... Di lo que necesites','ok');
+}
+function processVoiceCommand(text){
+  var ql=text.toLowerCase();
+  // Navigation
+  var navMap={'diario':'journal','mayor':'ledger','saldos':'trial','sumas y saldos':'trial','balance':'balance','pérdidas y ganancias':'pnl','pyg':'pnl','libro iva':'libroiva','factura':'facturas','socio':'socios','proveedore':'analisis','tesorería':'posicion','concilia':'conciliacion','expediente':'expedientes','previsión':'prevision','prevision':'prevision','plan de cuenta':'planCuentas','regla':'rules','auditoría':'audit','auditoria':'audit','backup':'backups','dashboard':'dashboard','inicio':'dashboard','borradores':'borradores','plantilla':'plantillas','artículo':'articulos','inmovilizado':'inmovilizado','mapa':'mapaventas','nuevo gasto':'newEntry','asiento manual':'manualEntry','nuevo asiento':'manualEntry','chat':'chatcontable'};
+  var navigated=false;
+  // Sort keys by length desc to match longer phrases first
+  var keys=Object.keys(navMap).sort(function(a,b){return b.length-a.length;});
+  for(var i=0;i<keys.length;i++){
+    if(ql.indexOf(keys[i])>=0){
+      setView(navMap[keys[i]]);toast('✅ Abriendo '+keys[i],'ok');navigated=true;break;
+    }
+  }
+  if(!navigated){
+    // Try as a chat question
+    chatHistory=chatHistory||[];
+    chatHistory.push({role:'user',text:h(text)});
+    // Calculate data for answer
+    var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+    var s2={};all.forEach(function(e){e.lines.forEach(function(l){if(!s2[l.a])s2[l.a]=0;s2[l.a]+=l.d-l.h;});});
+    var ivaRep=0,ivaSop=0,ingresos=0,gastos=0,banco=0,caja=0,clientes=0,proveedores=0;
+    Object.entries(s2).forEach(function(x){var code=x[0],val=x[1];
+      if(code.startsWith('477'))ivaRep+=-(val);if(code.startsWith('472'))ivaSop+=val;
+      if(parseInt(code[0])===7)ingresos+=(-val);if(parseInt(code[0])===6)gastos+=val;
+      if(code.startsWith('572'))banco+=val;if(code.startsWith('570'))caja+=val;
+      if(code.startsWith('430'))clientes+=val;if(code.startsWith('400')||code.startsWith('410'))proveedores+=(-val);
+    });
+    var answer='';
+    if(ql.indexOf('vendido')>=0||ql.indexOf('venta')>=0||ql.indexOf('ingreso')>=0||ql.indexOf('facturado')>=0)answer='Ventas: <strong>'+fmt(ingresos)+'€</strong>';
+    else if(ql.indexOf('iva')>=0)answer='IVA: Rep '+fmt(ivaRep)+'€ - Sop '+fmt(ivaSop)+'€ = <strong>'+fmt(Math.abs(ivaRep-ivaSop))+'€ '+(ivaRep-ivaSop>=0?'a pagar':'a devolver')+'</strong>';
+    else if(ql.indexOf('resultado')>=0||ql.indexOf('beneficio')>=0)answer='Resultado: <strong>'+fmt(ingresos-gastos)+'€</strong>';
+    else if(ql.indexOf('banco')>=0||ql.indexOf('tesorería')>=0||ql.indexOf('dinero')>=0||ql.indexOf('saldo')>=0)answer='Banco: '+fmt(banco)+'€ | Caja: '+fmt(caja)+'€ | <strong>Total: '+fmt(banco+caja)+'€</strong>';
+    else if(ql.indexOf('gasto')>=0)answer='Gastos totales: <strong>'+fmt(gastos)+'€</strong>';
+    else if(ql.indexOf('cliente')>=0||ql.indexOf('cobrar')>=0)answer='Clientes pte cobro: <strong>'+fmt(clientes)+'€</strong>';
+    else if(ql.indexOf('proveedor')>=0||ql.indexOf('debo')>=0)answer='Proveedores pte pago: <strong>'+fmt(proveedores)+'€</strong>';
+    else answer='No he entendido. Prueba: "sácame sumas y saldos", "cuánto he vendido", "abre el diario"...';
+    chatHistory.push({role:'bot',text:answer});
+    toast('💬 '+answer.replace(/<[^>]+>/g,''),'ok');
+    if(state.view==='chatcontable')render();
+  }
 }
 
 // ═══ BÚSQUEDA GLOBAL ═══
@@ -2352,12 +2494,12 @@ function deleteFactura(tipo,idx){
 
 // ═══ CONCILIACIÓN BANCARIA ═══
 function renderConciliacion(c){
+  loadConciliado();
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  // Get bank movements (572)
   var movsBanco=[];
   all.forEach(function(e){e.lines.forEach(function(l){
     if(l.a&&l.a.startsWith('572')){
-      movsBanco.push({date:e.date,concept:e.concept||'',debe:l.d,haber:l.h,id:e.id,conciliado:e.conciliado||false});
+      movsBanco.push({date:e.date,concept:e.concept||'',debe:l.d,haber:l.h,id:e.id,conciliado:!!conciliadoState[e.id]});
     }
   });});
   movsBanco.sort(function(a,b){return a.date.localeCompare(b.date);});
@@ -2365,15 +2507,30 @@ function renderConciliacion(c){
   var totalPend=movsBanco.length-totalConc;
   var saldo=0;
 
-  c.innerHTML='<div class="card"><div class="card-h"><span>🔄 Conciliación bancaria</span><div style="display:flex;gap:8px;align-items:center"><span class="badge badge-g">'+totalConc+' conciliados</span><span class="badge badge-r">'+totalPend+' pendientes</span></div></div>'+
-  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Marca los movimientos bancarios que coinciden con tu extracto del banco. Los no marcados son partidas pendientes de conciliar.</div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>🔄 Conciliación bancaria</span><div style="display:flex;gap:8px;align-items:center"><span class="badge badge-g conc-count">'+totalConc+' conciliados</span><span class="badge badge-r conc-count">'+totalPend+' pendientes</span></div></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4;display:flex;justify-content:space-between;align-items:center"><span>Marca los movimientos que coinciden con tu extracto del banco.</span><div style="display:flex;gap:6px"><button class="btn btn-d" style="font-size:10px" onclick="concSelectAll()">☑ Marcar todo</button><button class="btn btn-d" style="font-size:10px" onclick="concDeselectAll()">☐ Desmarcar todo</button></div></div>'+
   (movsBanco.length?'<div class="scr" style="max-height:500px"><table><thead><tr><th style="width:30px">✓</th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Entrada</th><th style="text-align:right">Salida</th><th style="text-align:right">Saldo</th></tr></thead><tbody>'+
-  movsBanco.map(function(m,i){saldo+=m.debe-m.haber;return '<tr class="'+(i%2?'alt':'')+'" style="'+(m.conciliado?'opacity:0.6':'')+'"><td><input type="checkbox" '+(m.conciliado?'checked':'')+' onchange="toggleConciliado(\''+m.id+'\',this.checked)"></td><td style="font-size:10px">'+fmtD(m.date)+'</td><td style="font-size:11px">'+h(m.concept)+'</td><td style="text-align:right;color:var(--ok)">'+(m.debe>0?fmt(m.debe):'')+'</td><td style="text-align:right;color:var(--rd)">'+(m.haber>0?fmt(m.haber):'')+'</td><td style="text-align:right;font-weight:600">'+fmt(saldo)+'</td></tr>';}).join('')+
+  movsBanco.map(function(m,i){saldo+=m.debe-m.haber;return '<tr class="'+(i%2?'alt':'')+'" data-conc-id="'+m.id+'" style="'+(m.conciliado?'opacity:0.6':'')+'"><td><input type="checkbox" class="conc-chk" data-id="'+m.id+'" '+(m.conciliado?'checked':'')+' onchange="toggleConciliado(\''+m.id+'\',this.checked)"></td><td style="font-size:10px">'+fmtD(m.date)+'</td><td style="font-size:11px">'+h(m.concept)+'</td><td style="text-align:right;color:var(--ok)">'+(m.debe>0?fmt(m.debe):'')+'</td><td style="text-align:right;color:var(--rd)">'+(m.haber>0?fmt(m.haber):'')+'</td><td style="text-align:right;font-weight:600">'+fmt(saldo)+'</td></tr>';}).join('')+
   '</tbody></table></div>':'<div class="empty">Sin movimientos bancarios</div>')+'</div>';
 }
+function concSelectAll(){loadConciliado();document.querySelectorAll('.conc-chk').forEach(function(ch){ch.checked=true;conciliadoState[ch.dataset.id]=true;var row=document.querySelector('[data-conc-id="'+ch.dataset.id+'"]');if(row)row.style.opacity='0.6';});saveConciliado();var badges=document.querySelectorAll('.conc-count');var total=document.querySelectorAll('.conc-chk').length;if(badges.length>=2){badges[0].textContent=total+' conciliados';badges[1].textContent='0 pendientes';}}
+function concDeselectAll(){loadConciliado();document.querySelectorAll('.conc-chk').forEach(function(ch){ch.checked=false;conciliadoState[ch.dataset.id]=false;var row=document.querySelector('[data-conc-id="'+ch.dataset.id+'"]');if(row)row.style.opacity='1';});saveConciliado();var badges=document.querySelectorAll('.conc-count');var total=document.querySelectorAll('.conc-chk').length;if(badges.length>=2){badges[0].textContent='0 conciliados';badges[1].textContent=total+' pendientes';}}
+var conciliadoState={};
+function loadConciliado(){try{conciliadoState=JSON.parse(localStorage.getItem('cf_conc_'+(state.company?state.company.id:''))||'{}');}catch(e){conciliadoState={};}}
+function saveConciliado(){try{localStorage.setItem('cf_conc_'+(state.company?state.company.id:''),JSON.stringify(conciliadoState));}catch(e){}}
 function toggleConciliado(entryId,checked){
-  var e=state.entries.find(function(x){return x.id===entryId;});
-  if(e){e.conciliado=checked;api('/api/entries/'+state.company.id,{method:'POST',body:e}).then(function(){loadData().then(function(){render();});});}
+  loadConciliado();
+  conciliadoState[entryId]=checked;
+  saveConciliado();
+  // Update counts without full re-render
+  var badges=document.querySelectorAll('.conc-count');
+  var checks=document.querySelectorAll('.conc-chk');
+  var totalConc=0,totalPend=0;
+  checks.forEach(function(ch){if(ch.checked)totalConc++;else totalPend++;});
+  if(badges.length>=2){badges[0].textContent=totalConc+' conciliados';badges[1].textContent=totalPend+' pendientes';}
+  // Update row opacity
+  var row=document.querySelector('[data-conc-id="'+entryId+'"]');
+  if(row)row.style.opacity=checked?'0.6':'1';
 }
 
 // ═══ INMOVILIZADO Y AMORTIZACIÓN ═══
@@ -2733,18 +2890,35 @@ function downloadBackupVersion(idx){
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 }
 
+var auditFilters={user:'',action:''};
 function renderAudit(c){
   var log=getAuditLog();
-  c.innerHTML='<div class="card"><div class="card-h"><span>📝 Registro de auditoría — '+log.length+' registros</span><button class="btn btn-d" style="font-size:10px" onclick="if(confirm(\'¿Borrar todo el registro?\')){localStorage.removeItem(\'cf_audit_\'+state.company.id);render();}">🗑 Limpiar</button></div>'+
-  (log.length?'<div class="scr" style="max-height:500px"><table><thead><tr><th>Fecha/Hora</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead><tbody>'+
-  log.map(function(l,i){
+  var empresas=getEmpresas();var users=getUsers();
+  // Get unique users and actions from log
+  var logUsers={};var logActions={};
+  log.forEach(function(l){logUsers[l.user]=true;logActions[l.action]=true;});
+  // Apply filters
+  var filtered=log.filter(function(l){
+    if(auditFilters.user&&l.user!==auditFilters.user)return false;
+    if(auditFilters.action&&l.action!==auditFilters.action)return false;
+    return true;
+  });
+  c.innerHTML='<div class="card"><div class="card-h"><span>📝 Registro de auditoría — '+filtered.length+' de '+log.length+' registros</span><button class="btn btn-d" style="font-size:10px" onclick="if(confirm(\'¿Borrar todo el registro?\')){localStorage.removeItem(\'cf_audit_\'+state.company.id);render();}">🗑 Limpiar</button></div>'+
+  '<div style="padding:8px 14px;background:#F8F9FB;border-bottom:1px solid #EDF0F4;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+  '<span style="font-size:11px;color:var(--txM);font-weight:600">Filtrar:</span>'+
+  '<div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px">Usuario</span><select class="sel" style="font-size:10px;padding:3px 6px" onchange="auditFilters.user=this.value;render();"><option value="">Todos</option>'+Object.keys(logUsers).map(function(u){return '<option value="'+h(u)+'"'+(auditFilters.user===u?' selected':'')+'>'+h(u)+'</option>';}).join('')+'</select></div>'+
+  '<div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px">Acción</span><select class="sel" style="font-size:10px;padding:3px 6px" onchange="auditFilters.action=this.value;render();"><option value="">Todas</option>'+Object.keys(logActions).sort().map(function(a){return '<option value="'+h(a)+'"'+(auditFilters.action===a?' selected':'')+'>'+h(a)+'</option>';}).join('')+'</select></div>'+
+  '<div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px">Empresa</span><select class="sel" style="font-size:10px;padding:3px 6px"><option value="">'+h(state.company?state.company.name:'Actual')+'</option></select></div>'+
+  '</div>'+
+  (filtered.length?'<div class="scr" style="max-height:500px"><table><thead><tr><th>Fecha/Hora</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead><tbody>'+
+  filtered.map(function(l,i){
     var dt=new Date(l.ts);var fh=String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear()+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
     var actionBadge='badge-b';
     if(l.action.indexOf('borrar')>=0)actionBadge='badge-r';
     else if(l.action.indexOf('crear')>=0||l.action.indexOf('gasto')>=0)actionBadge='badge-g';
     else if(l.action.indexOf('cierre')>=0)actionBadge='badge-a';
     return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px;white-space:nowrap">'+fh+'</td><td style="font-weight:600">'+h(l.user)+'</td><td><span class="badge '+actionBadge+'">'+h(l.action)+'</span></td><td style="font-size:11px;color:var(--txS)">'+h(l.detail||'')+'</td></tr>';
-  }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:30px;margin-bottom:8px">📝</div>Sin registros de auditoría aún</div>')+'</div>';
+  }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:30px;margin-bottom:8px">📝</div>Sin registros que coincidan con los filtros</div>')+'</div>';
 }
 
 // ═══ PERIODOS — Cerrar/abrir meses ═══
