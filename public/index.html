@@ -291,17 +291,15 @@ async function doRefresh(){await loadData();checkIntegrity();toast('Datos recarg
 function changeEmpresa(name){
   var empresas=getEmpresas();var em=empresas.find(function(e){return e.name===name;});
   if(!em)return;
-  // Store original company for going back
-  if(!window._originalCompany&&state.company)window._originalCompany={id:state.company.id,name:state.company.name};
-  // If switching back to original company, use stored ID
-  if(window._originalCompany&&window._originalCompany.name===name){
-    state.company={id:window._originalCompany.id,name:window._originalCompany.name};
-  }else{
-    state.company={id:name.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase(),name:em.name};
-  }
+  // Store ALL company IDs we've seen from the server
+  if(!window._companyIds)window._companyIds={};
+  if(state.company&&state.company.id)window._companyIds[state.company.name]=state.company.id;
+  // Use stored server ID if we have one, otherwise create local ID
+  var compId=window._companyIds[name]||name.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
+  state.company={id:compId,name:em.name};
   loadData().then(function(){checkIntegrity();render();}).catch(function(){
     state.accounts=[];state.entries=[];state.rules=[];render();
-    toast('Empresa '+name+' sin datos en el servidor. Los datos son independientes por empresa.','ok');
+    toast('Empresa '+name+': sin datos en el servidor','ok');
   });
 }
 function changeEjercicio(y){state.ejercicio=parseInt(y);initDates();render();}
@@ -315,7 +313,7 @@ function render(){
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div><span style="font-weight:600">'+h(state.company.name)+'</span><span style="opacity:0.7">— v6.3</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+
   (function(){var emps=getEmpresas();if(emps.length<=1)return '';var userEmps=emps;try{var users=getUsers();var cu=users.find(function(u){return u.name===(state.user?state.user.name:'');});if(cu&&cu.empresas&&cu.empresas.length>0){userEmps=emps.filter(function(em){return cu.empresas.indexOf(em.name)>=0;});}}catch(e){}if(userEmps.length<=1)return '';return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:11px;padding:3px 8px;max-width:160px;font-weight:600" onchange="changeEmpresa(this.value)">'+userEmps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
-  +intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="startGlobalVoice()" title="Pedir por voz" id="globalMicBtn">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  +intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){return '<div class="rgroup"><div class="rgroup-btns">'+g.items.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
@@ -702,7 +700,7 @@ function handleAssistFile(file){
     var mediaType=file.type||'image/jpeg';
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'placeholder'},
       body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,
         messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
@@ -928,6 +926,13 @@ function exportLedgerExcel(){
 var trialFilter={from:'',to:''};
 function trialAcctFilterHTML(){
   return '<div style="display:flex;gap:8px;align-items:center;padding:8px 14px;background:#F8F9FB;border-bottom:1px solid #EDF0F4"><span style="font-size:11px;color:var(--txM);font-weight:600">Filtrar cuentas:</span><div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px">Desde</span><input class="inp" style="width:90px;font-size:11px;padding:4px 6px" id="trialFrom" value="'+trialFilter.from+'" placeholder="00000000" maxlength="8" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')"></div><div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px">Hasta</span><input class="inp" style="width:90px;font-size:11px;padding:4px 6px" id="trialTo" value="'+trialFilter.to+'" placeholder="99999999" maxlength="8" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')"></div><button class="btn btn-p" style="font-size:10px;padding:4px 10px" onclick="trialFilter.from=$(\' trialFrom\').value;trialFilter.to=$(\' trialTo\').value;render();">Filtrar</button><button class="btn btn-d" style="font-size:10px;padding:4px 10px" onclick="trialFilter.from=\'\';trialFilter.to=\'\';render();">Todo</button></div>';
+}
+function applyTrialFilter(){
+  var f=document.getElementById('trialFrom');
+  var t=document.getElementById('trialTo');
+  trialFilter.from=f?f.value:'';
+  trialFilter.to=t?t.value:'';
+  render();
 }
 function renderTrial(c){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
@@ -1739,8 +1744,9 @@ function renderModelo303(c){
           var acct=l.a||l.account||'';
           var debe=parseFloat(l.d||l.debe||0)||0;
           var haber=parseFloat(l.h||l.haber||0)||0;
-          if(acct.startsWith('477')){rep+=haber;if(debe>0)rep-=debe;}
-          if(acct.startsWith('472')){sop+=debe;if(haber>0)sop-=haber;}
+          // IVA: sum gross movements, not net (liquidation entries zero the account)
+          if(acct.startsWith('477'))rep+=haber;
+          if(acct.startsWith('472'))sop+=debe;
           var g=parseInt(acct[0])||0;
           if(g===7)baseRep+=haber;
           if(g===6)baseSop+=debe;
@@ -1839,7 +1845,7 @@ function renderModelo111(c){
         var acct=l.a||l.account||'';
         var debe=parseFloat(l.d||l.debe||0)||0;
         var haber=parseFloat(l.h||l.haber||0)||0;
-        if(acct.startsWith('4751')){retTotal+=haber;if(debe>0)retTotal-=debe;}
+        if(acct.startsWith('4751'))retTotal+=haber;
         if(acct.startsWith('640'))baseT+=debe;
         if(acct.startsWith('623')||acct.startsWith('629'))baseP+=debe;
       });}
@@ -2411,6 +2417,32 @@ function fullIntegrityReport(){
 
 // ═══ ASISTENTE VOZ GLOBAL ═══
 var globalVoiceRecog=null;
+function openVoiceDialog(){
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='voiceModal';
+  bg.innerHTML='<div class="modal" style="max-width:500px"><div class="card-h" style="background:var(--pri);color:#fff"><span>🎤 Asistente de voz</span><button class="btn" style="background:rgba(255,255,255,0.2);color:#fff;border:none" onclick="stopVoiceDialog()">✕</button></div><div class="card-b" style="min-height:200px">'+
+  '<div id="voiceMessages" style="max-height:300px;overflow-y:auto;margin-bottom:12px;font-size:12px">'+
+  '<div style="color:var(--txM);text-align:center;padding:20px">Pulsa el micrófono para hablar o escribe un comando.<br><br>Ejemplos:<br>• "Sácame sumas y saldos"<br>• "¿Cuánto he vendido?"<br>• "Abre el diario"<br>• "Resultado del ejercicio"</div></div>'+
+  '<div style="display:flex;gap:6px;align-items:center"><input class="inp" id="voiceInput" placeholder="Escribe o pulsa el micro para hablar..." onkeydown="voiceInputKey(event)" style="flex:1"><button class="btn btn-p" style="font-size:20px;padding:8px 16px;border-radius:50%" onclick="startGlobalVoice()" id="voiceMicBtn">🎤</button><button class="btn btn-p" style="font-size:11px" onclick="voiceSendBtn()">Enviar</button></div>'+
+  '</div></div>';
+  document.body.appendChild(bg);
+}
+function voiceInputKey(ev){if(ev.key==='Enter'){var inp=$('voiceInput');if(inp&&inp.value){sendVoiceCommand(inp.value);inp.value='';}}}
+function voiceSendBtn(){var inp=$('voiceInput');if(inp&&inp.value){sendVoiceCommand(inp.value);inp.value='';}}
+function stopVoiceDialog(){
+  if(globalVoiceRecog){globalVoiceRecog.stop();globalVoiceRecog=null;}
+  var m=$('voiceModal');if(m)m.remove();
+}
+function addVoiceMessage(role,text){
+  var msgs=$('voiceMessages');if(!msgs)return;
+  var cls=role==='user'?'background:#EBF5FF':'background:var(--priLt)';
+  msgs.innerHTML+='<div style="margin-bottom:8px;padding:8px 12px;border-radius:8px;'+cls+';font-size:12px"><strong>'+(role==='user'?'🗣 Tú':'🤖 Asistente')+':</strong> '+text+'</div>';
+  msgs.scrollTop=msgs.scrollHeight;
+}
+function sendVoiceCommand(text){
+  if(!text||!text.trim())return;
+  addVoiceMessage('user',h(text));
+  processVoiceCommand(text);
+}
 function startGlobalVoice(){
   if(globalVoiceRecog){globalVoiceRecog.stop();globalVoiceRecog=null;var btn=$('globalMicBtn');if(btn){btn.textContent='🎤';btn.style.background='';}return;}
   if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){toast('Tu navegador no soporta reconocimiento de voz','error');return;}
@@ -2419,14 +2451,14 @@ function startGlobalVoice(){
   r.onresult=function(e){
     var transcript=e.results[0][0].transcript;
     globalVoiceRecog=null;var btn=$('globalMicBtn');if(btn){btn.textContent='🎤';btn.style.background='';}
-    toast('🎤 "'+transcript+'"','ok');
+    addVoiceMessage('user',transcript);
     processVoiceCommand(transcript);
   };
   r.onerror=function(){globalVoiceRecog=null;var btn=$('globalMicBtn');if(btn){btn.textContent='🎤';btn.style.background='';}toast('No se ha podido escuchar','error');};
   r.onend=function(){globalVoiceRecog=null;var btn=$('globalMicBtn');if(btn){btn.textContent='🎤';btn.style.background='';}};
   r.start();globalVoiceRecog=r;
-  var btn=$('globalMicBtn');if(btn){btn.textContent='⏹';btn.style.background='var(--rd)';btn.style.color='#fff';}
-  toast('🎤 Habla ahora... Di lo que necesites','ok');
+  var btn=$('voiceMicBtn')||$('globalMicBtn');if(btn){btn.textContent='⏹';btn.style.background='var(--rd)';}
+  addVoiceMessage('system','🎤 Escuchando... habla ahora');
 }
 function processVoiceCommand(text){
   var ql=text.toLowerCase();
@@ -2437,7 +2469,7 @@ function processVoiceCommand(text){
   var keys=Object.keys(navMap).sort(function(a,b){return b.length-a.length;});
   for(var i=0;i<keys.length;i++){
     if(ql.indexOf(keys[i])>=0){
-      setView(navMap[keys[i]]);toast('✅ Abriendo '+keys[i],'ok');navigated=true;break;
+      setView(navMap[keys[i]]);addVoiceMessage('bot','✅ Abriendo <strong>'+keys[i]+'</strong>...');stopVoiceDialog();navigated=true;break;
     }
   }
   if(!navigated){
@@ -2464,7 +2496,7 @@ function processVoiceCommand(text){
     else if(ql.indexOf('proveedor')>=0||ql.indexOf('debo')>=0)answer='Proveedores pte pago: <strong>'+fmt(proveedores)+'€</strong>';
     else answer='No he entendido. Prueba: "sácame sumas y saldos", "cuánto he vendido", "abre el diario"...';
     chatHistory.push({role:'bot',text:answer});
-    toast('💬 '+answer.replace(/<[^>]+>/g,''),'ok');
+    addVoiceMessage('bot',answer);
     if(state.view==='chatcontable')render();
   }
 }
