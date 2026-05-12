@@ -1579,15 +1579,33 @@ async function contabilizarFacturas(){
       // Retención IRPF (from explicit column or detected from IVA 0%)
       if(realRetencion!==0)lines.push({a:'47510000',d:0,h:Math.abs(realRetencion)});
 
-      // Recargo equivalencia
-      if(f.recargo&&f.recargo!==0)lines.push({a:'47200000',d:Math.max(f.recargo,0),h:Math.max(-f.recargo,0)});
+      // Recargo equivalencia: from explicit column, or IVA 0% when positive (not retention)
+      var recargoTotal=0;
+      if(f.recargo&&f.recargo!==0){recargoTotal=f.recargo;}
+      else if(f.iva0&&f.iva0>0){recargoTotal=f.iva0;} // IVA 0% positive = recargo equiv
+      if(recargoTotal!==0)lines.push({a:'47200000',d:Math.max(recargoTotal,0),h:Math.max(-recargoTotal,0)});
 
-      // Proveedor (haber = lo que debemos)
+      // Proveedor (haber = lo que debemos) — ALWAYS use Total from Excel
       var totalHaber=Math.abs(f.total);
       if(f.isAbono){
         lines.push({a:'40000000',d:totalHaber,h:0});
       }else{
         lines.push({a:'40000000',d:0,h:totalHaber});
+      }
+
+      // Auto-balance: if lines don't match Total, add difference as recargo equiv
+      var sumD=0,sumH=0;
+      lines.forEach(function(l){sumD+=l.d;sumH+=l.h;});
+      var balanceDiff=Math.round((sumD-sumH)*100)/100;
+      if(Math.abs(balanceDiff)>0.01){
+        // Difference = missing recargo de equivalencia
+        if(balanceDiff<0){
+          // Need more debe → add to IVA soportado (recargo equiv)
+          lines.push({a:'47200000',d:Math.abs(balanceDiff),h:0});
+        }else{
+          // Need more haber → rare, adjust gasto
+          lines.push({a:cuentaGasto,d:0,h:Math.abs(balanceDiff)});
+        }
       }
 
       // Auto-create supplier if not exists
