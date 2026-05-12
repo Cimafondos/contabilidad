@@ -278,6 +278,34 @@ app.delete('/api/entries-all/:companyId', (req, res) => {
   }
 });
 
+// Soft-delete: mark entries as deleted (recoverable)
+app.post('/api/soft-delete-entries/:companyId', (req, res) => {
+  const cid = req.params.companyId;
+  let count;
+  if (cid === '_all_') {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE deleted = 0').get().c;
+    db.prepare('UPDATE entries SET deleted = 1 WHERE deleted = 0').run();
+  } else {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ? AND deleted = 0').get(cid).c;
+    db.prepare('UPDATE entries SET deleted = 1 WHERE company_id = ? AND deleted = 0').run(cid);
+  }
+  res.json({ ok: true, count });
+});
+
+// Recover soft-deleted entries
+app.post('/api/recover-entries/:companyId', (req, res) => {
+  const cid = req.params.companyId;
+  let count;
+  if (cid === '_all_') {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE deleted = 1').get().c;
+    db.prepare('UPDATE entries SET deleted = 0 WHERE deleted = 1').run();
+  } else {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ? AND deleted = 1').get(cid).c;
+    db.prepare('UPDATE entries SET deleted = 0 WHERE company_id = ? AND deleted = 1').run(cid);
+  }
+  res.json({ ok: true, count });
+});
+
 // ── TRANSACTIONS (bank imports) ──
 app.get('/api/transactions/:companyId', (req, res) => {
   const rows = db.prepare('SELECT * FROM transactions WHERE company_id = ? ORDER BY date').all(req.params.companyId);

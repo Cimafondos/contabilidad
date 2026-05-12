@@ -2374,7 +2374,13 @@ function renderAdmin(c){
   '<div class="stat"><div class="stat-v" style="color:var(--rd)">'+(function(){loadArticulos();return articulos.length;})()+'</div><div class="stat-l">Artículos</div></div>'+
   '</div></div></div>'+
   '<div class="card" style="margin-top:8px"><div class="card-h" style="color:var(--rd)">⚠️ Zona peligrosa</div><div class="card-b">'+
-  '<div style="display:flex;gap:8px"><button class="btn btn-r" onclick="borrarDatosEmpresa()">🗑 Borrar TODOS los datos</button><button class="btn btn-d" onclick="exportarTodoCSV()">📊 Exportar todo CSV</button></div>'+
+  '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+  '<button class="btn btn-a" onclick="softDeleteAsientos(\'empresa\')">🗑 Marcar asientos empresa actual como eliminados</button>'+
+  '<button class="btn btn-r" onclick="softDeleteAsientos(\'todas\')">🗑 Marcar asientos TODAS las empresas como eliminados</button>'+
+  '<button class="btn btn-p" onclick="recuperarAsientos()">♻️ Recuperar asientos eliminados</button>'+
+  '<button class="btn btn-d" onclick="exportarTodoCSV()">📊 Exportar todo CSV</button>'+
+  '</div>'+
+  '<div style="margin-top:8px;font-size:10px;color:var(--txM)">ℹ️ Los asientos marcados como eliminados no se muestran pero se pueden recuperar (como en Sage). Para borrado definitivo, usa la Papelera.</div>'+
   '</div></div></div></div>';
 }
 function getEmpresas(){try{return JSON.parse(localStorage.getItem('cf_empresas')||'[]');}catch(e){return [];}}
@@ -2538,6 +2544,30 @@ function exportarTodoCSV(){
   var a=document.createElement('a');a.href=url;a.download='export_total_'+state.ejercicio+'.csv';
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   toast('CSV exportado');
+}
+
+// ═══ SOFT DELETE / RECOVERY ═══
+async function softDeleteAsientos(scope){
+  var msg=scope==='todas'?'¿Marcar como eliminados TODOS los asientos de TODAS las empresas?':'¿Marcar como eliminados todos los asientos de '+state.company.name+'?';
+  if(!confirm(msg))return;
+  if(scope==='todas'&&!confirm('⚠️ SEGUNDA CONFIRMACIÓN: Esto afecta a TODAS las empresas. ¿Continuar?'))return;
+  try{
+    var url=scope==='todas'?'/api/soft-delete-entries/_all_':'/api/soft-delete-entries/'+state.company.id;
+    var r=await api(url,{method:'POST'});
+    await loadData();checkIntegrity();
+    toast('✓ '+(r.count||0)+' asientos marcados como eliminados. Se pueden recuperar desde aquí.','ok');
+    render();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+async function recuperarAsientos(){
+  if(!confirm('¿Recuperar todos los asientos eliminados de '+state.company.name+'?'))return;
+  try{
+    var r=await api('/api/recover-entries/'+state.company.id,{method:'POST'});
+    await loadData();checkIntegrity();
+    toast('✓ '+(r.count||0)+' asientos recuperados','ok');
+    render();
+  }catch(e){toast('Error: '+e.message,'error');}
 }
 
 // ═══ CARTERA DE EXPEDIENTES ═══
