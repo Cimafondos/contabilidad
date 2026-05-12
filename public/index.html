@@ -1535,11 +1535,26 @@ async function contabilizarFacturas(){
   var tipo=window._facturasType;
   if(!facturas||!facturas.length){toast('No hay facturas','error');return;}
 
+  // Show progress overlay
+  var overlay=document.createElement('div');
+  overlay.id='impProgress';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  overlay.innerHTML='<div style="background:#fff;border-radius:12px;padding:30px 50px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2)"><div style="font-size:28px;margin-bottom:10px">⏳</div><div style="font-size:16px;font-weight:700;margin-bottom:6px" id="impProgressTitle">Contabilizando facturas...</div><div style="font-size:13px;color:var(--txM)" id="impProgressDetail">Preparando...</div><div style="margin-top:12px;background:#E8E8E8;border-radius:6px;height:8px;overflow:hidden"><div id="impProgressBar" style="background:var(--pri);height:100%;width:0%;transition:width 0.3s;border-radius:6px"></div></div></div>';
+  document.body.appendChild(overlay);
+
+  function updateProgress(current,total,detail){
+    var pct=Math.round(current/total*100);
+    var bar=$('impProgressBar');if(bar)bar.style.width=pct+'%';
+    var det=$('impProgressDetail');if(det)det.textContent=current+'/'+total+' — '+detail;
+  }
+
   var created=0,provsCreated=0,clientsCreated=0;
   loadMasters();
 
   for(var fi=0;fi<facturas.length;fi++){
     var f=facturas[fi];
+    updateProgress(fi+1,facturas.length,(f.isAbono?'Abono ':'Fra. ')+f.tercero);
+    await new Promise(function(r){setTimeout(r,10)}); // Let UI update
     var lines=[];
 
     // Detect retention pattern from gestor documental:
@@ -1583,7 +1598,7 @@ async function contabilizarFacturas(){
       var recargoTotal=0;
       if(f.recargo&&f.recargo!==0){recargoTotal=f.recargo;}
       else if(f.iva0&&f.iva0>0){recargoTotal=f.iva0;} // IVA 0% positive = recargo equiv
-      if(recargoTotal!==0)lines.push({a:'47200000',d:Math.max(recargoTotal,0),h:Math.max(-recargoTotal,0)});
+      if(recargoTotal!==0)lines.push({a:'47200001',d:Math.max(recargoTotal,0),h:Math.max(-recargoTotal,0)});
 
       // Proveedor (haber = lo que debemos) — ALWAYS use Total from Excel
       var totalHaber=Math.abs(f.total);
@@ -1598,12 +1613,10 @@ async function contabilizarFacturas(){
       lines.forEach(function(l){sumD+=l.d;sumH+=l.h;});
       var balanceDiff=Math.round((sumD-sumH)*100)/100;
       if(Math.abs(balanceDiff)>0.01){
-        // Difference = missing recargo de equivalencia
         if(balanceDiff<0){
-          // Need more debe → add to IVA soportado (recargo equiv)
-          lines.push({a:'47200000',d:Math.abs(balanceDiff),h:0});
+          // Need more debe → recargo de equivalencia
+          lines.push({a:'47200001',d:Math.abs(balanceDiff),h:0});
         }else{
-          // Need more haber → rare, adjust gasto
           lines.push({a:cuentaGasto,d:0,h:Math.abs(balanceDiff)});
         }
       }
@@ -1683,6 +1696,8 @@ async function contabilizarFacturas(){
   }
 
   await loadData();checkIntegrity();
+  // Remove progress overlay
+  var ov=$('impProgress');if(ov)ov.remove();
   auditLog('importar_facturas',tipo+': '+created+' facturas');
   var msg='✓ '+created+' facturas contabilizadas';
   if(provsCreated>0)msg+=' · '+provsCreated+' proveedores nuevos';
@@ -2072,7 +2087,7 @@ function renderModelo303(c){
           var haber=parseFloat(l.h||l.haber||0)||0;
           // IVA: sum gross movements, not net (liquidation entries zero the account)
           if(acct.startsWith('477'))rep+=haber;
-          if(acct.startsWith('472'))sop+=debe;
+          if(acct==='47200000')sop+=debe; // Only pure IVA soportado, not recargo equiv (47200001)
           var g=parseInt(acct[0])||0;
           if(g===7)baseRep+=haber;
           if(g===6)baseSop+=debe;

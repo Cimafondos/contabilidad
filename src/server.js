@@ -129,6 +129,7 @@ if (companyCount === 0) {
     ['43000000','Clientes',4,'A'],['44000000','Deudores',4,'A'],
     ['46500000','Remuneraciones ptes. pago',4,'P'],
     ['47200000','HP IVA soportado',4,'A'],['47300000','HP retenciones',4,'A'],
+    ['47200001','HP Recargo equivalencia soportado',4,'A'],
     ['47500000','HP acreedora',4,'P'],['47700000','HP IVA repercutido',4,'P'],
     ['52000000','Deudas CP ent. crédito',5,'P'],['55100000','C/C con socios',5,'P'],
     ['55100001','C/C Pepe',5,'P'],['55100002','C/C Fernanda',5,'P'],
