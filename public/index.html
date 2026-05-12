@@ -2379,7 +2379,31 @@ function renderAdmin(c){
 }
 function getEmpresas(){try{return JSON.parse(localStorage.getItem('cf_empresas')||'[]');}catch(e){return [];}}
 function saveEmpresas(arr){try{localStorage.setItem('cf_empresas',JSON.stringify(arr));}catch(e){}}
-function initEmpresas(){var em=getEmpresas();if(!em.length){em=[{name:state.company?state.company.name:'Cimafondos S.L.',cif:'',direccion:'',cp:'',ciudad:'Valencia',provincia:'Valencia',activa:true}];saveEmpresas(em);}}
+function initEmpresas(){
+  var em=getEmpresas();
+  if(!em.length){
+    em=[{name:'Cimafondos S.L.',cif:'B98000001',direccion:'',cp:'',ciudad:'Valencia',provincia:'Valencia',activa:true},
+        {name:'Valentia Alimentación S.L.',cif:'',direccion:'',cp:'',ciudad:'Valencia',provincia:'Valencia',activa:true},
+        {name:'Espacio CF',cif:'',direccion:'',cp:'',ciudad:'Valencia',provincia:'Valencia',activa:true}];
+    saveEmpresas(em);
+  }
+  // Also try loading from server
+  try{
+    api('/api/companies').then(function(companies){
+      if(companies&&companies.length){
+        var current=getEmpresas();
+        var changed=false;
+        companies.forEach(function(sc){
+          if(!current.some(function(e){return e.name===sc.name;})){
+            current.push({name:sc.name,cif:sc.cif||'',direccion:sc.address||'',cp:'',ciudad:'',provincia:'',activa:true});
+            changed=true;
+          }
+        });
+        if(changed)saveEmpresas(current);
+      }
+    }).catch(function(){});
+  }catch(e){}
+}
 function newEmpresa(){
   var bg=document.createElement('div');bg.className='modal-bg';bg.id='empModal';
   var h2='<div class="modal" style="max-width:500px"><div class="card-h"><span>🏢 Nueva empresa</span><button class="btn btn-d" onclick="$(\'empModal\').remove()">✕</button></div><div class="card-b">';
