@@ -259,7 +259,7 @@ var TABS=[
 {id:'maestros',label:'Maestros',groups:[{label:'Terceros',items:[{id:'clients',icon:'🏢',label:'Clientes'},{id:'suppliers',icon:'🏭',label:'Proveedores'}]},{label:'Tablas',items:[{id:'banks',icon:'🏦',label:'Bancos'},{id:'articulos',icon:'📦',label:'Artículos'}]},{label:'Análisis',items:[{id:'analisis',icon:'📊',label:'Proveedores'}]}]},
 {id:'npl',label:'NPL',groups:[{label:'Gestión',items:[{id:'expedientes',icon:'📁',label:'Expedientes'},{id:'captacion',icon:'🤝',label:'Captación'}]},{label:'Seguimiento',items:[{id:'tareas',icon:'✅',label:'Tareas'},{id:'calendario',icon:'📅',label:'Calendario'},{id:'cartera',icon:'📊',label:'Cartera'},{id:'rentabilidad',icon:'💰',label:'Rentabilidad'}]}]},
 {id:'fiscal',label:'Fiscal',groups:[{label:'Modelos',items:[{id:'modelo303',icon:'📋',label:'303 IVA'},{id:'modelo390',icon:'📋',label:'390 Anual'},{id:'modelo111',icon:'📋',label:'111 IRPF'},{id:'modelo347',icon:'📋',label:'347 Terceros'},{id:'modelo200',icon:'📋',label:'200 IS'},{id:'modelo115',icon:'📋',label:'115 Alq.'}]},{label:'Informes',items:[{id:'pendientes',icon:'⏳',label:'Pendientes'},{id:'chatcontable',icon:'💬',label:'Chat'}]}]},
-{id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'backups',icon:'💾',label:'Backups'},{id:'audit',icon:'📝',label:'Auditoría'},{id:'trash',icon:'🗑️',label:'Papelera'},{id:'admin',icon:'👤',label:'Admin'}]}]}
+{id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'incidencias',icon:'⚠️',label:'Incidencias'},{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'backups',icon:'💾',label:'Backups'},{id:'audit',icon:'📝',label:'Auditoría'},{id:'trash',icon:'🗑️',label:'Papelera'},{id:'admin',icon:'👤',label:'Admin'}]}]}
 ];
 
 function setView(v){if(v==='newEntry'){showAssistant();return;}if(v==='manualEntry'){showEntryModal();return;}state.view=v;render();}
@@ -311,7 +311,7 @@ function render(){
   if(!state.user){try{renderLogin();}catch(e){$('app').innerHTML='<div style="padding:40px;text-align:center"><h2>Error de carga</h2><p>'+e.message+'</p><button onclick="location.reload()">Recargar</button></div>';}return;}
   var app=$('app');
   var tab=TABS.find(function(t){return t.id===state.tab;})||TABS[0];
-  var intBadge=state.integrity?(state.integrity.ok?'<span class="integrity-ok">✓ OK</span>':'<span class="integrity-err">✗ '+state.integrity.errors.length+' errores</span>'):'';
+  var intBadge=state.integrity?(state.integrity.ok?'<span class="integrity-ok">✓ OK</span>':'<span class="integrity-err" style="cursor:pointer" onclick="state.tab=\'config\';state.view=\'incidencias\';render();">✗ '+state.integrity.errors.length+' errores</span>'):'';
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div><span style="font-weight:600">'+h(state.company.name)+'</span><span style="opacity:0.7">— v6.7</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+
   (function(){var emps=getEmpresas();if(emps.length<=1)return '';var userEmps=emps;try{var users=getUsers();var cu=users.find(function(u){return u.name===(state.user?state.user.name:'');});if(cu&&cu.empresas&&cu.empresas.length>0){userEmps=emps.filter(function(em){return cu.empresas.indexOf(em.name)>=0;});}}catch(e){}if(userEmps.length<=1)return '';return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:11px;padding:3px 8px;max-width:160px;font-weight:600" onchange="changeEmpresa(this.value)">'+userEmps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
@@ -364,6 +364,7 @@ function renderView(){
   else if(v==='modelo200')renderModelo200(c);
   else if(v==='chatcontable')renderChat(c);
   else if(v==='admin')renderAdmin(c);
+  else if(v==='incidencias')renderIncidencias(c);
   else if(v==='cartera')renderCartera(c);
   else if(v==='rentabilidad')renderRentabilidad(c);
   else if(v==='infconc')renderInfConciliacion(c);
@@ -2568,6 +2569,81 @@ function exportarTodoCSV(){
 }
 
 // ═══ SOFT DELETE / RECOVERY ═══
+
+// ═══ INCIDENCIAS CONTABLES ═══
+function renderIncidencias(c){
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var errors=[];
+  
+  // 1. Asientos descuadrados
+  state.entries.forEach(function(e){
+    var td=0,th=0;
+    e.lines.forEach(function(l){td+=Math.round(l.d*100)/100;th+=Math.round(l.h*100)/100;});
+    var diff=Math.round((td-th)*100)/100;
+    if(Math.abs(diff)>0.01){
+      errors.push({tipo:'Descuadre',icon:'⚖️',severity:'error',date:e.date,ref:e.concept||e.id,detail:'Debe: '+fmt(td)+'€ · Haber: '+fmt(th)+'€ · Diferencia: '+fmt(diff)+'€',entryId:e.id,lines:e.lines});
+    }
+  });
+  
+  // 2. Cuentas inexistentes (usadas en asientos pero no en plan de cuentas)
+  var cuentasUsadas={};
+  state.entries.forEach(function(e){e.lines.forEach(function(l){
+    if(l.a&&!am[l.a]&&!cuentasUsadas[l.a]){
+      cuentasUsadas[l.a]=true;
+      errors.push({tipo:'Cuenta inexistente',icon:'📑',severity:'warning',date:e.date,ref:e.concept||e.id,detail:'Cuenta '+l.a+' usada en asiento pero no existe en el plan de cuentas',entryId:e.id});
+    }
+  });});
+  
+  // 3. Asientos sin líneas
+  state.entries.forEach(function(e){
+    if(!e.lines||e.lines.length===0){
+      errors.push({tipo:'Sin líneas',icon:'📋',severity:'warning',date:e.date,ref:e.concept||e.id,detail:'Asiento sin ninguna línea contable',entryId:e.id});
+    }
+  });
+  
+  // 4. Asientos con importe 0
+  state.entries.forEach(function(e){
+    if(e.lines&&e.lines.length>0){
+      var td=0;e.lines.forEach(function(l){td+=l.d+l.h;});
+      if(td===0){
+        errors.push({tipo:'Importe cero',icon:'0️⃣',severity:'info',date:e.date,ref:e.concept||e.id,detail:'Todas las líneas tienen importe 0',entryId:e.id});
+      }
+    }
+  });
+  
+  // 5. Fechas fuera del ejercicio
+  state.entries.forEach(function(e){
+    if(e.date&&!e.date.startsWith(String(state.ejercicio))){
+      errors.push({tipo:'Fecha fuera ejercicio',icon:'📅',severity:'info',date:e.date,ref:e.concept||e.id,detail:'Fecha '+fmtD(e.date)+' no pertenece al ejercicio '+state.ejercicio,entryId:e.id});
+    }
+  });
+  
+  // Sort: errors first, then warnings, then info
+  var order={error:0,warning:1,info:2};
+  errors.sort(function(a,b){return (order[a.severity]||9)-(order[b.severity]||9)||(a.date||'').localeCompare(b.date||'');});
+  
+  var countErr=errors.filter(function(e){return e.severity==='error';}).length;
+  var countWarn=errors.filter(function(e){return e.severity==='warning';}).length;
+  var countInfo=errors.filter(function(e){return e.severity==='info';}).length;
+  
+  c.innerHTML='<div class="row">'+
+  '<div class="stat"><div class="stat-v" style="color:var(--rd)">'+countErr+'</div><div class="stat-l">🔴 Errores (descuadres)</div></div>'+
+  '<div class="stat"><div class="stat-v" style="color:var(--am)">'+countWarn+'</div><div class="stat-l">🟡 Advertencias</div></div>'+
+  '<div class="stat"><div class="stat-v" style="color:var(--bl)">'+countInfo+'</div><div class="stat-l">🔵 Informativos</div></div>'+
+  '<div class="stat"><div class="stat-v" style="color:var(--ok)">'+state.entries.length+'</div><div class="stat-l">Total asientos</div></div>'+
+  '</div>'+
+  '<div class="card"><div class="card-h"><span>⚠️ Incidencias contables — '+errors.length+' encontradas</span><div style="display:flex;gap:6px"><button class="btn btn-d" style="font-size:10px" onclick="checkIntegrity();render();">🔄 Recomprobar</button></div></div>'+
+  (errors.length?'<div class="scr" style="max-height:500px"><table><thead><tr><th style="width:30px"></th><th>Tipo</th><th>Fecha</th><th>Asiento/Concepto</th><th>Detalle</th><th style="width:50px">Acc.</th></tr></thead><tbody>'+
+  errors.map(function(e,i){
+    var bgColor=e.severity==='error'?'#FDF0F0':e.severity==='warning'?'#FFF8E1':'#EBF5FF';
+    var txtColor=e.severity==='error'?'var(--rd)':e.severity==='warning'?'var(--am)':'var(--bl)';
+    return '<tr style="background:'+bgColor+'"><td style="font-size:16px;text-align:center">'+e.icon+'</td><td><span class="badge '+(e.severity==='error'?'badge-r':e.severity==='warning'?'badge-a':'badge-b')+'">'+e.tipo+'</span></td><td style="font-size:10px">'+fmtD(e.date)+'</td><td style="font-size:11px;font-weight:600;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(e.ref)+'</td><td style="font-size:10px;color:'+txtColor+'">'+h(e.detail)+'</td><td style="white-space:nowrap">'+(e.entryId?'<button class="abtn" onclick="editEntry(\''+e.entryId+'\')" title="Editar asiento">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteEntry(\''+e.entryId+'\')" title="Eliminar">🗑</button>':'')+'</td></tr>';
+  }).join('')+
+  '</tbody></table></div>':'<div class="empty"><div style="font-size:40px;margin-bottom:10px">✅</div>Sin incidencias. ¡Todo correcto!</div>')+
+  '</div>';
+}
+
+
 async function softDeleteAsientos(scope){
   var msg=scope==='todas'?'¿Marcar como eliminados TODOS los asientos de TODAS las empresas?':'¿Marcar como eliminados todos los asientos de '+state.company.name+'?';
   if(!confirm(msg))return;
