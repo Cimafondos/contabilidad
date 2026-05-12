@@ -1160,6 +1160,7 @@ function processFacturasFile(file,tipo){
       // Try all sheets
       var allFacts=[];
       wb.SheetNames.forEach(function(sn){
+        if(sn.toUpperCase().indexOf('RESUMEN')>=0)return; // skip summary sheets
         var ws=wb.Sheets[sn];
         var rows=XLSX.utils.sheet_to_json(ws,{header:1});
         if(rows.length<2)return;
@@ -1195,6 +1196,14 @@ function processFacturasFile(file,tipo){
         var cTotal=findCol('TOTAL','IMPORTE','LIQUIDO');
         // If no specific base columns, try generic BASE
         if(cBase21<0){cBase21=findCol('BASE');}
+        var cBase0p=findColExact('BASE 0%','BASE0%');if(cBase0p>=0)cBase0=cBase0p;
+        var cIva0=findColExact('IVA 0%','IVA0%');
+        var cRetP=findCol('RETENCIÓN','RETENCION');if(cRetP>=0&&cRet<0)cRet=cRetP;
+        var cReq=findCol('R. EQUIV','RECARGO','EQUIV');
+        var cTotalBase=findCol('TOTAL BASE');
+        if(cTotal<0)cTotal=findCol('TOTAL');
+
+        function parseNum(v){if(v===null||v===undefined||v==='')return 0;if(typeof v==='number')return v;var s=String(v).trim();if(s.indexOf(',')>=0&&s.indexOf('.')<0){s=s.replace(/,/g,'.');}else if(s.indexOf(',')>=0&&s.indexOf('.')>=0){s=s.replace(/\./g,'').replace(/,/g,'.');}return parseFloat(s)||0;}
 
         for(var i=hdr+1;i<rows.length;i++){
           var row=rows[i];if(!row||!row.length)continue;
@@ -1203,17 +1212,18 @@ function processFacturasFile(file,tipo){
           var cif=cCif>=0?String(row[cCif]||'').trim():'';
           if(!numFact&&!prov)continue;
           var fecha=cFecha>=0?parseDateImport(row[cFecha]):'';
-          var b21=cBase21>=0?parseFloat(row[cBase21])||0:0;
-          var b10=cBase10>=0?parseFloat(row[cBase10])||0:0;
-          var b4=cBase4>=0?parseFloat(row[cBase4])||0:0;
-          var b0=cBase0>=0?parseFloat(row[cBase0])||0:0;
-          var i21=cIva21>=0?parseFloat(row[cIva21])||0:(b21*0.21);
-          var i10=cIva10>=0?parseFloat(row[cIva10])||0:(b10*0.10);
-          var i4=cIva4>=0?parseFloat(row[cIva4])||0:(b4*0.04);
-          var ret=cRet>=0?parseFloat(row[cRet])||0:0;
-          var total=cTotal>=0?parseFloat(row[cTotal])||0:(b21+b10+b4+b0+i21+i10+i4-Math.abs(ret));
+          var b21=cBase21>=0?parseNum(row[cBase21]):0;
+          var b10=cBase10>=0?parseNum(row[cBase10]):0;
+          var b4=cBase4>=0?parseNum(row[cBase4]):0;
+          var b0=cBase0>=0?parseNum(row[cBase0]):0;
+          var i21=cIva21>=0?parseNum(row[cIva21]):(b21*0.21);
+          var i10=cIva10>=0?parseNum(row[cIva10]):(b10*0.10);
+          var i4=cIva4>=0?parseNum(row[cIva4]):(b4*0.04);
+          var ret=cRet>=0?parseNum(row[cRet]):0;
+          var req=cReq>=0?parseNum(row[cReq]):0;
+          var total=cTotal>=0?parseNum(row[cTotal]):(b21+b10+b4+b0+i21+i10+i4-Math.abs(ret)+req);
           if(total===0&&b21===0&&b10===0&&b4===0&&b0===0)continue;
-          allFacts.push({numFact:numFact,tercero:prov,cif:cif,fecha:fecha,b21:b21,b10:b10,b4:b4,b0:b0,i21:i21,i10:i10,i4:i4,ret:ret,total:total,hoja:sn});
+          allFacts.push({numFact:numFact,tercero:prov,cif:cif,fecha:fecha,b21:b21,b10:b10,b4:b4,b0:b0,i21:i21,i10:i10,i4:i4,ret:ret,req:req,total:total,hoja:sn});
         }
       });
       // Check duplicates
