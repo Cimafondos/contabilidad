@@ -1425,6 +1425,7 @@ function processFacturasRows(rows,tipo){
     if(hl.indexOf('base 4')>=0)colMap.base4=i;
     if(hl.indexOf('iva 4')>=0)colMap.iva4=i;
     if(hl.indexOf('base 0')>=0)colMap.base0=i;
+    if(hl.indexOf('iva 0')>=0&&hl.indexOf('iva 10')<0)colMap.iva0=i;
     if(hl.indexOf('retenc')>=0||hl.indexOf('retención')>=0)colMap.retencion=i;
     if(hl.indexOf('r. equiv')>=0||hl.indexOf('recargo')>=0)colMap.recargo=i;
     if(hl==='total')colMap.total=i;
@@ -1468,6 +1469,7 @@ function processFacturasRows(rows,tipo){
       base10:parseAmt(r[colMap.base10]), iva10:parseAmt(r[colMap.iva10]),
       base4:parseAmt(r[colMap.base4]), iva4:parseAmt(r[colMap.iva4]),
       base0:parseAmt(r[colMap.base0]),
+      iva0:parseAmt(r[colMap.iva0]),
       retencion:parseAmt(r[colMap.retencion]),
       recargo:parseAmt(r[colMap.recargo]),
       total:parseAmt(r[colMap.total]),
@@ -1508,7 +1510,11 @@ function showFacturasImportResult(nuevas,duplicadas,tipo){
   '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+nuevas.length+'</div><div class="stat-l">Nuevas para importar</div></div><div class="stat"><div class="stat-v" style="color:var(--txM)">'+duplicadas.length+'</div><div class="stat-l">Duplicadas (saltadas)</div></div><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(totalNuevas)+'€</div><div class="stat-l">Importe total</div></div></div>'+
   (nuevas.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Nº Factura</th><th>Fecha</th><th>'+(tipo==='recibida'?'Proveedor':'Cliente')+'</th><th>CIF</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Tipo</th></tr></thead><tbody>'+
   nuevas.map(function(f,i){
-    var totalBase=f.base21+f.base10+f.base4+f.base0;
+    // Don't double-count base0 when it's retention pattern
+    var rb0=f.base0;
+    if(f.base0!==0&&f.iva0&&f.iva0<0)rb0=0;
+    else if(f.base0!==0&&(f.base0===f.base21||f.base0===f.base10||f.base0===f.base4))rb0=0;
+    var totalBase=f.base21+f.base10+f.base4+rb0;
     var totalIva=f.iva21+f.iva10+f.iva4;
     return '<tr class="'+(i%2?'alt':'')+'" style="'+(f.isAbono?'color:var(--rd)':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.numFact)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="font-size:9px;color:var(--txM)">'+h(f.cif)+'</td><td style="text-align:right">'+fmt(totalBase)+'€</td><td style="text-align:right">'+fmt(totalIva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.total)+'€</td><td style="font-size:9px"><span class="badge '+(f.isAbono?'badge-r':'badge-g')+'">'+(f.isAbono?'Abono':'Factura')+'</span></td></tr>';
   }).join('')+'</tbody></table></div>'+
@@ -1534,7 +1540,22 @@ async function contabilizarFacturas(){
   for(var fi=0;fi<facturas.length;fi++){
     var f=facturas[fi];
     var lines=[];
-    var totalBase=f.base21+f.base10+f.base4+f.base0;
+
+    // Detect retention pattern from gestor documental:
+    // When Base 0% equals one of the other bases and IVA 0% is negative, 
+    // Base 0% is NOT a real exempt base — it's the retention base, and IVA 0% is the retention amount
+    var realBase0=f.base0;
+    var realRetencion=f.retencion||0;
+    if(f.base0!==0&&f.iva0&&f.iva0<0){
+      // IVA 0% negative = this is IRPF retention, not a real base
+      realRetencion=Math.abs(f.iva0);
+      realBase0=0; // Don't count base0 as it duplicates base21/10/4
+    }else if(f.base0!==0&&(f.base0===f.base21||f.base0===f.base10||f.base0===f.base4)){
+      // Base 0% duplicates another base — skip it
+      realBase0=0;
+    }
+
+    var totalBase=f.base21+f.base10+f.base4+realBase0;
     var totalIva=f.iva21+f.iva10+f.iva4;
 
     if(tipo==='recibida'){
@@ -1547,15 +1568,15 @@ async function contabilizarFacturas(){
       if(f.base21!==0)lines.push({a:cuentaGasto,d:Math.max(f.base21,0),h:Math.max(-f.base21,0)});
       if(f.base10!==0)lines.push({a:cuentaGasto,d:Math.max(f.base10,0),h:Math.max(-f.base10,0)});
       if(f.base4!==0)lines.push({a:cuentaGasto,d:Math.max(f.base4,0),h:Math.max(-f.base4,0)});
-      if(f.base0!==0)lines.push({a:cuentaGasto,d:Math.max(f.base0,0),h:Math.max(-f.base0,0)});
+      if(realBase0!==0)lines.push({a:cuentaGasto,d:Math.max(realBase0,0),h:Math.max(-realBase0,0)});
 
       // IVA soportado
       if(f.iva21!==0)lines.push({a:'47200000',d:Math.max(f.iva21,0),h:Math.max(-f.iva21,0)});
       if(f.iva10!==0)lines.push({a:'47200000',d:Math.max(f.iva10,0),h:Math.max(-f.iva10,0)});
       if(f.iva4!==0)lines.push({a:'47200000',d:Math.max(f.iva4,0),h:Math.max(-f.iva4,0)});
 
-      // Retención IRPF
-      if(f.retencion&&f.retencion!==0)lines.push({a:'47510000',d:0,h:Math.abs(f.retencion)});
+      // Retención IRPF (from explicit column or detected from IVA 0%)
+      if(realRetencion!==0)lines.push({a:'47510000',d:0,h:Math.abs(realRetencion)});
 
       // Recargo equivalencia
       if(f.recargo&&f.recargo!==0)lines.push({a:'47200000',d:Math.max(f.recargo,0),h:Math.max(-f.recargo,0)});
