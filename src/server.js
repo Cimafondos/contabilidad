@@ -355,6 +355,43 @@ app.post('/api/ocr', async (req, res) => {
     }
 });
 
+// ── USERS MANAGEMENT ──
+app.get('/api/users/:companyId', (req, res) => {
+  const rows = db.prepare('SELECT id, username, name, role, company_id FROM users WHERE company_id = ?').all(req.params.companyId);
+  res.json(rows);
+});
+
+app.post('/api/users/:companyId', (req, res) => {
+  const { id, username, password, name, role } = req.body;
+  try {
+    db.prepare('INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?)').run(id, username, password, name, role || 'user', req.params.companyId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/users/:companyId/:id', (req, res) => {
+  db.prepare('DELETE FROM users WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
+  res.json({ ok: true });
+});
+
+// ── COMPANIES MANAGEMENT ──
+app.get('/api/companies', (req, res) => {
+  const rows = db.prepare('SELECT * FROM companies').all();
+  res.json(rows);
+});
+
+app.post('/api/companies', (req, res) => {
+  const { id, name, cif, address, config } = req.body;
+  try {
+    db.prepare('INSERT OR REPLACE INTO companies VALUES (?, ?, ?, ?, ?)').run(id, name, cif || '', address || '', config || '{}');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ── SPA fallback ──
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
