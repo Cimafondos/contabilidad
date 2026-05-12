@@ -1174,17 +1174,23 @@ function processFacturasFile(file,tipo){
         var headers=rows[hdr].map(function(h2){return String(h2||'').toUpperCase().trim();});
         // Map columns
         function findCol(){for(var a=0;a<arguments.length;a++){var idx=headers.findIndex(function(h3){return h3.indexOf(arguments[a])>=0;});if(idx>=0)return idx;}return -1;}
-        var cFact=findCol('FACTURA','NUM','Nº','NUMERO');
-        var cProv=findCol('PROVEEDOR','CLIENTE','RAZON','RAZÓN','NOMBRE');
+        function findColExact(){for(var a=0;a<arguments.length;a++){var idx=headers.findIndex(function(h3){return h3===arguments[a]||h3.replace(/[%\s]/g,'')===arguments[a].replace(/[%\s]/g,'');});if(idx>=0)return idx;}return -1;}
+        // Nº Factura (not "Empresa Factura")
+        var cFact=findCol('Nº FACTURA','N° FACTURA','NUM FACTURA','NUMERO FACTURA');
+        if(cFact<0)cFact=findCol('FACTURA','NUM','Nº','NUMERO');
+        // If cFact landed on "EMPRESA FACTURA", try next match
+        if(cFact>=0&&headers[cFact].indexOf('EMPRESA')>=0){var cf2=headers.findIndex(function(h3,ix){return ix>cFact&&(h3.indexOf('FACTURA')>=0||h3.indexOf('Nº')>=0);});if(cf2>=0)cFact=cf2;}
+        var cProv=findCol('PROVEEDOR','RAZON','RAZÓN');
+        if(cProv<0)cProv=findCol('CLIENTE','NOMBRE');
         var cCif=findCol('CIF','NIF','DNI');
-        var cFecha=findCol('FECHA');
-        var cBase21=findCol('BASE 21','BASE IMP 21','B.I 21','BI 21');
-        var cBase10=findCol('BASE 10','BASE IMP 10','B.I 10','BI 10');
-        var cBase4=findCol('BASE 4','BASE IMP 4','B.I 4','BI 4');
+        var cFecha=findCol('FECHA CONTABLE','FECHA FACTURA','FECHA');
+        var cBase21=findColExact('BASE 21%','BASE21%');if(cBase21<0)cBase21=findCol('BASE 21','BASE IMP 21','B.I 21','BI 21');
+        var cBase10=findColExact('BASE 10%','BASE10%');if(cBase10<0)cBase10=findCol('BASE 10','BASE IMP 10','B.I 10','BI 10');
+        var cBase4=findColExact('BASE 4%','BASE4%');if(cBase4<0)cBase4=findCol('BASE 4','BASE IMP 4','B.I 4','BI 4');
         var cBase0=findCol('BASE 0','BASE EX','EXENT');
-        var cIva21=findCol('IVA 21','CUOTA 21');
-        var cIva10=findCol('IVA 10','CUOTA 10');
-        var cIva4=findCol('IVA 4','CUOTA 4');
+        var cIva21=findColExact('IVA 21%','IVA21%');if(cIva21<0)cIva21=findCol('IVA 21','CUOTA 21');
+        var cIva10=findColExact('IVA 10%','IVA10%');if(cIva10<0)cIva10=findCol('IVA 10','CUOTA 10');
+        var cIva4=findColExact('IVA 4%','IVA4%');if(cIva4<0)cIva4=findCol('IVA 4','CUOTA 4');
         var cRet=findCol('RETENC','IRPF','RET');
         var cTotal=findCol('TOTAL','IMPORTE','LIQUIDO');
         // If no specific base columns, try generic BASE
@@ -1206,7 +1212,7 @@ function processFacturasFile(file,tipo){
           var i4=cIva4>=0?parseFloat(row[cIva4])||0:(b4*0.04);
           var ret=cRet>=0?parseFloat(row[cRet])||0:0;
           var total=cTotal>=0?parseFloat(row[cTotal])||0:(b21+b10+b4+b0+i21+i10+i4-Math.abs(ret));
-          if(total===0&&b21===0&&b10===0&&b4===0)continue;
+          if(total===0&&b21===0&&b10===0&&b4===0&&b0===0)continue;
           allFacts.push({numFact:numFact,tercero:prov,cif:cif,fecha:fecha,b21:b21,b10:b10,b4:b4,b0:b0,i21:i21,i10:i10,i4:i4,ret:ret,total:total,hoja:sn});
         }
       });
