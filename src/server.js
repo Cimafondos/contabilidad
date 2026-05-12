@@ -198,6 +198,18 @@ app.post('/api/login', (req, res) => {
   res.json({ user, company });
 });
 
+// ── Helper: auto-create company if needed ──
+function ensureCompany(companyId) {
+  const existing = db.prepare('SELECT id FROM companies WHERE id = ?').get(companyId);
+  if (!existing) {
+    db.prepare('INSERT INTO companies VALUES (?, ?, ?, ?, ?)').run(companyId, companyId, '', '', '{}');
+    // Copy default PGC accounts for new company
+    const defaultAccounts = db.prepare('SELECT code, name, group_num, type FROM accounts WHERE company_id = ?').all('c1');
+    const insertAcct = db.prepare('INSERT OR IGNORE INTO accounts VALUES (?, ?, ?, ?, ?)');
+    defaultAccounts.forEach(a => insertAcct.run(a.code, a.name, a.group_num, a.type, companyId));
+  }
+}
+
 // ── ACCOUNTS ──
 app.get('/api/accounts/:companyId', (req, res) => {
   const rows = db.prepare('SELECT code, name, group_num as g, type as t FROM accounts WHERE company_id = ? ORDER BY code').all(req.params.companyId);
@@ -206,6 +218,7 @@ app.get('/api/accounts/:companyId', (req, res) => {
 
 app.post('/api/accounts/:companyId', (req, res) => {
   const { code, name, g, t } = req.body;
+  ensureCompany(req.params.companyId);
   try {
     db.prepare('INSERT INTO accounts VALUES (?, ?, ?, ?, ?)').run(code, name, g, t, req.params.companyId);
     res.json({ ok: true });
@@ -227,6 +240,8 @@ app.get('/api/entries/:companyId', (req, res) => {
 app.post('/api/entries/:companyId', (req, res) => {
   const { id, date, concept, type, lines } = req.body;
   const companyId = req.params.companyId;
+  ensureCompany(companyId);
+
   const insertEntry = db.prepare('INSERT OR REPLACE INTO entries (id, date, concept, type, company_id, deleted) VALUES (?, ?, ?, ?, ?, 0)');
   const deleteLine = db.prepare('DELETE FROM entry_lines WHERE entry_id = ?');
   const insertLine = db.prepare('INSERT INTO entry_lines (entry_id, account, debit, credit) VALUES (?, ?, ?, ?)');
