@@ -297,6 +297,8 @@ function changeEmpresa(name){
   // Use stored server ID if we have one, otherwise create local ID
   var compId=window._companyIds[name]||name.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
   state.company={id:compId,name:em.name};
+  // Remember last selected company
+  try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:compId,name:em.name}));}catch(e){}
   loadData().then(function(){checkIntegrity();render();}).catch(function(){
     state.accounts=[];state.entries=[];state.rules=[];render();
     toast('Empresa '+name+': sin datos en el servidor','ok');
@@ -427,6 +429,14 @@ async function doLogin(){
   }
   if(loginOk){
     console.log('Login OK, rendering...');
+    // Restore last selected company
+    try{
+      var lastComp=JSON.parse(localStorage.getItem('cf_lastCompany'));
+      if(lastComp&&lastComp.id&&lastComp.name){
+        state.company={id:lastComp.id,name:lastComp.name};
+        await loadData();checkIntegrity();
+      }
+    }catch(e){console.log('Restore company:',e.message);}
     render();
   }else{
     console.log('Login failed');
@@ -1509,6 +1519,7 @@ function showFacturasImportResult(nuevas,duplicadas,tipo){
   // Store for contabilizar
   window._facturasToImport=nuevas;
   window._facturasType=tipo;
+  window._facturasSkipped=duplicadas.length;
 }
 
 function clearImpResult(){var el=$('impResult');if(el)el.innerHTML='';}
@@ -1636,7 +1647,7 @@ async function contabilizarFacturas(){
   var msg='✓ '+created+' facturas contabilizadas';
   if(provsCreated>0)msg+=' · '+provsCreated+' proveedores nuevos';
   if(clientsCreated>0)msg+=' · '+clientsCreated+' clientes nuevos';
-  if(duplicadas&&duplicadas.length)msg+=' · '+duplicadas.length+' duplicadas saltadas';
+  if(window._facturasSkipped&&window._facturasSkipped>0)msg+=' · '+window._facturasSkipped+' duplicadas saltadas';
   toast(msg,'ok');
   render();
 }

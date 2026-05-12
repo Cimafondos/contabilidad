@@ -260,6 +260,24 @@ app.delete('/api/entries/:companyId/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// Delete ALL entries for a company (or all companies)
+app.delete('/api/entries-all/:companyId', (req, res) => {
+  const cid = req.params.companyId;
+  if (cid === '_all_') {
+    const count = db.prepare('SELECT COUNT(*) as c FROM entries').get().c;
+    db.prepare('DELETE FROM entry_lines').run();
+    db.prepare('DELETE FROM entries').run();
+    db.prepare('DELETE FROM transactions').run();
+    res.json({ ok: true, deleted: count });
+  } else {
+    const count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ?').get(cid).c;
+    db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ?)').run(cid);
+    db.prepare('DELETE FROM entries WHERE company_id = ?').run(cid);
+    db.prepare('DELETE FROM transactions WHERE company_id = ?').run(cid);
+    res.json({ ok: true, deleted: count });
+  }
+});
+
 // ── TRANSACTIONS (bank imports) ──
 app.get('/api/transactions/:companyId', (req, res) => {
   const rows = db.prepare('SELECT * FROM transactions WHERE company_id = ? ORDER BY date').all(req.params.companyId);
