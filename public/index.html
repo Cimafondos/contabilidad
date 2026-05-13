@@ -1410,7 +1410,14 @@ function importFacturasExcel(file,tipo){
           var label=String(r[0]||'').trim().toLowerCase();
           // Use 'total' column (last column with data)
           var totalVal=0;
-          for(var ci=r.length-1;ci>=1;ci--){if(r[ci]!==null&&r[ci]!==undefined&&r[ci]!==''){totalVal=parseFloat(String(r[ci]).replace(/\./g,'').replace(',','.'))||0;break;}}
+          for(var ci=r.length-1;ci>=1;ci--){
+            var cv=r[ci];
+            if(cv!==null&&cv!==undefined&&cv!==''&&cv!==0){
+              if(typeof cv==='number'){totalVal=cv;}
+              else{totalVal=parseFloat(String(cv).replace(/\./g,'').replace(',','.'))||0;}
+              break;
+            }
+          }
           if(label.indexOf('base 21')>=0)resumenIVA.base21=totalVal;
           if(label.indexOf('base 10')>=0)resumenIVA.base10=totalVal;
           if(label.indexOf('base 4')>=0&&label.indexOf('base 40')<0)resumenIVA.base4=totalVal;
