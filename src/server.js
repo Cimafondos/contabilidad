@@ -12,7 +12,7 @@ const fs = require('fs');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');h
+db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 // ── Create tables ──
