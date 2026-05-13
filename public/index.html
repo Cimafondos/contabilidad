@@ -1597,27 +1597,14 @@ async function contabilizarFacturas(){
       // Use REAL bases from Excel per IVA type instead of a single derived base
       var totalFactura=Math.abs(f.total);
       
-      // Compute real bases from Excel columns
-      var realBase21=Math.abs(f.base21)||0;
-      var realBase10=Math.abs(f.base10)||0;
-      var realBase4=Math.abs(f.base4)||0;
-      var sumBases=realBase21+realBase10+realBase4;
+      // Derive the real base from Total to ensure perfect balance
+      var realBase=totalFactura-Math.abs(totalIva)-Math.abs(recargoTotal)+Math.abs(realRetencion);
       
-      // If no individual bases detected, derive from Total
-      if(sumBases<0.01){
-        sumBases=totalFactura-Math.abs(totalIva)-Math.abs(recargoTotal)+Math.abs(realRetencion);
-        realBase21=sumBases; // Assume all is 21% if no breakdown
-      }
-
-      // Gasto lines - one per base type for traceability
+      // Gasto = single derived base (guarantees balance with total)
       if(f.isAbono){
-        if(realBase21>0.001)lines.push({a:cuentaGasto,d:0,h:realBase21});
-        if(realBase10>0.001)lines.push({a:cuentaGasto,d:0,h:realBase10});
-        if(realBase4>0.001)lines.push({a:cuentaGasto,d:0,h:realBase4});
+        lines.push({a:cuentaGasto,d:0,h:Math.abs(realBase)});
       }else{
-        if(realBase21>0.001)lines.push({a:cuentaGasto,d:realBase21,h:0});
-        if(realBase10>0.001)lines.push({a:cuentaGasto,d:realBase10,h:0});
-        if(realBase4>0.001)lines.push({a:cuentaGasto,d:realBase4,h:0});
+        lines.push({a:cuentaGasto,d:Math.abs(realBase),h:0});
       }
 
       // IVA soportado — separate lines per type, DO NOT consolidate
