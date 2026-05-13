@@ -1471,7 +1471,7 @@ function processFacturasRows(rows,tipo){
     var fact={
       numFact:numFact, fecha:fecha, tercero:terceroName, cif:cif,
       concepto:concepto, tipoDoc:tipoDoc, empresa:empresaOrigen,
-      vencimiento:colMap.vencimiento!==undefined?parseDateImport(r[colMap.vencimiento]):'',
+      vencimiento:colMap.vencimiento!==undefined?parseDate(r[colMap.vencimiento]):'',
       base21:parseAmt(r[colMap.base21]), iva21:parseAmt(r[colMap.iva21]),
       base10:parseAmt(r[colMap.base10]), iva10:parseAmt(r[colMap.iva10]),
       base4:parseAmt(r[colMap.base4]), iva4:parseAmt(r[colMap.iva4]),
