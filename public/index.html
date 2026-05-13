@@ -1980,6 +1980,14 @@ function processAsientosPaste(){
   processAsientosRows(rows);
 }
 
+function parseAsientoAmount(val){
+  if(typeof val==='number')return val;
+  var s=String(val||'').replace(/[€$\s]/g,'');
+  if(!s)return 0;
+  if(s.indexOf(',')>=0&&s.indexOf('.')<s.indexOf(','))s=s.replace(/\./g,'').replace(',','.');
+  return parseFloat(s)||0;
+}
+
 function processAsientosRows(rows){
   if(rows.length<2){toast('Sin datos','error');return;}
   var headerIdx=0;
@@ -2008,10 +2016,8 @@ function processAsientosRows(rows){
     var fechaRaw=String(r[dI]||'').trim();
     var cuenta=String(r[cI]||'').trim();
     var desc=String(r[descI]||'').trim();
-    var debeVal=r[debeI];var haberVal=r[haberI];
-    var debe=0,haber=0;
-    if(typeof debeVal==='number'){debe=debeVal;}else{var ds=String(debeVal||'').replace(/[€$\s]/g,'');if(ds.indexOf(',')>=0&&ds.indexOf('.')<ds.indexOf(',')){ds=ds.replace(/\./g,'').replace(',','.');}debe=parseFloat(ds)||0;}
-    if(typeof haberVal==='number'){haber=haberVal;}else{var hs=String(haberVal||'').replace(/[€$\s]/g,'');if(hs.indexOf(',')>=0&&hs.indexOf('.')<hs.indexOf(',')){hs=hs.replace(/\./g,'').replace(',','.');}haber=parseFloat(hs)||0;}
+    var debe=parseAsientoAmount(r[debeI]);
+    var haber=parseAsientoAmount(r[haberI]);
     if(!cuenta&&!debe&&!haber)continue;
     if(!numAsi&&order.length>0)numAsi=order[order.length-1];
     var dateStr=parseDate(fechaRaw);
