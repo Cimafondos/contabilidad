@@ -1556,6 +1556,13 @@ async function contabilizarFacturas(){
 
   var created=0,provsCreated=0,clientsCreated=0;
   loadMasters();
+  
+  // Ensure recargo equivalencia account exists
+  var has47200001=state.accounts.some(function(a){return a.code==='47200001';});
+  if(!has47200001){
+    try{await api('/api/accounts/'+state.company.id,{method:'POST',body:{code:'47200001',name:'HP Recargo equivalencia soportado',g:4,t:'A'}});}catch(e){}
+    state.accounts.push({code:'47200001',name:'HP Recargo equivalencia soportado',g:4,t:'A'});
+  }
 
   for(var fi=0;fi<facturas.length;fi++){
     var f=facturas[fi];
@@ -2198,24 +2205,26 @@ function renderPendientesCobro(c){
 // ═══ MODELO 390 — RESUMEN ANUAL IVA ═══
 function renderModelo390(c){
   var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
-  var rep21=0,rep10=0,rep4=0,sop21=0,sop10=0,sop4=0,baseRep=0,baseSop=0;
+  var baseRep=0,baseSop=0,rep=0,sop=0;
   all.forEach(function(e){e.lines.forEach(function(l){
-    if(l.a&&l.a.startsWith('477')&&l.h>0){rep21+=l.h;}
-    if(l.a&&l.a.startsWith('472')&&l.d>0){sop21+=l.d;}
-    var g=parseInt((l.a||'')[0])||0;
-    if(g===7&&l.h>l.d)baseRep+=l.h-l.d;
-    if(g===6&&l.d>l.h)baseSop+=l.d-l.h;
+    var acct=l.a||'';
+    var debe=parseFloat(l.d||0)||0;
+    var haber=parseFloat(l.h||0)||0;
+    if(acct.startsWith('477'))rep+=haber;
+    if(acct==='47200000')sop+=debe;
+    var g=parseInt(acct[0])||0;
+    if(g===7){baseRep+=haber-debe;}
+    if(g===6){baseSop+=debe-haber;}
   });});
-  var totalRep=rep21+rep10+rep4,totalSop=sop21+sop10+sop4;
   c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 390 — Resumen anual IVA '+state.ejercicio+'</span></div>'+
   '<table><thead><tr><th>Concepto</th><th style="text-align:right">Base imponible</th><th style="text-align:right">Cuota IVA</th></tr></thead><tbody>'+
   '<tr><td colspan="3" style="font-weight:700;background:#E8F8ED;color:var(--ok)">IVA DEVENGADO (Repercutido)</td></tr>'+
-  '<tr><td style="padding-left:20px">Régimen general 21%</td><td style="text-align:right">'+fmt(baseRep)+'€</td><td style="text-align:right">'+fmt(totalRep)+'€</td></tr>'+
-  '<tr class="total"><td>Total IVA devengado</td><td style="text-align:right">'+fmt(baseRep)+'€</td><td style="text-align:right">'+fmt(totalRep)+'€</td></tr>'+
+  '<tr><td style="padding-left:20px">Régimen general 21%</td><td style="text-align:right">'+fmt(baseRep)+'€</td><td style="text-align:right">'+fmt(rep)+'€</td></tr>'+
+  '<tr class="total"><td>Total IVA devengado</td><td style="text-align:right">'+fmt(baseRep)+'€</td><td style="text-align:right">'+fmt(rep)+'€</td></tr>'+
   '<tr><td colspan="3" style="font-weight:700;background:#FDF0F0;color:var(--rd)">IVA DEDUCIBLE (Soportado)</td></tr>'+
-  '<tr><td style="padding-left:20px">Cuotas soportadas operaciones interiores</td><td style="text-align:right">'+fmt(baseSop)+'€</td><td style="text-align:right">'+fmt(totalSop)+'€</td></tr>'+
-  '<tr class="total"><td>Total IVA deducible</td><td style="text-align:right">'+fmt(baseSop)+'€</td><td style="text-align:right">'+fmt(totalSop)+'€</td></tr>'+
-  '<tr style="background:var(--priLt)"><td style="font-weight:700;font-size:14px">RESULTADO</td><td></td><td style="text-align:right;font-weight:700;font-size:14px;color:'+(totalRep-totalSop>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(totalRep-totalSop))+'€ '+(totalRep-totalSop>=0?'A INGRESAR':'A DEVOLVER')+'</td></tr>'+
+  '<tr><td style="padding-left:20px">Cuotas soportadas operaciones interiores</td><td style="text-align:right">'+fmt(baseSop)+'€</td><td style="text-align:right">'+fmt(sop)+'€</td></tr>'+
+  '<tr class="total"><td>Total IVA deducible</td><td style="text-align:right">'+fmt(baseSop)+'€</td><td style="text-align:right">'+fmt(sop)+'€</td></tr>'+
+  '<tr style="background:var(--priLt)"><td style="font-weight:700;font-size:14px">RESULTADO</td><td></td><td style="text-align:right;font-weight:700;font-size:14px;color:'+(rep-sop>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(rep-sop))+'€ '+(rep-sop>=0?'A INGRESAR':'A DEVOLVER')+'</td></tr>'+
   '</tbody></table></div>';
 }
 
@@ -2257,26 +2266,61 @@ var m347Minimo=3005.06;
 function renderModelo347(c){
   var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
   var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  loadMasters();
+  
+  // Build terceros from entry concepts (Fra. NOMBRE [NUM]) and maestros
   var terceros={};
   all.forEach(function(e){
     var trimIdx=Math.floor((parseInt(e.date.slice(5,7))-1)/3);
+    // Extract tercero name from concept
+    var concepto=e.concept||'';
+    var terceroName='';var terceroCif='';var tipo='';
+    var mFra=concepto.match(/^(?:Fra\.|Abono)\s+(.+?)\s*\[/);
+    if(mFra)terceroName=mFra[1].trim();
+    
+    // Find total from proveedor/cliente line (400/430)
+    var totalIvaIncl=0;
+    var isCompra=false,isVenta=false;
     e.lines.forEach(function(l){
       if(!l.a)return;
-      var isCliente=l.a.startsWith('430');
-      var isProveedor=l.a.startsWith('400')||l.a.startsWith('410');
-      if(isCliente||isProveedor){
-        var key=l.a;var nombre=am[l.a]?am[l.a].name:l.a;
-        if(!terceros[key])terceros[key]={nombre:nombre,cuenta:l.a,compras:0,ventas:0,trim:[0,0,0,0]};
-        if(isCliente){terceros[key].ventas+=l.d;terceros[key].trim[trimIdx]+=l.d;}
-        if(isProveedor){terceros[key].compras+=l.h;terceros[key].trim[trimIdx]+=l.h;}
+      if(l.a.startsWith('400')||l.a.startsWith('410')){
+        totalIvaIncl+=l.h-l.d; // haber = factura, debe = abono
+        isCompra=true;
+      }
+      if(l.a.startsWith('430')||l.a.startsWith('431')){
+        totalIvaIncl+=l.d-l.h; // debe = factura, haber = cobro
+        isVenta=true;
       }
     });
+    
+    if(!terceroName&&totalIvaIncl===0)return;
+    
+    // Try to find CIF from maestros
+    if(!terceroCif){
+      var prov=masters.supplier.find(function(s){return s.name===terceroName;});
+      if(prov)terceroCif=prov.cif||'';
+      if(!terceroCif){
+        var cli=masters.client.find(function(s){return s.name===terceroName;});
+        if(cli)terceroCif=cli.cif||'';
+      }
+    }
+    
+    var key=terceroName||concepto;
+    if(!terceros[key])terceros[key]={nombre:terceroName||concepto,cif:terceroCif,compras:0,ventas:0,trim:[0,0,0,0]};
+    if(terceroCif&&!terceros[key].cif)terceros[key].cif=terceroCif;
+    if(isCompra){terceros[key].compras+=Math.abs(totalIvaIncl);terceros[key].trim[trimIdx]+=Math.abs(totalIvaIncl);}
+    if(isVenta){terceros[key].ventas+=Math.abs(totalIvaIncl);terceros[key].trim[trimIdx]+=Math.abs(totalIvaIncl);}
   });
+  
   var lista=Object.values(terceros).filter(function(x){return (x.compras+x.ventas)>m347Minimo;}).sort(function(a,b){return (b.compras+b.ventas)-(a.compras+a.ventas);});
+  var totalCompras=lista.reduce(function(s,x){return s+x.compras;},0);
+  var totalVentas=lista.reduce(function(s,x){return s+x.ventas;},0);
+  
   c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 347 — Terceros >'+fmt(m347Minimo)+'€ — '+state.ejercicio+'</span><span class="badge badge-b">'+lista.length+' declarables</span></div>'+
-  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4;display:flex;justify-content:space-between;align-items:center"><span>Operaciones con clientes y proveedores (IVA incluido). Presentación: febrero año siguiente.</span><div style="display:flex;gap:6px;align-items:center"><span style="font-size:10px;font-weight:600">Mínimo €:</span><input class="inp" style="width:90px;font-size:10px;padding:3px 6px;text-align:right" id="m347min" value="'+fmt(m347Minimo)+'" onfocus="selectAll(this)"><button class="btn btn-p" style="font-size:9px;padding:3px 8px" onclick="var raw=$(\'m347min\').value.replace(/\\./g,\'\').replace(\',\'\,\'.\');m347Minimo=parseFloat(raw)||3005.06;render();">Aplicar</button></div></div>'+
-  (lista.length?'<table><thead><tr><th>Tercero</th><th>Cuenta</th><th style="text-align:right">Compras</th><th style="text-align:right">Ventas</th><th style="text-align:right">Total</th><th style="text-align:right">1T</th><th style="text-align:right">2T</th><th style="text-align:right">3T</th><th style="text-align:right">4T</th></tr></thead><tbody>'+
-  lista.map(function(x,i){var t=x.compras+x.ventas;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x.nombre)+'</td><td class="acct" style="font-size:10px">'+x.cuenta+'</td><td style="text-align:right;color:var(--rd)">'+fmt(x.compras)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(x.ventas)+'€</td><td style="text-align:right;font-weight:700">'+fmt(t)+'€</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[0])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[1])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[2])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[3])+'</td></tr>';}).join('')+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4;display:flex;justify-content:space-between;align-items:center"><span>Operaciones con clientes y proveedores (IVA incluido). Presentación: febrero año siguiente.</span><div style="display:flex;gap:6px;align-items:center"><span style="font-size:10px;font-weight:600">Mínimo €:</span><input class="inp" style="width:90px;font-size:10px;padding:3px 6px;text-align:right" id="m347min" value="'+fmt(m347Minimo)+'" onfocus="selectAll(this)"><button class="btn btn-p" style="font-size:9px;padding:3px 8px" onclick="var raw=$(\'m347min\').value.replace(/\\./g,\'\').replace(\',\',\'.\');m347Minimo=parseFloat(raw)||3005.06;render();">Aplicar</button></div></div>'+
+  (lista.length?'<table><thead><tr><th>Tercero</th><th>CIF/NIF</th><th style="text-align:right">Compras (IVA incl.)</th><th style="text-align:right">Ventas (IVA incl.)</th><th style="text-align:right">Total</th><th style="text-align:right">1T</th><th style="text-align:right">2T</th><th style="text-align:right">3T</th><th style="text-align:right">4T</th></tr></thead><tbody>'+
+  lista.map(function(x,i){var t=x.compras+x.ventas;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis">'+h(x.nombre)+'</td><td style="font-size:10px">'+h(x.cif||'—')+'</td><td style="text-align:right;color:var(--rd)">'+fmt(x.compras)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(x.ventas)+'€</td><td style="text-align:right;font-weight:700">'+fmt(t)+'€</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[0])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[1])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[2])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[3])+'</td></tr>';}).join('')+
+  '<tr class="total"><td colspan="2">TOTALES ('+lista.length+' terceros)</td><td style="text-align:right">'+fmt(totalCompras)+'€</td><td style="text-align:right">'+fmt(totalVentas)+'€</td><td style="text-align:right;font-size:14px">'+fmt(totalCompras+totalVentas)+'€</td><td colspan="4"></td></tr>'+
   '</tbody></table>':'<div class="empty">Ningún tercero supera '+fmt(m347Minimo)+'€</div>')+'</div>';
 }
 
