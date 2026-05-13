@@ -1512,7 +1512,7 @@ function processFacturasRows(rows,tipo){
 
 function showFacturasImportResult(nuevas,duplicadas,tipo){
   var res=$('impResult');if(!res)return;
-  var totalNuevas=nuevas.reduce(function(s,f){return s+Math.abs(f.total);},0);
+  var totalNuevas=nuevas.reduce(function(s,f){return s+f.total;},0);
 
   res.innerHTML='<div class="card" style="border:2px solid var(--pri)"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 Resultado importación — '+(tipo==='recibida'?'Facturas recibidas':'Facturas emitidas')+'</span></div><div class="card-b">'+
   '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+nuevas.length+'</div><div class="stat-l">Nuevas para importar</div></div><div class="stat"><div class="stat-v" style="color:var(--txM)">'+duplicadas.length+'</div><div class="stat-l">Duplicadas (saltadas)</div></div><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(totalNuevas)+'€</div><div class="stat-l">Importe total</div></div></div>'+
