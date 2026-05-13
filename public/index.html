@@ -297,7 +297,9 @@ function changeEmpresa(name){
   // Use stored server ID if we have one, otherwise create local ID
   var compId=window._companyIds[name]||name.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
   state.company={id:compId,name:em.name};
-  // Remember last selected company
+  // Register mapping
+  EMPRESA_MAP[compId]=em.name;
+  // Remember last selected company — ALWAYS save real name
   try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:compId,name:em.name}));}catch(e){}
   loadData().then(function(){checkIntegrity();render();}).catch(function(){
     state.accounts=[];state.entries=[];state.rules=[];render();
@@ -315,7 +317,7 @@ function render(){
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div>'+
   (function(){var emps=getEmpresas();if(!emps.length)emps=[{name:state.company.name}];var userEmps=emps;try{var users=getUsers();var cu=users.find(function(u){return u.name===(state.user?state.user.name:'');});if(cu&&cu.empresas&&cu.empresas.length>0){userEmps=emps.filter(function(em){return cu.empresas.indexOf(em.name)>=0;});}}catch(e){}return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+userEmps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
-  +'<span style="opacity:0.7">— v6.8</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  +'<span style="opacity:0.7">— v6.8.1</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){return '<div class="rgroup"><div class="rgroup-btns">'+g.items.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
@@ -433,11 +435,14 @@ async function doLogin(){
     // Restore last selected company
     try{
       var lastComp=JSON.parse(localStorage.getItem('cf_lastCompany'));
-      if(lastComp&&lastComp.id&&lastComp.name){
-        state.company={id:lastComp.id,name:lastComp.name};
+      if(lastComp&&lastComp.id){
+        // Always resolve name from ID mapping
+        var realName=resolveCompanyName(lastComp.name||lastComp.id);
+        state.company={id:lastComp.id,name:realName};
         await loadData();checkIntegrity();
       }
     }catch(e){console.log('Restore company:',e.message);}
+    fixCompanyState();
     render();
   }else{
     console.log('Login failed');
@@ -2483,6 +2488,33 @@ function renderAdmin(c){
 }
 function getEmpresas(){try{return JSON.parse(localStorage.getItem('cf_empresas')||'[]');}catch(e){return [];}}
 function saveEmpresas(arr){try{localStorage.setItem('cf_empresas',JSON.stringify(arr));}catch(e){}}
+
+// Map of company IDs to real names — never lose the real name
+var EMPRESA_MAP={
+  'c1':'Cimafondos S.L.',
+  'valentia_alimentaci_n_s_l_':'Valentia Alimentación S.L.',
+  'valentia_alimentacion_s_l_':'Valentia Alimentación S.L.',
+  'espacio_cf':'Espacio CF',
+  'default':'Cimafondos S.L.'
+};
+function resolveCompanyName(idOrName){
+  if(EMPRESA_MAP[idOrName])return EMPRESA_MAP[idOrName];
+  // Check if it already is a real name
+  var emps=getEmpresas();
+  var found=emps.find(function(e){return e.name===idOrName;});
+  if(found)return found.name;
+  // Last resort: return as-is but cleaned up
+  return idOrName;
+}
+function fixCompanyState(){
+  if(state.company&&state.company.name){
+    var resolved=resolveCompanyName(state.company.name);
+    if(resolved!==state.company.name)state.company.name=resolved;
+    // Also register the ID mapping
+    if(state.company.id)EMPRESA_MAP[state.company.id]=state.company.name;
+  }
+}
+
 function initEmpresas(){
   var em=getEmpresas();
   if(!em.length){
@@ -2491,6 +2523,8 @@ function initEmpresas(){
         {name:'Espacio CF',cif:'',direccion:'',cp:'',ciudad:'Valencia',provincia:'Valencia',activa:true}];
     saveEmpresas(em);
   }
+  // Fix current company name if it's an ID
+  fixCompanyState();
   // Also try loading from server
   try{
     api('/api/companies').then(function(companies){
@@ -2498,12 +2532,14 @@ function initEmpresas(){
         var current=getEmpresas();
         var changed=false;
         companies.forEach(function(sc){
+          // Register ID mapping
+          if(sc.id&&sc.name)EMPRESA_MAP[sc.id]=sc.name;
           if(!current.some(function(e){return e.name===sc.name;})){
             current.push({name:sc.name,cif:sc.cif||'',direccion:sc.address||'',cp:'',ciudad:'',provincia:'',activa:true});
             changed=true;
           }
         });
-        if(changed)saveEmpresas(current);
+        if(changed){saveEmpresas(current);fixCompanyState();render();}
       }
     }).catch(function(){});
   }catch(e){}
