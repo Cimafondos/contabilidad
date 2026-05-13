@@ -12,7 +12,7 @@ const fs = require('fs');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
+db.pragma('journal_mode = WAL');h
 db.pragma('foreign_keys = ON');
 
 // ── Create tables ──
@@ -477,6 +477,6 @@ app.get('*', (req, res) => {
 
 // ── Start ──
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✓ Cimafondos v6.9.5 running on port ${PORT}`);
+  console.log(`✓ Cimafondos v6.9.7 running on port ${PORT}`);
   console.log(`  Database: ${DB_PATH}`);
 });
