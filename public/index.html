@@ -2312,20 +2312,24 @@ function renderModelo303(c){
 function renderPendientesCobro(c){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var pendCobro=[],pendPago=[];
-  // Agrupar por cliente (430) y proveedor (400/410)
+  // Agrupar por cuenta de cliente (430) y proveedor (400/410) — NOT by concept
   var clientes={},proveedores={};
   all.forEach(function(e){e.lines.forEach(function(l){
     if(l.a&&l.a.startsWith('430')){
-      var key=e.concept||'Sin concepto';if(!clientes[key])clientes[key]={saldo:0,date:e.date};
-      clientes[key].saldo+=l.d-l.h;clientes[key].date=e.date;
+      var key=l.a;var name=am[l.a]?am[l.a].name:(e.concept||'Sin concepto');
+      if(!clientes[key])clientes[key]={saldo:0,date:e.date,name:name};
+      clientes[key].saldo+=l.d-l.h;
+      if(e.date>clientes[key].date)clientes[key].date=e.date;
     }
     if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))){
-      var key2=e.concept||'Sin concepto';if(!proveedores[key2])proveedores[key2]={saldo:0,date:e.date};
-      proveedores[key2].saldo+=l.h-l.d;proveedores[key2].date=e.date;
+      var key2=l.a;var name2=am[l.a]?am[l.a].name:(e.concept||'Sin concepto');
+      if(!proveedores[key2])proveedores[key2]={saldo:0,date:e.date,name:name2};
+      proveedores[key2].saldo+=l.h-l.d;
+      if(e.date>proveedores[key2].date)proveedores[key2].date=e.date;
     }
   });});
-  Object.entries(clientes).forEach(function(x){if(x[1].saldo>0.01)pendCobro.push({name:x[0],saldo:x[1].saldo,date:x[1].date});});
-  Object.entries(proveedores).forEach(function(x){if(x[1].saldo>0.01)pendPago.push({name:x[0],saldo:x[1].saldo,date:x[1].date});});
+  Object.entries(clientes).forEach(function(x){if(x[1].saldo>0.01)pendCobro.push({name:x[1].name,saldo:x[1].saldo,date:x[1].date});});
+  Object.entries(proveedores).forEach(function(x){if(x[1].saldo>0.01)pendPago.push({name:x[1].name,saldo:x[1].saldo,date:x[1].date});});
   pendCobro.sort(function(a,b){return b.saldo-a.saldo;});
   pendPago.sort(function(a,b){return b.saldo-a.saldo;});
   var totalCobro=pendCobro.reduce(function(s,x){return s+x.saldo;},0);
@@ -3459,32 +3463,33 @@ function renderAnalisisProveedores(c){
   var provs={};
   all.forEach(function(e){
     // Buscar líneas con cuentas de proveedor/acreedor (400, 410)
-    var provAccts=[];var gastoTotal=0;
+    var provAccts=[];var gastoNeto=0;
     e.lines.forEach(function(l){
-      if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))&&l.h>0){
+      if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))&&(l.h>0||l.d>0)){
         provAccts.push(l);
       }
       var g=parseInt((l.a||'')[0])||0;
-      if(g===6&&l.d>0)gastoTotal+=l.d;
+      if(g===6){gastoNeto+=l.d-l.h;}
     });
     // Si hay cuenta de proveedor, agrupar por ella
     if(provAccts.length>0){
       provAccts.forEach(function(pl){
         var key=pl.a;
+        var neto=pl.h-pl.d; // Positivo=factura, negativo=abono
         var provName=am[pl.a]?am[pl.a].name:pl.a;
         if(!provs[key])provs[key]={name:provName,total:0,count:0,months:{},lastDate:'',cuenta:pl.a};
-        provs[key].total+=pl.h;provs[key].count++;
+        provs[key].total+=neto;provs[key].count++;
         var ym=e.date.slice(0,7);if(!provs[key].months[ym])provs[key].months[ym]=0;
-        provs[key].months[ym]+=pl.h;
+        provs[key].months[ym]+=neto;
         if(e.date>provs[key].lastDate)provs[key].lastDate=e.date;
       });
-    } else if(gastoTotal>0){
+    } else if(gastoNeto>0){
       // Fallback: si no hay cuenta proveedor, usar concepto
       var key='_'+((e.concept||'Otros').split(/\s+/)[0]);
       if(!provs[key])provs[key]={name:(e.concept||'Otros').split(/\s+/)[0],total:0,count:0,months:{},lastDate:'',cuenta:'Directo'};
-      provs[key].total+=gastoTotal;provs[key].count++;
+      provs[key].total+=gastoNeto;provs[key].count++;
       var ym2=e.date.slice(0,7);if(!provs[key].months[ym2])provs[key].months[ym2]=0;
-      provs[key].months[ym2]+=gastoTotal;
+      provs[key].months[ym2]+=gastoNeto;
       if(e.date>provs[key].lastDate)provs[key].lastDate=e.date;
     }
   });
@@ -3512,20 +3517,20 @@ function exportAnalisisExcel(){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var provs={};
   all.forEach(function(e){
-    var provAccts=[];var gastoTotal=0;
+    var provAccts=[];var gastoNeto=0;
     e.lines.forEach(function(l){
-      if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))&&l.h>0)provAccts.push(l);
-      var g=parseInt((l.a||'')[0])||0;if(g===6&&l.d>0)gastoTotal+=l.d;
+      if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))&&(l.h>0||l.d>0))provAccts.push(l);
+      var g=parseInt((l.a||'')[0])||0;if(g===6){gastoNeto+=l.d-l.h;}
     });
     if(provAccts.length>0){
       provAccts.forEach(function(pl){
-        var key=pl.a;var provName=am[pl.a]?am[pl.a].name:pl.a;
-        if(!provs[key])provs[key]={name:provName,t:0,c:0};provs[key].t+=pl.h;provs[key].c++;
+        var key=pl.a;var provName=am[pl.a]?am[pl.a].name:pl.a;var neto=pl.h-pl.d;
+        if(!provs[key])provs[key]={name:provName,t:0,c:0};provs[key].t+=neto;provs[key].c++;
       });
-    }else if(gastoTotal>0){
+    }else if(gastoNeto>0){
       var key='_'+((e.concept||'Otros').split(/\s+/)[0]);
       if(!provs[key])provs[key]={name:(e.concept||'Otros').split(/\s+/)[0],t:0,c:0};
-      provs[key].t+=gastoTotal;provs[key].c++;
+      provs[key].t+=gastoNeto;provs[key].c++;
     }
   });
   var rows=Object.entries(provs).sort(function(a,b){return b[1].t-a[1].t;}).map(function(x){return [x[1].name,x[1].t,x[1].c,x[1].c>0?x[1].t/x[1].c:0];});
