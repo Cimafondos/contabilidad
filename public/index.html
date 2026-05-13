@@ -2160,8 +2160,8 @@ function renderModelo303(c){
           var acct=l.a||l.account||'';
           var debe=parseFloat(l.d||l.debe||0)||0;
           var haber=parseFloat(l.h||l.haber||0)||0;
-          if(acct.startsWith('477')){rep+=haber;eIvaRep+=haber-debe;}
-          if(acct==='47200000'){sop+=debe;eIvaSop+=debe-haber;}
+          if(acct.startsWith('477')){rep+=haber-debe;eIvaRep+=haber-debe;}
+          if(acct==='47200000'){sop+=debe-haber;eIvaSop+=debe-haber;}
           var g=parseInt(acct[0])||0;
           if(g===7){baseRep+=haber-debe;eBaseG7+=haber-debe;}
           if(g===6){baseSop+=debe-haber;eBaseG6+=debe-haber;}
@@ -2265,8 +2265,8 @@ function renderModelo390(c){
       var acct=l.a||'';
       var debe=parseFloat(l.d||0)||0;
       var haber=parseFloat(l.h||0)||0;
-      if(acct.startsWith('477')){rep+=haber;eIvaRep+=haber-debe;}
-      if(acct==='47200000'){sop+=debe;eIvaSop+=debe-haber;}
+      if(acct.startsWith('477')){rep+=haber-debe;eIvaRep+=haber-debe;}
+      if(acct==='47200000'){sop+=debe-haber;eIvaSop+=debe-haber;}
       var g=parseInt(acct[0])||0;
       if(g===7){baseRep+=haber-debe;eBaseG7+=haber-debe;}
       if(g===6){baseSop+=debe-haber;eBaseG6+=debe-haber;}
