@@ -317,7 +317,7 @@ function render(){
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div>'+
   (function(){var emps=getEmpresas();if(!emps.length)emps=[{name:state.company.name}];var userEmps=emps;try{var users=getUsers();var cu=users.find(function(u){return u.name===(state.user?state.user.name:'');});if(cu&&cu.empresas&&cu.empresas.length>0){userEmps=emps.filter(function(em){return cu.empresas.indexOf(em.name)>=0;});}}catch(e){}return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+userEmps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
-  +'<span style="opacity:0.7">— v6.9.1</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  +'<span style="opacity:0.7">— v6.9.2</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){return '<div class="rgroup"><div class="rgroup-btns">'+g.items.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
@@ -1615,65 +1615,74 @@ async function contabilizarFacturas(){
       // Recargo equivalencia
       if(recargoTotal!==0)lines.push({a:'47200001',d:Math.max(recargoTotal,0),h:Math.max(-recargoTotal,0)});
 
-      // Proveedor (haber = lo que debemos) — Total from Excel
-      if(f.isAbono){
-        lines.push({a:'40000000',d:totalFactura,h:0});
-      }else{
-        lines.push({a:'40000000',d:0,h:totalFactura});
-      }
-
-      // Auto-create supplier if not exists
-      var provExists=masters.supplier.some(function(s){return s.cif===f.cif||s.name===f.tercero;});
-      if(!provExists&&f.tercero){
+      // Find or create supplier with individual account
+      var provRecord=masters.supplier.find(function(s){return s.cif===f.cif||(s.name&&s.name===f.tercero);});
+      if(!provRecord&&f.tercero){
         var provCode='P'+String(masters.supplier.length+1).padStart(3,'0');
-        // Extract payment info from concepto
-        var formaPago='';var vencimiento='';
+        var formaPago='';
         if(f.concepto){
           var fpMatch=f.concepto.match(/Forma de pago:\s*([^|]+)/i);
           if(fpMatch)formaPago=fpMatch[1].trim();
         }
-        if(f.vencimiento)vencimiento=f.vencimiento;
-        // Calculate payment days from fecha to vencimiento
         var diasPago='';
         if(f.fecha&&f.vencimiento){
           var d1=new Date(f.fecha),d2=new Date(f.vencimiento);
           if(!isNaN(d1)&&!isNaN(d2)){diasPago=String(Math.round((d2-d1)/(1000*60*60*24)));}
         }
-        // Individualized account: 40000001, 40000002, etc.
         var provAccount='4000'+String(masters.supplier.length+1).padStart(4,'0');
-        masters.supplier.push({code:provCode,name:f.tercero,cif:f.cif,address:'',cp:'',city:'',province:'',country:'ES',account:provAccount,payment:formaPago,days:diasPago,contact:'',phone:'',email:'',notes:'Auto-importado desde gestor documental'});
+        provRecord={code:provCode,name:f.tercero,cif:f.cif,address:'',cp:'',city:'',province:'',country:'ES',account:provAccount,payment:formaPago,days:diasPago,contact:'',phone:'',email:'',notes:'Auto-importado desde gestor documental'};
+        masters.supplier.push(provRecord);
         saveMasters('supplier');
+        // Create account in plan if not exists
+        if(!state.accounts.some(function(a){return a.code===provAccount;})){
+          try{api('/api/accounts/'+state.company.id,{method:'POST',body:{code:provAccount,name:f.tercero,g:4,t:'A'}});}catch(e){}
+          state.accounts.push({code:provAccount,name:f.tercero,g:4,t:'A'});
+        }
         provsCreated++;
+      }
+      var cuentaProv=provRecord?provRecord.account:'40000000';
+
+      // Proveedor (haber = lo que debemos) — Total from Excel, using individual account
+      if(f.isAbono){
+        lines.push({a:cuentaProv,d:totalFactura,h:0});
+      }else{
+        lines.push({a:cuentaProv,d:0,h:totalFactura});
       }
 
     }else{
       // FACTURA EMITIDA: Cliente(D) + Ingreso(H) + IVA repercutido(H)
-      if(f.base21!==0)lines.push({a:'70000000',d:Math.max(-f.base21,0),h:Math.max(f.base21,0)});
-      if(f.base10!==0)lines.push({a:'70000000',d:Math.max(-f.base10,0),h:Math.max(f.base10,0)});
-      if(f.base4!==0)lines.push({a:'70000000',d:Math.max(-f.base4,0),h:Math.max(f.base4,0)});
-      if(f.base0!==0)lines.push({a:'70000000',d:Math.max(-f.base0,0),h:Math.max(f.base0,0)});
+      var totalIvaEm=f.iva21+f.iva10+f.iva4;
+      var totalFacturaEm=Math.abs(f.total);
+      var realBaseEm=totalFacturaEm-Math.abs(totalIvaEm);
+      
+      // Ingreso
+      lines.push({a:'70000000',d:0,h:Math.abs(realBaseEm)});
 
       // IVA repercutido
       if(f.iva21!==0)lines.push({a:'47700000',d:Math.max(-f.iva21,0),h:Math.max(f.iva21,0)});
       if(f.iva10!==0)lines.push({a:'47700000',d:Math.max(-f.iva10,0),h:Math.max(f.iva10,0)});
       if(f.iva4!==0)lines.push({a:'47700000',d:Math.max(-f.iva4,0),h:Math.max(f.iva4,0)});
 
-      // Cliente (debe = lo que nos deben)
-      var totalDebe=Math.abs(f.total);
-      lines.push({a:'43000000',d:totalDebe,h:0});
-
-      // For emitidas, the "tercero" is actually the client company name
-      // and "empresa" is who issued it (the client of Valentia)
+      // Find or create client with individual account
       var clientName=f.empresa||f.tercero;
       var clientCif=f.cif;
-      var cliExists=masters.client.some(function(c2){return c2.cif===clientCif||c2.name===clientName;});
-      if(!cliExists&&clientName){
+      var cliRecord=masters.client.find(function(c2){return c2.cif===clientCif||(c2.name&&c2.name===clientName);});
+      if(!cliRecord&&clientName){
         var cliCode='C'+String(masters.client.length+1).padStart(3,'0');
         var cliAccount='4300'+String(masters.client.length+1).padStart(4,'0');
-        masters.client.push({code:cliCode,name:clientName,cif:clientCif,address:'',cp:'',city:'',province:'',country:'ES',account:cliAccount,payment:'',days:'',contact:'',phone:'',email:'',notes:'Auto-importado desde gestor documental'});
+        cliRecord={code:cliCode,name:clientName,cif:clientCif,address:'',cp:'',city:'',province:'',country:'ES',account:cliAccount,payment:'',days:'',contact:'',phone:'',email:'',notes:'Auto-importado desde gestor documental'};
+        masters.client.push(cliRecord);
         saveMasters('client');
+        if(!state.accounts.some(function(a){return a.code===cliAccount;})){
+          try{api('/api/accounts/'+state.company.id,{method:'POST',body:{code:cliAccount,name:clientName,g:4,t:'A'}});}catch(e){}
+          state.accounts.push({code:cliAccount,name:clientName,g:4,t:'A'});
+        }
         clientsCreated++;
       }
+      var cuentaCli=cliRecord?cliRecord.account:'43000000';
+
+      // Cliente (debe = lo que nos deben) — using individual account
+      lines.push({a:cuentaCli,d:totalFacturaEm,h:0});
     }
 
     // Consolidate lines with same account
@@ -2300,7 +2309,7 @@ function renderModelo347(c){
     if(isVenta){terceros[key].ventas+=totalIvaIncl;terceros[key].trim[trimIdx]+=totalIvaIncl;}
   });
   
-  var lista=Object.values(terceros).filter(function(x){return Math.abs(x.compras+x.ventas)>m347Minimo;}).sort(function(a,b){return Math.abs(b.compras+b.ventas)-Math.abs(a.compras+a.ventas);});
+  var lista=Object.values(terceros).filter(function(x){var t=x.compras+x.ventas;return t>m347Minimo;}).sort(function(a,b){return (b.compras+b.ventas)-(a.compras+a.ventas);});
   var totalCompras=lista.reduce(function(s,x){return s+x.compras;},0);
   var totalVentas=lista.reduce(function(s,x){return s+x.ventas;},0);
   
