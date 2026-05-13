@@ -2898,9 +2898,10 @@ function renderAdmin(c){
   '<button class="btn btn-a" onclick="softDeleteAsientos(\'empresa\')">🗑 Marcar asientos empresa actual como eliminados</button>'+
   '<button class="btn btn-r" onclick="softDeleteAsientos(\'todas\')">🗑 Marcar asientos TODAS las empresas como eliminados</button>'+
   '<button class="btn btn-p" onclick="recuperarAsientos()">♻️ Recuperar asientos eliminados</button>'+
+  '<button class="btn" style="background:#B71C1C;color:#fff" onclick="borrarDatosEmpresa()">💀 Borrar TODOS los datos de esta empresa</button>'+
   '<button class="btn btn-d" onclick="exportarTodoCSV()">📊 Exportar todo CSV</button>'+
   '</div>'+
-  '<div style="margin-top:8px;font-size:10px;color:var(--txM)">ℹ️ Los asientos marcados como eliminados no se muestran pero se pueden recuperar (como en Sage). Para borrado definitivo, usa la Papelera.</div>'+
+  '<div style="margin-top:8px;font-size:10px;color:var(--txM)">ℹ️ Los asientos marcados como eliminados no se muestran pero se pueden recuperar (como en Sage). Para borrado definitivo, usa la Papelera o "Borrar TODOS los datos".</div>'+
   '</div></div>'+
   '<div id="testResults"></div>'+
   '</div></div>';
@@ -3088,9 +3089,13 @@ function borrarDatosEmpresa(){
   var nombre=prompt('Escribe el nombre de la empresa para confirmar el borrado TOTAL:');
   if(!nombre||nombre!==state.company.name){toast('Nombre incorrecto. Borrado cancelado.','error');return;}
   if(!confirm('⚠️ ÚLTIMA CONFIRMACIÓN: ¿Borrar TODOS los datos de '+state.company.name+'? Esta acción NO se puede deshacer.'))return;
-  api('/api/entries-all/'+state.company.id,{method:'DELETE'}).then(function(r){
-    Object.keys(localStorage).forEach(function(k){if(k.indexOf(state.company.id)>=0||k.indexOf('cf_')>=0)localStorage.removeItem(k);});
-    toast('✅ Borrados '+(r.deleted||0)+' asientos de '+state.company.name);
+  var cid=state.company.id;
+  Promise.all([
+    api('/api/entries-all/'+cid,{method:'DELETE'}),
+    api('/api/accounts-all/'+cid,{method:'DELETE'})
+  ]).then(function(results){
+    Object.keys(localStorage).forEach(function(k){if(k.indexOf(cid)>=0||k.indexOf('cf_')>=0)localStorage.removeItem(k);});
+    toast('✅ Borrados '+(results[0].deleted||0)+' asientos y '+(results[1].deleted||0)+' cuentas de '+state.company.name);
     loadData().then(function(){render();});
   }).catch(function(e){toast('Error al borrar: '+e.message,'error');});
 }

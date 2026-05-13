@@ -230,8 +230,9 @@ app.post('/api/accounts/:companyId', (req, res) => {
 
 // ── ENTRIES ──
 app.get('/api/entries/:companyId', (req, res) => {
-  const entries = db.prepare('SELECT * FROM entries WHERE company_id = ? ORDER BY date').all(req.params.companyId);
-  const lines = db.prepare('SELECT * FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ?)').all(req.params.companyId);
+  const showDeleted = req.query.deleted === '1';
+  const entries = db.prepare('SELECT * FROM entries WHERE company_id = ?' + (showDeleted ? '' : ' AND deleted = 0') + ' ORDER BY date').all(req.params.companyId);
+  const lines = db.prepare('SELECT * FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ?' + (showDeleted ? '' : ' AND deleted = 0') + ')').all(req.params.companyId);
   const lineMap = {};
   lines.forEach(l => { if (!lineMap[l.entry_id]) lineMap[l.entry_id] = []; lineMap[l.entry_id].push({ a: l.account, d: l.debit, h: l.credit }); });
   const result = entries.map(e => ({ ...e, del: !!e.deleted, lines: lineMap[e.id] || [] }));
@@ -277,6 +278,14 @@ app.delete('/api/entries-all/:companyId', (req, res) => {
     db.prepare('DELETE FROM transactions WHERE company_id = ?').run(cid);
     res.json({ ok: true, deleted: count });
   }
+});
+
+// Delete all accounts for a company (to reimport clean)
+app.delete('/api/accounts-all/:companyId', (req, res) => {
+  const cid = req.params.companyId;
+  const count = db.prepare('SELECT COUNT(*) as c FROM accounts WHERE company_id = ?').get(cid).c;
+  db.prepare('DELETE FROM accounts WHERE company_id = ?').run(cid);
+  res.json({ ok: true, deleted: count });
 });
 
 // Soft-delete: mark entries as deleted (recoverable)
