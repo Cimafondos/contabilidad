@@ -2116,10 +2116,6 @@ function deleteCaptador(idx){if(!confirm('¿Eliminar?'))return;loadCaptadores();
 // ═══ MODELO 303 — IVA TRIMESTRAL ═══
 function renderModelo303(c){
   var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
-  // Debug: log first entry structure
-  if(all.length>0){console.log('303 DEBUG - entries:',all.length,'first entry:',JSON.stringify(all[0]).slice(0,300));
-  var iva477=0,iva472=0;all.forEach(function(e){e.lines.forEach(function(l){var a=l.a||l.account||'';if(a.startsWith('477'))iva477+=(parseFloat(l.h||0)||0);if(a.startsWith('472'))iva472+=(parseFloat(l.d||0)||0);});});
-  console.log('303 DEBUG - IVA 477 total:',iva477,'IVA 472 total:',iva472);}
   var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var trimestres=[{name:'1T (Ene-Mar)',from:'01',to:'03'},{name:'2T (Abr-Jun)',from:'04',to:'06'},{name:'3T (Jul-Sep)',from:'07',to:'09'},{name:'4T (Oct-Dic)',from:'10',to:'12'}];
   var datos=trimestres.map(function(t){
@@ -2131,12 +2127,15 @@ function renderModelo303(c){
           var acct=l.a||l.account||'';
           var debe=parseFloat(l.d||l.debe||0)||0;
           var haber=parseFloat(l.h||l.haber||0)||0;
-          // IVA: sum gross movements, not net (liquidation entries zero the account)
+          // IVA repercutido (477)
           if(acct.startsWith('477'))rep+=haber;
-          if(acct==='47200000')sop+=debe; // Only pure IVA soportado, not recargo equiv (47200001)
+          // IVA soportado — ONLY 47200000, not recargo (47200001)
+          if(acct==='47200000')sop+=debe;
+          // Base ventas = grupo 7 NET
           var g=parseInt(acct[0])||0;
-          if(g===7)baseRep+=haber;
-          if(g===6)baseSop+=debe;
+          if(g===7){baseRep+=haber;baseRep-=debe;}
+          // Base compras = grupo 6 NET (debe - haber) — matches dashboard calculation
+          if(g===6){baseSop+=debe;baseSop-=haber;}
         });
       }
     });
