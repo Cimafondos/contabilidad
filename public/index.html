@@ -318,7 +318,7 @@ function render(){
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div>'+
   (function(){var emps=getEmpresas();if(!emps.length)emps=[{name:state.company.name}];var userEmps=emps;try{var users=getUsers();var cu=users.find(function(u){return u.name===(state.user?state.user.name:'');});if(cu&&cu.empresas&&cu.empresas.length>0){userEmps=emps.filter(function(em){return cu.empresas.indexOf(em.name)>=0;});}}catch(e){}return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+userEmps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
-  +'<span style="opacity:0.7">— v6.9.4</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  +'<span style="opacity:0.7">— v6.9.5</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){return '<div class="rgroup"><div class="rgroup-btns">'+g.items.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
@@ -382,7 +382,7 @@ function showEmergencyAccess(){
   alert(msg);
 }
 function renderLogin(){
-  $('app').innerHTML='<div class="login-wrap"><div class="login-box"><div style="text-align:center;margin-bottom:24px"><div class="login-logo">CF</div><div style="font-size:20px;font-weight:700">Cimafondos</div><div style="font-size:11px;color:var(--txM);margin-top:3px">Sistema contable v6.9.4</div></div><div class="card"><div class="card-b"><div style="margin-bottom:10px"><div class="lbl">Usuario</div><input class="inp" id="lu" autofocus onkeydown="if(event.key===\'Enter\')doLogin()"></div><div style="margin-bottom:14px"><div class="lbl">Contraseña</div><input class="inp" type="password" id="lp" onkeydown="if(event.key===\'Enter\')doLogin()"></div><div id="lerr" style="color:var(--rd);font-size:11px;margin-bottom:8px;text-align:center"></div><button class="btn btn-p" style="width:100%;justify-content:center;padding:9px" onclick="doLogin()">Entrar</button></div></div><div style="font-size:10px;color:var(--txM);text-align:center">admin/admin · javier/1234<br><span style="font-size:9px;cursor:pointer;text-decoration:underline" onclick="showEmergencyAccess()">¿Olvidaste tu contraseña?</span></div><div style="margin-top:8px"><button class="btn btn-d" style="width:100%;font-size:10px" onclick="quickDemo()">🎭 Cargar demo rápido</button></div><div style="font-size:10px;color:var(--txM);text-align:center"></div></div></div>';
+  $('app').innerHTML='<div class="login-wrap"><div class="login-box"><div style="text-align:center;margin-bottom:24px"><div class="login-logo">CF</div><div style="font-size:20px;font-weight:700">Cimafondos</div><div style="font-size:11px;color:var(--txM);margin-top:3px">Sistema contable v6.9.5</div></div><div class="card"><div class="card-b"><div style="margin-bottom:10px"><div class="lbl">Usuario</div><input class="inp" id="lu" autofocus onkeydown="if(event.key===\'Enter\')doLogin()"></div><div style="margin-bottom:14px"><div class="lbl">Contraseña</div><input class="inp" type="password" id="lp" onkeydown="if(event.key===\'Enter\')doLogin()"></div><div id="lerr" style="color:var(--rd);font-size:11px;margin-bottom:8px;text-align:center"></div><button class="btn btn-p" style="width:100%;justify-content:center;padding:9px" onclick="doLogin()">Entrar</button></div></div><div style="font-size:10px;color:var(--txM);text-align:center">admin/admin · javier/1234<br><span style="font-size:9px;cursor:pointer;text-decoration:underline" onclick="showEmergencyAccess()">¿Olvidaste tu contraseña?</span></div><div style="margin-top:8px"><button class="btn btn-d" style="width:100%;font-size:10px" onclick="quickDemo()">🎭 Cargar demo rápido</button></div><div style="font-size:10px;color:var(--txM);text-align:center"></div></div></div>';
 }
 async function doLogin(){
   var u=$('lu').value,p=$('lp').value;
@@ -1594,21 +1594,36 @@ async function contabilizarFacturas(){
       if(f.recargo&&f.recargo!==0){recargoTotal=f.recargo;}
       else if(f.iva0&&f.iva0>0){recargoTotal=f.iva0;} // IVA 0% positive = recargo equiv
       
-      // Derive the real base from Total to ensure perfect balance
+      // Use REAL bases from Excel per IVA type instead of a single derived base
       var totalFactura=Math.abs(f.total);
-      var realBase=totalFactura-Math.abs(totalIva)-Math.abs(recargoTotal)+Math.abs(realRetencion);
       
-      // Gasto = real base (derived from Total)
-      if(f.isAbono){
-        lines.push({a:cuentaGasto,d:0,h:Math.abs(realBase)});
-      }else{
-        lines.push({a:cuentaGasto,d:Math.abs(realBase),h:0});
+      // Compute real bases from Excel columns
+      var realBase21=Math.abs(f.base21)||0;
+      var realBase10=Math.abs(f.base10)||0;
+      var realBase4=Math.abs(f.base4)||0;
+      var sumBases=realBase21+realBase10+realBase4;
+      
+      // If no individual bases detected, derive from Total
+      if(sumBases<0.01){
+        sumBases=totalFactura-Math.abs(totalIva)-Math.abs(recargoTotal)+Math.abs(realRetencion);
+        realBase21=sumBases; // Assume all is 21% if no breakdown
       }
 
-      // IVA soportado
-      if(f.iva21!==0)lines.push({a:'47200000',d:Math.max(f.iva21,0),h:Math.max(-f.iva21,0)});
-      if(f.iva10!==0)lines.push({a:'47200000',d:Math.max(f.iva10,0),h:Math.max(-f.iva10,0)});
-      if(f.iva4!==0)lines.push({a:'47200000',d:Math.max(f.iva4,0),h:Math.max(-f.iva4,0)});
+      // Gasto lines - one per base type for traceability
+      if(f.isAbono){
+        if(realBase21>0.001)lines.push({a:cuentaGasto,d:0,h:realBase21});
+        if(realBase10>0.001)lines.push({a:cuentaGasto,d:0,h:realBase10});
+        if(realBase4>0.001)lines.push({a:cuentaGasto,d:0,h:realBase4});
+      }else{
+        if(realBase21>0.001)lines.push({a:cuentaGasto,d:realBase21,h:0});
+        if(realBase10>0.001)lines.push({a:cuentaGasto,d:realBase10,h:0});
+        if(realBase4>0.001)lines.push({a:cuentaGasto,d:realBase4,h:0});
+      }
+
+      // IVA soportado — separate lines per type, DO NOT consolidate
+      if(f.iva21!==0)lines.push({a:'47200000',d:Math.max(f.iva21,0),h:Math.max(-f.iva21,0),_noConsolidate:true});
+      if(f.iva10!==0)lines.push({a:'47200000',d:Math.max(f.iva10,0),h:Math.max(-f.iva10,0),_noConsolidate:true});
+      if(f.iva4!==0)lines.push({a:'47200000',d:Math.max(f.iva4,0),h:Math.max(-f.iva4,0),_noConsolidate:true});
 
       // Retención IRPF
       if(realRetencion!==0)lines.push({a:'47510000',d:0,h:Math.abs(realRetencion)});
@@ -1702,14 +1717,21 @@ async function contabilizarFacturas(){
       lines.push({a:cuentaCli,d:totalFacturaEm,h:0});
     }
 
-    // Consolidate lines with same account
+    // Consolidate lines with same account (but NOT IVA lines marked _noConsolidate)
     var consolidated={};
+    var noConsolidateLines=[];
     lines.forEach(function(l){
-      if(!consolidated[l.a])consolidated[l.a]={a:l.a,d:0,h:0};
-      consolidated[l.a].d+=l.d;
-      consolidated[l.a].h+=l.h;
+      if(l._noConsolidate){
+        noConsolidateLines.push({a:l.a,d:l.d,h:l.h});
+      }else{
+        if(!consolidated[l.a])consolidated[l.a]={a:l.a,d:0,h:0};
+        consolidated[l.a].d+=l.d;
+        consolidated[l.a].h+=l.h;
+      }
     });
     var finalLines=Object.values(consolidated).filter(function(l){return l.d>0.001||l.h>0.001;});
+    // Add non-consolidated IVA lines
+    noConsolidateLines.forEach(function(l){if(l.d>0.001||l.h>0.001)finalLines.push(l);});
 
     // Round to 2 decimals
     finalLines.forEach(function(l){l.d=Math.round(l.d*100)/100;l.h=Math.round(l.h*100)/100;});
@@ -2157,9 +2179,25 @@ function renderModelo303(c){
           if(g===7){baseRep+=haber-debe;eBaseG7+=haber-debe;}
           if(g===6){baseSop+=debe-haber;eBaseG6+=debe-haber;}
         });
-        // Classify by IVA rate
-        if(eIvaRep>0.001&&eBaseG7>0.001){var rr=detectIvaRate(eBaseG7,eIvaRep);var rk=rates[rr]?rr:21;rates[rk].baseR+=eBaseG7;rates[rk].cuotaR+=eIvaRep;}
-        if(eIvaSop>0.001&&eBaseG6>0.001){var rs=detectIvaRate(eBaseG6,eIvaSop);var rk2=rates[rs]?rs:21;rates[rk2].baseS+=eBaseG6;rates[rk2].cuotaS+=eIvaSop;}
+        // Classify by IVA rate — handle multiple IVA lines per entry
+        var ivaSopLines=[];var ivaRepLines=[];
+        e.lines.forEach(function(l){
+          var acct=l.a||l.account||'';
+          var debe=parseFloat(l.d||l.debe||0)||0;
+          var haber=parseFloat(l.h||l.haber||0)||0;
+          if(acct.startsWith('477'))ivaRepLines.push(haber-debe);
+          if(acct==='47200000')ivaSopLines.push(debe-haber);
+        });
+        if(ivaRepLines.length===1&&eIvaRep>0.001){
+          var rr=detectIvaRate(eBaseG7,eIvaRep);var rk=rates[rr]?rr:21;rates[rk].baseR+=eBaseG7;rates[rk].cuotaR+=eIvaRep;
+        }else if(ivaRepLines.length>1){
+          ivaRepLines.forEach(function(cuota){if(Math.abs(cuota)<0.001)return;var rate=detectIvaRateFromCuota(cuota,eBaseG7,eIvaRep);var base=rate>0?cuota/rate:0;var rk=rates[Math.round(rate*100)]?Math.round(rate*100):21;rates[rk].baseR+=base;rates[rk].cuotaR+=cuota;});
+        }
+        if(ivaSopLines.length===1&&eIvaSop>0.001){
+          var rs=detectIvaRate(eBaseG6,eIvaSop);var rk2=rates[rs]?rs:21;rates[rk2].baseS+=eBaseG6;rates[rk2].cuotaS+=eIvaSop;
+        }else if(ivaSopLines.length>1){
+          ivaSopLines.forEach(function(cuota){if(Math.abs(cuota)<0.001)return;var rate=detectIvaRateFromCuota(cuota,eBaseG6,eIvaSop);var base=rate>0?cuota/rate:0;var rk2=rates[Math.round(rate*100)]?Math.round(rate*100):21;rates[rk2].baseS+=base;rates[rk2].cuotaS+=cuota;});
+        }
       }
     });
     return {name:t.name,baseRep:baseRep,rep:rep,baseSop:baseSop,sop:sop,resultado:rep-sop,rates:rates};
@@ -2246,8 +2284,16 @@ function renderModelo390(c){
       if(g===7){baseRep+=haber-debe;eBaseG7+=haber-debe;}
       if(g===6){baseSop+=debe-haber;eBaseG6+=debe-haber;}
     });
-    if(eIvaRep>0.001&&eBaseG7>0.001){var rr=detectIvaRate(eBaseG7,eIvaRep);var rk=rates[rr]?rr:21;rates[rk].baseR+=eBaseG7;rates[rk].cuotaR+=eIvaRep;}
-    if(eIvaSop>0.001&&eBaseG6>0.001){var rs=detectIvaRate(eBaseG6,eIvaSop);var rk2=rates[rs]?rs:21;rates[rk2].baseS+=eBaseG6;rates[rk2].cuotaS+=eIvaSop;}
+    if(eIvaRep>0.001){
+      var ivaRepLns=[];e.lines.forEach(function(l){if((l.a||'').startsWith('477'))ivaRepLns.push((parseFloat(l.h||0)||0)-(parseFloat(l.d||0)||0));});
+      if(ivaRepLns.length<=1){var rr=detectIvaRate(eBaseG7,eIvaRep);var rk=rates[rr]?rr:21;rates[rk].baseR+=eBaseG7;rates[rk].cuotaR+=eIvaRep;}
+      else{ivaRepLns.forEach(function(cuota){if(Math.abs(cuota)<0.001)return;var rate=detectIvaRateFromCuota(cuota,eBaseG7,eIvaRep);var base=rate>0?cuota/rate:0;var rk=rates[Math.round(rate*100)]?Math.round(rate*100):21;rates[rk].baseR+=base;rates[rk].cuotaR+=cuota;});}
+    }
+    if(eIvaSop>0.001){
+      var ivaSopLns=[];e.lines.forEach(function(l){if((l.a||'')==='47200000')ivaSopLns.push((parseFloat(l.d||0)||0)-(parseFloat(l.h||0)||0));});
+      if(ivaSopLns.length<=1){var rs=detectIvaRate(eBaseG6,eIvaSop);var rk2=rates[rs]?rs:21;rates[rk2].baseS+=eBaseG6;rates[rk2].cuotaS+=eIvaSop;}
+      else{ivaSopLns.forEach(function(cuota){if(Math.abs(cuota)<0.001)return;var rate=detectIvaRateFromCuota(cuota,eBaseG6,eIvaSop);var base=rate>0?cuota/rate:0;var rk2=rates[Math.round(rate*100)]?Math.round(rate*100):21;rates[rk2].baseS+=base;rates[rk2].cuotaS+=cuota;});}
+    }
   });
   // Rate rows for devengado
   var devRows='';
@@ -3780,36 +3826,95 @@ function detectIvaRate(base,cuota){
   if(pct<1)return 0;
   return Math.round(pct); // fallback
 }
+// Detect IVA rate from a single cuota line when we have multiple IVA lines
+// Try each standard rate and see which gives a clean base
+function detectIvaRateFromCuota(cuota,totalBase,totalIva){
+  if(Math.abs(cuota)<0.001)return 0;
+  // Try standard rates: check which one gives a base that is a round number
+  var rates=[0.21,0.10,0.04];
+  for(var i=0;i<rates.length;i++){
+    var testBase=cuota/rates[i];
+    // Check if base × rate ≈ cuota (within rounding tolerance)
+    var testCuota=Math.round(testBase*rates[i]*100)/100;
+    if(Math.abs(testCuota-Math.round(cuota*100)/100)<0.02){
+      return rates[i];
+    }
+  }
+  // Fallback: if totalIva > 0, derive rate from total
+  if(totalIva>0&&totalBase>0){
+    var avgRate=totalIva/totalBase;
+    if(avgRate>0.18)return 0.21;
+    if(avgRate>0.08)return 0.10;
+    if(avgRate>0.02)return 0.04;
+  }
+  return 0.21; // default
+}
 function renderLibroIVA(c){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var repercutido=[],soportado=[];
   // Aggregate by IVA rate for summary
   var resByRate={21:{baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0},10:{baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0},4:{baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0}};
   all.forEach(function(e){
-    var iva_rep=0,iva_sop=0,concepto=e.concept||'';
-    var base_g6=0,base_g7=0;
+    var concepto=e.concept||'';
+    // Collect IVA lines separately per entry
+    var ivaRepLines=[],ivaSopLines=[];
+    var totalBaseG6=0,totalBaseG7=0;
     e.lines.forEach(function(l){
-      if(l.a&&l.a.startsWith('477')){iva_rep+=l.h-l.d;}
-      if(l.a==='47200000'){iva_sop+=l.d-l.h;} // Only IVA, not recargo
+      if(l.a&&l.a.startsWith('477')){ivaRepLines.push(l.h-l.d);}
+      if(l.a==='47200000'){ivaSopLines.push(l.d-l.h);}
       var g=parseInt((l.a||'')[0])||0;
-      if(g===6){base_g6+=l.d-l.h;}
-      if(g===7){base_g7+=l.h-l.d;}
+      if(g===6){totalBaseG6+=l.d-l.h;}
+      if(g===7){totalBaseG7+=l.h-l.d;}
     });
-    if(iva_rep>0.001){
-      var cliAcct='';e.lines.forEach(function(l){var g=parseInt((l.a||'')[0])||0;if(g===7)cliAcct=l.a;});
-      var tipoIva=detectIvaRate(base_g7,iva_rep);
-      repercutido.push({date:e.date,concept:concepto,base:Math.round(base_g7*100)/100,tipo:tipoIva,cuota:Math.round(iva_rep*100)/100,total:Math.round((base_g7+iva_rep)*100)/100,cuenta:cliAcct});
-      var rk=resByRate[tipoIva]?tipoIva:21;
-      if(!resByRate[rk])resByRate[rk]={baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0};
-      resByRate[rk].baseRep+=base_g7;resByRate[rk].cuotaRep+=iva_rep;
+    
+    // Process IVA Repercutido
+    if(ivaRepLines.length>0){
+      var totalIvaRep=ivaRepLines.reduce(function(s,v){return s+v;},0);
+      if(totalIvaRep>0.001){
+        var cliAcct='';e.lines.forEach(function(l){var g=parseInt((l.a||'')[0])||0;if(g===7)cliAcct=l.a;});
+        if(ivaRepLines.length===1){
+          // Single IVA line — detect rate from total base
+          var tipoIva=detectIvaRate(totalBaseG7,totalIvaRep);
+          repercutido.push({date:e.date,concept:concepto,base:Math.round(totalBaseG7*100)/100,tipo:tipoIva,cuota:Math.round(totalIvaRep*100)/100,total:Math.round((totalBaseG7+totalIvaRep)*100)/100,cuenta:cliAcct});
+          var rk=resByRate[tipoIva]?tipoIva:21;
+          resByRate[rk].baseRep+=totalBaseG7;resByRate[rk].cuotaRep+=totalIvaRep;
+        }else{
+          // Multiple IVA lines — each is a separate rate, derive base from cuota/rate
+          ivaRepLines.forEach(function(cuota){
+            if(Math.abs(cuota)<0.001)return;
+            var rate=detectIvaRateFromCuota(cuota,totalBaseG7,totalIvaRep);
+            var base=rate>0?Math.round(cuota/rate*10000)/100:0;
+            repercutido.push({date:e.date,concept:concepto,base:base,tipo:Math.round(rate*100),cuota:Math.round(cuota*100)/100,total:Math.round((base+cuota)*100)/100,cuenta:cliAcct});
+            var rk=resByRate[Math.round(rate*100)]?Math.round(rate*100):21;
+            resByRate[rk].baseRep+=base;resByRate[rk].cuotaRep+=cuota;
+          });
+        }
+      }
     }
-    if(iva_sop>0.001){
-      var provAcct='';e.lines.forEach(function(l){var g=parseInt((l.a||'')[0])||0;if(g===6)provAcct=l.a;});
-      var tipoIvaS=detectIvaRate(base_g6,iva_sop);
-      soportado.push({date:e.date,concept:concepto,base:Math.round(base_g6*100)/100,tipo:tipoIvaS,cuota:Math.round(iva_sop*100)/100,total:Math.round((base_g6+iva_sop)*100)/100,cuenta:provAcct});
-      var rk2=resByRate[tipoIvaS]?tipoIvaS:21;
-      if(!resByRate[rk2])resByRate[rk2]={baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0};
-      resByRate[rk2].baseSop+=base_g6;resByRate[rk2].cuotaSop+=iva_sop;
+    
+    // Process IVA Soportado
+    if(ivaSopLines.length>0){
+      var totalIvaSop=ivaSopLines.reduce(function(s,v){return s+v;},0);
+      if(totalIvaSop>0.001){
+        var provAcct='';e.lines.forEach(function(l){var g=parseInt((l.a||'')[0])||0;if(g===6)provAcct=l.a;});
+        if(ivaSopLines.length===1){
+          // Single IVA line — detect rate from total base
+          var tipoIvaS=detectIvaRate(totalBaseG6,totalIvaSop);
+          soportado.push({date:e.date,concept:concepto,base:Math.round(totalBaseG6*100)/100,tipo:tipoIvaS,cuota:Math.round(totalIvaSop*100)/100,total:Math.round((totalBaseG6+totalIvaSop)*100)/100,cuenta:provAcct});
+          var rk2=resByRate[tipoIvaS]?tipoIvaS:21;
+          resByRate[rk2].baseSop+=totalBaseG6;resByRate[rk2].cuotaSop+=totalIvaSop;
+        }else{
+          // Multiple IVA lines — each is a separate rate, derive base from cuota/rate
+          ivaSopLines.forEach(function(cuota){
+            if(Math.abs(cuota)<0.001)return;
+            var rate=detectIvaRateFromCuota(cuota,totalBaseG6,totalIvaSop);
+            var base=rate>0?Math.round(cuota/rate*10000)/100:0;
+            soportado.push({date:e.date,concept:concepto,base:base,tipo:Math.round(rate*100),cuota:Math.round(cuota*100)/100,total:Math.round((base+cuota)*100)/100,cuenta:provAcct});
+            var rk2=resByRate[Math.round(rate*100)]?Math.round(rate*100):21;
+            resByRate[rk2].baseSop+=base;resByRate[rk2].cuotaSop+=cuota;
+          });
+        }
+      }
     }
   });
   var tBaseRep=repercutido.reduce(function(s,x){return s+x.base;},0);
@@ -3844,15 +3949,27 @@ function renderLibroIVA(c){
 function exportLibroIVA(tipo){
   var all=filteredEntries();var rows=[];
   all.forEach(function(e){
-    var iva=0,base=0,esRep=tipo==='rep';
+    var ivaLines=[],base=0,esRep=tipo==='rep';
     e.lines.forEach(function(l){
-      if(esRep&&l.a&&l.a.startsWith('477'))iva+=l.h-l.d;
-      if(!esRep&&l.a==='47200000')iva+=l.d-l.h;
+      if(esRep&&l.a&&l.a.startsWith('477'))ivaLines.push(l.h-l.d);
+      if(!esRep&&l.a==='47200000')ivaLines.push(l.d-l.h);
       var g=parseInt((l.a||'')[0])||0;
       if(esRep&&g===7){base+=l.h-l.d;}
       if(!esRep&&g===6){base+=l.d-l.h;}
     });
-    if(iva>0.001){var tipoIva=detectIvaRate(base,iva);rows.push([e.date,e.concept||'',Math.round(base*100)/100,tipoIva,Math.round(iva*100)/100,Math.round((base+iva)*100)/100]);}
+    var totalIva=ivaLines.reduce(function(s,v){return s+v;},0);
+    if(totalIva<0.001)return;
+    if(ivaLines.length<=1){
+      var tipoIva=detectIvaRate(base,totalIva);
+      rows.push([e.date,e.concept||'',Math.round(base*100)/100,tipoIva,Math.round(totalIva*100)/100,Math.round((base+totalIva)*100)/100]);
+    }else{
+      ivaLines.forEach(function(cuota){
+        if(Math.abs(cuota)<0.001)return;
+        var rate=detectIvaRateFromCuota(cuota,base,totalIva);
+        var lineBase=rate>0?Math.round(cuota/rate*10000)/100:0;
+        rows.push([e.date,e.concept||'',lineBase,Math.round(rate*100),Math.round(cuota*100)/100,Math.round((lineBase+cuota)*100)/100]);
+      });
+    }
   });
   exportExcel(rows,['Fecha','Concepto','Base','% IVA','Cuota','Total'],tipo==='rep'?'iva_repercutido':'iva_soportado');
 }

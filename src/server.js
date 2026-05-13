@@ -461,6 +461,6 @@ app.get('*', (req, res) => {
 
 // ── Start ──
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✓ Cimafondos v6.9.4 running on port ${PORT}`);
+  console.log(`✓ Cimafondos v6.9.5 running on port ${PORT}`);
   console.log(`  Database: ${DB_PATH}`);
 });
