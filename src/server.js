@@ -129,6 +129,7 @@ if (companyCount === 0) {
     ['43000000','Clientes',4,'A'],['44000000','Deudores',4,'A'],
     ['46500000','Remuneraciones ptes. pago',4,'P'],
     ['47200000','HP IVA soportado',4,'A'],['47300000','HP retenciones',4,'A'],
+    ['47200001','HP Recargo equivalencia soportado',4,'A'],
     ['47500000','HP acreedora',4,'P'],['47700000','HP IVA repercutido',4,'P'],
     ['52000000','Deudas CP ent. crédito',5,'P'],['55100000','C/C con socios',5,'P'],
     ['55100001','C/C Pepe',5,'P'],['55100002','C/C Fernanda',5,'P'],
@@ -198,6 +199,18 @@ app.post('/api/login', (req, res) => {
   res.json({ user, company });
 });
 
+// ── Helper: auto-create company if needed ──
+function ensureCompany(companyId) {
+  const existing = db.prepare('SELECT id FROM companies WHERE id = ?').get(companyId);
+  if (!existing) {
+    db.prepare('INSERT INTO companies VALUES (?, ?, ?, ?, ?)').run(companyId, companyId, '', '', '{}');
+    // Copy default PGC accounts for new company
+    const defaultAccounts = db.prepare('SELECT code, name, group_num, type FROM accounts WHERE company_id = ?').all('c1');
+    const insertAcct = db.prepare('INSERT OR IGNORE INTO accounts VALUES (?, ?, ?, ?, ?)');
+    defaultAccounts.forEach(a => insertAcct.run(a.code, a.name, a.group_num, a.type, companyId));
+  }
+}
+
 // ── ACCOUNTS ──
 app.get('/api/accounts/:companyId', (req, res) => {
   const rows = db.prepare('SELECT code, name, group_num as g, type as t FROM accounts WHERE company_id = ? ORDER BY code').all(req.params.companyId);
@@ -206,6 +219,7 @@ app.get('/api/accounts/:companyId', (req, res) => {
 
 app.post('/api/accounts/:companyId', (req, res) => {
   const { code, name, g, t } = req.body;
+  ensureCompany(req.params.companyId);
   try {
     db.prepare('INSERT INTO accounts VALUES (?, ?, ?, ?, ?)').run(code, name, g, t, req.params.companyId);
     res.json({ ok: true });
@@ -227,6 +241,8 @@ app.get('/api/entries/:companyId', (req, res) => {
 app.post('/api/entries/:companyId', (req, res) => {
   const { id, date, concept, type, lines } = req.body;
   const companyId = req.params.companyId;
+  ensureCompany(companyId);
+
   const insertEntry = db.prepare('INSERT OR REPLACE INTO entries (id, date, concept, type, company_id, deleted) VALUES (?, ?, ?, ?, ?, 0)');
   const deleteLine = db.prepare('DELETE FROM entry_lines WHERE entry_id = ?');
   const insertLine = db.prepare('INSERT INTO entry_lines (entry_id, account, debit, credit) VALUES (?, ?, ?, ?)');
@@ -243,6 +259,68 @@ app.post('/api/entries/:companyId', (req, res) => {
 app.delete('/api/entries/:companyId/:id', (req, res) => {
   db.prepare('UPDATE entries SET deleted = 1 WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
   res.json({ ok: true });
+});
+
+// Delete ALL entries for a company (or all companies)
+app.delete('/api/entries-all/:companyId', (req, res) => {
+  const cid = req.params.companyId;
+  if (cid === '_all_') {
+    const count = db.prepare('SELECT COUNT(*) as c FROM entries').get().c;
+    db.prepare('DELETE FROM entry_lines').run();
+    db.prepare('DELETE FROM entries').run();
+    db.prepare('DELETE FROM transactions').run();
+    res.json({ ok: true, deleted: count });
+  } else {
+    const count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ?').get(cid).c;
+    db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ?)').run(cid);
+    db.prepare('DELETE FROM entries WHERE company_id = ?').run(cid);
+    db.prepare('DELETE FROM transactions WHERE company_id = ?').run(cid);
+    res.json({ ok: true, deleted: count });
+  }
+});
+
+// Soft-delete: mark entries as deleted (recoverable)
+app.post('/api/soft-delete-entries/:companyId', (req, res) => {
+  const cid = req.params.companyId;
+  let count;
+  if (cid === '_all_') {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE deleted = 0').get().c;
+    db.prepare('UPDATE entries SET deleted = 1 WHERE deleted = 0').run();
+  } else {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ? AND deleted = 0').get(cid).c;
+    db.prepare('UPDATE entries SET deleted = 1 WHERE company_id = ? AND deleted = 0').run(cid);
+  }
+  res.json({ ok: true, count });
+});
+
+// Recover soft-deleted entries
+app.post('/api/recover-entries/:companyId', (req, res) => {
+  const cid = req.params.companyId;
+  let count;
+  if (cid === '_all_') {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE deleted = 1').get().c;
+    db.prepare('UPDATE entries SET deleted = 0 WHERE deleted = 1').run();
+  } else {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ? AND deleted = 1').get(cid).c;
+    db.prepare('UPDATE entries SET deleted = 0 WHERE company_id = ? AND deleted = 1').run(cid);
+  }
+  res.json({ ok: true, count });
+});
+
+// Purge soft-deleted entries permanently
+app.post('/api/purge-entries/:companyId', (req, res) => {
+  const cid = req.params.companyId;
+  let count;
+  if (cid === '_all_') {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE deleted = 1').get().c;
+    db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE deleted = 1)').run();
+    db.prepare('DELETE FROM entries WHERE deleted = 1').run();
+  } else {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ? AND deleted = 1').get(cid).c;
+    db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ? AND deleted = 1)').run(cid);
+    db.prepare('DELETE FROM entries WHERE company_id = ? AND deleted = 1').run(cid);
+  }
+  res.json({ ok: true, count });
 });
 
 // ── TRANSACTIONS (bank imports) ──
@@ -355,6 +433,43 @@ app.post('/api/ocr', async (req, res) => {
     }
 });
 
+// ── USERS MANAGEMENT ──
+app.get('/api/users/:companyId', (req, res) => {
+  const rows = db.prepare('SELECT id, username, name, role, company_id FROM users WHERE company_id = ?').all(req.params.companyId);
+  res.json(rows);
+});
+
+app.post('/api/users/:companyId', (req, res) => {
+  const { id, username, password, name, role } = req.body;
+  try {
+    db.prepare('INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?)').run(id, username, password, name, role || 'user', req.params.companyId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/users/:companyId/:id', (req, res) => {
+  db.prepare('DELETE FROM users WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
+  res.json({ ok: true });
+});
+
+// ── COMPANIES MANAGEMENT ──
+app.get('/api/companies', (req, res) => {
+  const rows = db.prepare('SELECT * FROM companies').all();
+  res.json(rows);
+});
+
+app.post('/api/companies', (req, res) => {
+  const { id, name, cif, address, config } = req.body;
+  try {
+    db.prepare('INSERT OR REPLACE INTO companies VALUES (?, ?, ?, ?, ?)').run(id, name, cif || '', address || '', config || '{}');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ── SPA fallback ──
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
@@ -362,6 +477,6 @@ app.get('*', (req, res) => {
 
 // ── Start ──
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✓ Cimafondos v6.1 running on port ${PORT}`);
+  console.log(`✓ Cimafondos v6.9.7 running on port ${PORT}`);
   console.log(`  Database: ${DB_PATH}`);
 });
