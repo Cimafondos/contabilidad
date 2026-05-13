@@ -1444,7 +1444,7 @@ function importFacturasExcel(file,tipo){
   reader.readAsArrayBuffer(file);
 }
 
-function processFacturasRows(rows,tipo,resumenIVA){
+async function processFacturasRows(rows,tipo,resumenIVA){
   var header=rows[0].map(function(c){return String(c||'').trim();});
   // Map columns
   var colMap={};
@@ -1520,22 +1520,36 @@ function processFacturasRows(rows,tipo,resumenIVA){
     facturas.push(fact);
   }
 
-  // Check for duplicates against existing entries
+  // Check for duplicates against ALL existing entries (including soft-deleted!)
   var existingNums={};
-  state.entries.forEach(function(e){
-    if(e.concept){
-      var m=e.concept.match(/\[([^\]]+)\]/);
-      if(m)existingNums[m[1]]=true;
+  // Load ALL entries from server (the endpoint returns deleted ones too)
+  try{
+    var allEntries=await api('/api/entries/'+state.company.id);
+    if(allEntries&&allEntries.length){
+      allEntries.forEach(function(e){
+        if(e.concept){
+          var m=e.concept.match(/\[([^\]]+)\]/);
+          if(m)existingNums[m[1]]=true;
+        }
+      });
     }
-  });
+  }catch(e){
+    // Fallback to state.entries if server fails
+    state.entries.forEach(function(e){
+      if(e.concept){var m=e.concept.match(/\[([^\]]+)\]/);if(m)existingNums[m[1]]=true;}
+    });
+  }
 
   var nuevas=[],duplicadas=[];
+  var seenInBatch={}; // Also prevent duplicates within the same import batch
   facturas.forEach(function(f){
     var key=f.numFact+'_'+f.cif;
-    if(existingNums[f.numFact]||existingNums[key]){
+    if(existingNums[f.numFact]||existingNums[key]||seenInBatch[f.numFact]||seenInBatch[key]){
       duplicadas.push(f);
     }else{
       nuevas.push(f);
+      seenInBatch[f.numFact]=true;
+      seenInBatch[key]=true;
     }
   });
 
@@ -4200,14 +4214,16 @@ async function restoreEntry(id){
   }catch(e){toast('Error: '+e.message,'error');}
 }
 async function emptyTrash(){
-  if(!confirm('¿Vaciar la papelera PERMANENTEMENTE?\n\nEsta acción NO se puede deshacer.\nSe eliminarán todos los asientos borrados.'))return;
-  if(!confirm('¿SEGURO? Escribe OK para confirmar'))return;
+  if(!confirm('¿Vaciar la papelera PERMANENTEMENTE?\n\nEsta acción NO se puede deshacer.\nSe eliminarán todos los asientos borrados de la empresa actual.'))return;
+  if(!confirm('SEGUNDA CONFIRMACIÓN\n\n¿Estás completamente seguro?\nPulsa Aceptar para eliminar permanentemente.'))return;
   try{
     var r=await api('/api/purge-entries/'+state.company.id,{method:'POST',body:{}});
     if(r&&r.ok){
       auditLog('vaciar_papelera',r.count+' asientos purgados');
       toast('✓ Papelera vaciada: '+r.count+' asientos eliminados permanentemente');
       await loadData();checkIntegrity();render();
+    }else{
+      toast('Error: el servidor no respondió correctamente','error');
     }
   }catch(e){toast('Error al vaciar papelera: '+e.message,'error');}
 }
