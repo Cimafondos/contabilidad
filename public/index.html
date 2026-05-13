@@ -3918,69 +3918,33 @@ function detectIvaRateFromCuota(cuota,totalBase,totalIva){
 function renderLibroIVA(c){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var repercutido=[],soportado=[];
-  // Aggregate by IVA rate for summary
   var resByRate={21:{baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0},10:{baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0},4:{baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0}};
   all.forEach(function(e){
     var concepto=e.concept||'';
-    // Collect IVA lines separately per entry
-    var ivaRepLines=[],ivaSopLines=[];
-    var totalBaseG6=0,totalBaseG7=0;
+    var totalIvaRep=0,totalIvaSop=0,totalBaseG6=0,totalBaseG7=0;
+    var ivaSopLines=[],ivaRepLines=[];
     e.lines.forEach(function(l){
-      if(l.a&&l.a.startsWith('477')){ivaRepLines.push(l.h-l.d);}
-      if(l.a==='47200000'){ivaSopLines.push(l.d-l.h);}
+      if(l.a&&l.a.startsWith('477')){totalIvaRep+=l.h-l.d;ivaRepLines.push(l.h-l.d);}
+      if(l.a==='47200000'){totalIvaSop+=l.d-l.h;ivaSopLines.push(l.d-l.h);}
       var g=parseInt((l.a||'')[0])||0;
       if(g===6){totalBaseG6+=l.d-l.h;}
       if(g===7){totalBaseG7+=l.h-l.d;}
     });
-    
-    // Process IVA Repercutido
-    if(ivaRepLines.length>0){
-      var totalIvaRep=ivaRepLines.reduce(function(s,v){return s+v;},0);
-      if(totalIvaRep>0.001){
-        var cliAcct='';e.lines.forEach(function(l){var g=parseInt((l.a||'')[0])||0;if(g===7)cliAcct=l.a;});
-        if(ivaRepLines.length===1){
-          // Single IVA line — detect rate from total base
-          var tipoIva=detectIvaRate(totalBaseG7,totalIvaRep);
-          repercutido.push({date:e.date,concept:concepto,base:Math.round(totalBaseG7*100)/100,tipo:tipoIva,cuota:Math.round(totalIvaRep*100)/100,total:Math.round((totalBaseG7+totalIvaRep)*100)/100,cuenta:cliAcct});
-          var rk=resByRate[tipoIva]?tipoIva:21;
-          resByRate[rk].baseRep+=totalBaseG7;resByRate[rk].cuotaRep+=totalIvaRep;
-        }else{
-          // Multiple IVA lines — each is a separate rate, derive base from cuota/rate
-          ivaRepLines.forEach(function(cuota){
-            if(Math.abs(cuota)<0.001)return;
-            var rate=detectIvaRateFromCuota(cuota,totalBaseG7,totalIvaRep);
-            var base=rate>0?Math.round(cuota/rate*10000)/100:0;
-            repercutido.push({date:e.date,concept:concepto,base:base,tipo:Math.round(rate*100),cuota:Math.round(cuota*100)/100,total:Math.round((base+cuota)*100)/100,cuenta:cliAcct});
-            var rk=resByRate[Math.round(rate*100)]?Math.round(rate*100):21;
-            resByRate[rk].baseRep+=base;resByRate[rk].cuotaRep+=cuota;
-          });
-        }
-      }
+    // IVA Repercutido — one entry per invoice
+    if(Math.abs(totalIvaRep)>0.001){
+      var cliAcct='';e.lines.forEach(function(l){var g=parseInt((l.a||'')[0])||0;if(g===7)cliAcct=l.a;});
+      var tipoIva=detectIvaRate(totalBaseG7,totalIvaRep);
+      repercutido.push({date:e.date,concept:concepto,base:Math.round(totalBaseG7*100)/100,tipo:tipoIva,cuota:Math.round(totalIvaRep*100)/100,total:Math.round((totalBaseG7+totalIvaRep)*100)/100,cuenta:cliAcct});
+      if(ivaRepLines.length<=1){var rk=resByRate[tipoIva]?tipoIva:21;resByRate[rk].baseRep+=totalBaseG7;resByRate[rk].cuotaRep+=totalIvaRep;}
+      else{ivaRepLines.forEach(function(cuota){if(Math.abs(cuota)<0.001)return;var rate=detectIvaRateFromCuota(cuota,totalBaseG7,totalIvaRep);var base=rate>0?cuota/rate:0;var rk=resByRate[Math.round(rate*100)]?Math.round(rate*100):21;resByRate[rk].baseRep+=base;resByRate[rk].cuotaRep+=cuota;});}
     }
-    
-    // Process IVA Soportado
-    if(ivaSopLines.length>0){
-      var totalIvaSop=ivaSopLines.reduce(function(s,v){return s+v;},0);
-      if(totalIvaSop>0.001){
-        var provAcct='';e.lines.forEach(function(l){var g=parseInt((l.a||'')[0])||0;if(g===6)provAcct=l.a;});
-        if(ivaSopLines.length===1){
-          // Single IVA line — detect rate from total base
-          var tipoIvaS=detectIvaRate(totalBaseG6,totalIvaSop);
-          soportado.push({date:e.date,concept:concepto,base:Math.round(totalBaseG6*100)/100,tipo:tipoIvaS,cuota:Math.round(totalIvaSop*100)/100,total:Math.round((totalBaseG6+totalIvaSop)*100)/100,cuenta:provAcct});
-          var rk2=resByRate[tipoIvaS]?tipoIvaS:21;
-          resByRate[rk2].baseSop+=totalBaseG6;resByRate[rk2].cuotaSop+=totalIvaSop;
-        }else{
-          // Multiple IVA lines — each is a separate rate, derive base from cuota/rate
-          ivaSopLines.forEach(function(cuota){
-            if(Math.abs(cuota)<0.001)return;
-            var rate=detectIvaRateFromCuota(cuota,totalBaseG6,totalIvaSop);
-            var base=rate>0?Math.round(cuota/rate*10000)/100:0;
-            soportado.push({date:e.date,concept:concepto,base:base,tipo:Math.round(rate*100),cuota:Math.round(cuota*100)/100,total:Math.round((base+cuota)*100)/100,cuenta:provAcct});
-            var rk2=resByRate[Math.round(rate*100)]?Math.round(rate*100):21;
-            resByRate[rk2].baseSop+=base;resByRate[rk2].cuotaSop+=cuota;
-          });
-        }
-      }
+    // IVA Soportado — one entry per invoice
+    if(Math.abs(totalIvaSop)>0.001){
+      var provAcct='';e.lines.forEach(function(l){var g=parseInt((l.a||'')[0])||0;if(g===6)provAcct=l.a;});
+      var tipoIvaS=detectIvaRate(Math.abs(totalBaseG6),Math.abs(totalIvaSop));
+      soportado.push({date:e.date,concept:concepto,base:Math.round(totalBaseG6*100)/100,tipo:tipoIvaS,cuota:Math.round(totalIvaSop*100)/100,total:Math.round((totalBaseG6+totalIvaSop)*100)/100,cuenta:provAcct});
+      if(ivaSopLines.length<=1){var rk2=resByRate[tipoIvaS]?tipoIvaS:21;resByRate[rk2].baseSop+=totalBaseG6;resByRate[rk2].cuotaSop+=totalIvaSop;}
+      else{ivaSopLines.forEach(function(cuota){if(Math.abs(cuota)<0.001)return;var rate=detectIvaRateFromCuota(cuota,Math.abs(totalBaseG6),Math.abs(totalIvaSop));var base=rate>0?cuota/rate:0;var rk2=resByRate[Math.round(rate*100)]?Math.round(rate*100):21;resByRate[rk2].baseSop+=base;resByRate[rk2].cuotaSop+=cuota;});}
     }
   });
   var tBaseRep=repercutido.reduce(function(s,x){return s+x.base;},0);
@@ -4015,27 +3979,17 @@ function renderLibroIVA(c){
 function exportLibroIVA(tipo){
   var all=filteredEntries();var rows=[];
   all.forEach(function(e){
-    var ivaLines=[],base=0,esRep=tipo==='rep';
+    var totalIva=0,base=0,esRep=tipo==='rep';
     e.lines.forEach(function(l){
-      if(esRep&&l.a&&l.a.startsWith('477'))ivaLines.push(l.h-l.d);
-      if(!esRep&&l.a==='47200000')ivaLines.push(l.d-l.h);
+      if(esRep&&l.a&&l.a.startsWith('477'))totalIva+=l.h-l.d;
+      if(!esRep&&l.a==='47200000')totalIva+=l.d-l.h;
       var g=parseInt((l.a||'')[0])||0;
       if(esRep&&g===7){base+=l.h-l.d;}
       if(!esRep&&g===6){base+=l.d-l.h;}
     });
-    var totalIva=ivaLines.reduce(function(s,v){return s+v;},0);
-    if(totalIva<0.001)return;
-    if(ivaLines.length<=1){
-      var tipoIva=detectIvaRate(base,totalIva);
-      rows.push([e.date,e.concept||'',Math.round(base*100)/100,tipoIva,Math.round(totalIva*100)/100,Math.round((base+totalIva)*100)/100]);
-    }else{
-      ivaLines.forEach(function(cuota){
-        if(Math.abs(cuota)<0.001)return;
-        var rate=detectIvaRateFromCuota(cuota,base,totalIva);
-        var lineBase=rate>0?Math.round(cuota/rate*10000)/100:0;
-        rows.push([e.date,e.concept||'',lineBase,Math.round(rate*100),Math.round(cuota*100)/100,Math.round((lineBase+cuota)*100)/100]);
-      });
-    }
+    if(Math.abs(totalIva)<0.001)return;
+    var tipoIva=detectIvaRate(Math.abs(base),Math.abs(totalIva));
+    rows.push([e.date,e.concept||'',Math.round(base*100)/100,tipoIva,Math.round(totalIva*100)/100,Math.round((base+totalIva)*100)/100]);
   });
   exportExcel(rows,['Fecha','Concepto','Base','% IVA','Cuota','Total'],tipo==='rep'?'iva_repercutido':'iva_soportado');
 }
