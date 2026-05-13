@@ -1968,7 +1968,7 @@ function processAsientosFile(file){
   }else{
     reader.onload=function(e){
       var data=new Uint8Array(e.target.result);var wb=XLSX.read(data,{type:'array'});
-      var ws=wb.Sheets[wb.SheetNames[0]];var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false});
+      var ws=wb.Sheets[wb.SheetNames[0]];var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
       processAsientosRows(rows);
     };reader.readAsArrayBuffer(file);
   }
@@ -2008,10 +2008,10 @@ function processAsientosRows(rows){
     var fechaRaw=String(r[dI]||'').trim();
     var cuenta=String(r[cI]||'').trim();
     var desc=String(r[descI]||'').trim();
-    var debeRaw=String(r[debeI]||'').replace(/[€$\s]/g,'').replace(/\./g,'').replace(',','.');
-    var haberRaw=String(r[haberI]||'').replace(/[€$\s]/g,'').replace(/\./g,'').replace(',','.');
-    var debe=parseFloat(debeRaw)||0;
-    var haber=parseFloat(haberRaw)||0;
+    var debeVal=r[debeI];var haberVal=r[haberI];
+    var debe=0,haber=0;
+    if(typeof debeVal==='number'){debe=debeVal;}else{var ds=String(debeVal||'').replace(/[€$\s]/g,'');if(ds.indexOf(',')>=0&&ds.indexOf('.')<ds.indexOf(',')){ds=ds.replace(/\./g,'').replace(',','.');}debe=parseFloat(ds)||0;}
+    if(typeof haberVal==='number'){haber=haberVal;}else{var hs=String(haberVal||'').replace(/[€$\s]/g,'');if(hs.indexOf(',')>=0&&hs.indexOf('.')<hs.indexOf(',')){hs=hs.replace(/\./g,'').replace(',','.');}haber=parseFloat(hs)||0;}
     if(!cuenta&&!debe&&!haber)continue;
     if(!numAsi&&order.length>0)numAsi=order[order.length-1];
     var dateStr=parseDate(fechaRaw);
