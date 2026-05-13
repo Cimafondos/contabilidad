@@ -1400,18 +1400,44 @@ function importFacturasExcel(file,tipo){
     try{
       var data=new Uint8Array(e.target.result);
       var wb=XLSX.read(data,{type:'array'});
+      // Read Resumen IVA sheet if exists (for cuadre test)
+      var resumenIVA=null;
+      if(wb.SheetNames.indexOf('Resumen IVA')>=0){
+        var rsWs=wb.Sheets['Resumen IVA'];
+        var rsRows=XLSX.utils.sheet_to_json(rsWs,{header:1,raw:true});
+        resumenIVA={};
+        rsRows.forEach(function(r){
+          var label=String(r[0]||'').trim().toLowerCase();
+          // Use 'total' column (last column with data)
+          var totalVal=0;
+          for(var ci=r.length-1;ci>=1;ci--){if(r[ci]!==null&&r[ci]!==undefined&&r[ci]!==''){totalVal=parseFloat(String(r[ci]).replace(/\./g,'').replace(',','.'))||0;break;}}
+          if(label.indexOf('base 21')>=0)resumenIVA.base21=totalVal;
+          if(label.indexOf('base 10')>=0)resumenIVA.base10=totalVal;
+          if(label.indexOf('base 4')>=0&&label.indexOf('base 40')<0)resumenIVA.base4=totalVal;
+          if(label.indexOf('base 0')>=0)resumenIVA.base0=totalVal;
+          if(label.indexOf('iva 21')>=0)resumenIVA.iva21=totalVal;
+          if(label.indexOf('iva 10')>=0)resumenIVA.iva10=totalVal;
+          if(label.indexOf('iva 4')>=0&&label.indexOf('iva 10')<0)resumenIVA.iva4=totalVal;
+          if(label==='total bases'||label.indexOf('total bases')>=0)resumenIVA.totalBases=totalVal;
+          if(label==='total iva'||label.indexOf('total iva')>=0)resumenIVA.totalIVA=totalVal;
+          if(label.indexOf('total gral')>=0)resumenIVA.totalFacturado=totalVal;
+          if(label.indexOf('recargo')>=0)resumenIVA.recargos=totalVal;
+          if(label.indexOf('retenc')>=0)resumenIVA.retenciones=totalVal;
+        });
+        console.log('Resumen IVA del gestor:',resumenIVA);
+      }
       // Find the data sheet (not 'Resumen IVA')
       var sheetName=wb.SheetNames.find(function(s){return s!=='Resumen IVA';})||wb.SheetNames[0];
       var ws=wb.Sheets[sheetName];
       var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
       if(rows.length<2){toast('Sin datos en la hoja '+sheetName,'error');return;}
-      processFacturasRows(rows,tipo);
+      processFacturasRows(rows,tipo,resumenIVA);
     }catch(err){toast('Error leyendo archivo: '+err.message,'error');}
   };
   reader.readAsArrayBuffer(file);
 }
 
-function processFacturasRows(rows,tipo){
+function processFacturasRows(rows,tipo,resumenIVA){
   var header=rows[0].map(function(c){return String(c||'').trim();});
   // Map columns
   var colMap={};
@@ -1507,15 +1533,61 @@ function processFacturasRows(rows,tipo){
   });
 
   // Show results
-  showFacturasImportResult(nuevas,duplicadas,tipo);
+  showFacturasImportResult(nuevas,duplicadas,tipo,resumenIVA);
 }
 
-function showFacturasImportResult(nuevas,duplicadas,tipo){
+function showFacturasImportResult(nuevas,duplicadas,tipo,resumenIVA){
   var res=$('impResult');if(!res)return;
   var totalNuevas=nuevas.reduce(function(s,f){return s+f.total;},0);
 
+  // ═══ TEST DE CUADRE CON GESTOR ═══
+  var cuadreHTML='';
+  if(resumenIVA&&(resumenIVA.totalIVA||resumenIVA.totalFacturado)){
+    var allFacturas=nuevas.concat(duplicadas); // Test against ALL facturas from file
+    var sumIva21=0,sumIva10=0,sumIva4=0,sumBase21=0,sumBase10=0,sumBase4=0,sumTotal=0,sumRecargo=0,sumRetencion=0;
+    allFacturas.forEach(function(f){
+      sumIva21+=f.iva21;sumIva10+=f.iva10;sumIva4+=f.iva4;
+      sumBase21+=f.base21;sumBase10+=f.base10;sumBase4+=f.base4;
+      sumTotal+=f.total;
+      var rec=0;if(f.recargo&&f.recargo!==0)rec=f.recargo;else if(f.iva0&&f.iva0>0)rec=f.iva0;
+      sumRecargo+=rec;
+      var ret=f.retencion||0;if(f.iva0&&f.iva0<0)ret=Math.abs(f.iva0);
+      sumRetencion+=ret;
+    });
+    var sumIvaTotal=sumIva21+sumIva10+sumIva4;
+    var sumBasesTotal=sumBase21+sumBase10+sumBase4;
+    
+    var checks=[];
+    function chk(name,prog,gestor,tolerance){
+      var diff=Math.abs(prog-gestor);
+      var ok=diff<=(tolerance||0.05);
+      checks.push({name:name,prog:prog,gestor:gestor,diff:diff,ok:ok});
+    }
+    if(resumenIVA.totalIVA)chk('Total IVA',sumIvaTotal,resumenIVA.totalIVA);
+    if(resumenIVA.totalFacturado)chk('Total Facturado',sumTotal,resumenIVA.totalFacturado);
+    if(resumenIVA.totalBases)chk('Total Bases',sumBasesTotal,resumenIVA.totalBases);
+    if(resumenIVA.iva21)chk('IVA 21%',sumIva21,resumenIVA.iva21);
+    if(resumenIVA.iva10)chk('IVA 10%',sumIva10,resumenIVA.iva10);
+    if(resumenIVA.iva4)chk('IVA 4%',sumIva4,resumenIVA.iva4);
+    if(resumenIVA.base21)chk('Base 21%',sumBase21,resumenIVA.base21);
+    if(resumenIVA.base10)chk('Base 10%',sumBase10,resumenIVA.base10);
+    if(resumenIVA.base4)chk('Base 4%',sumBase4,resumenIVA.base4);
+    if(resumenIVA.recargos)chk('Recargos',sumRecargo,resumenIVA.recargos,0.10);
+    if(resumenIVA.retenciones)chk('Retenciones',sumRetencion,resumenIVA.retenciones,0.10);
+    
+    var allOk=checks.every(function(c){return c.ok;});
+    var failCount=checks.filter(function(c){return !c.ok;}).length;
+    
+    cuadreHTML='<div style="margin-bottom:12px;border:2px solid '+(allOk?'var(--ok)':'var(--rd)')+';border-radius:8px;overflow:hidden">'+
+    '<div style="padding:8px 14px;background:'+(allOk?'#E8F8ED':'#FDF0F0')+';font-weight:600;font-size:12px;color:'+(allOk?'var(--ok)':'var(--rd)')+'">'+(allOk?'✅ Test de cuadre con gestor: TODO OK':'❌ Test de cuadre con gestor: '+failCount+' diferencias')+'</div>'+
+    '<table style="font-size:11px"><thead><tr><th>Check</th><th style="text-align:right">Programa</th><th style="text-align:right">Gestor</th><th style="text-align:right">Diff</th><th>Estado</th></tr></thead><tbody>'+
+    checks.map(function(c,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+c.name+'</td><td style="text-align:right">'+fmt(c.prog)+'€</td><td style="text-align:right">'+fmt(c.gestor)+'€</td><td style="text-align:right;color:'+(c.ok?'var(--txM)':'var(--rd)')+'">'+fmt(c.diff)+'€</td><td>'+(c.ok?'<span class="badge badge-g">✓</span>':'<span class="badge badge-r">✗</span>')+'</td></tr>';}).join('')+
+    '</tbody></table></div>';
+  }
+
   res.innerHTML='<div class="card" style="border:2px solid var(--pri)"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 Resultado importación — '+(tipo==='recibida'?'Facturas recibidas':'Facturas emitidas')+'</span></div><div class="card-b">'+
   '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+nuevas.length+'</div><div class="stat-l">Nuevas para importar</div></div><div class="stat"><div class="stat-v" style="color:var(--txM)">'+duplicadas.length+'</div><div class="stat-l">Duplicadas (saltadas)</div></div><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(totalNuevas)+'€</div><div class="stat-l">Importe total</div></div></div>'+
+  cuadreHTML+
   (nuevas.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Nº Factura</th><th>Fecha</th><th>'+(tipo==='recibida'?'Proveedor':'Cliente')+'</th><th>CIF</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Tipo</th></tr></thead><tbody>'+
   nuevas.map(function(f,i){
     var totalIva=f.iva21+f.iva10+f.iva4;
