@@ -3088,16 +3088,11 @@ function borrarDatosEmpresa(){
   var nombre=prompt('Escribe el nombre de la empresa para confirmar el borrado TOTAL:');
   if(!nombre||nombre!==state.company.name){toast('Nombre incorrecto. Borrado cancelado.','error');return;}
   if(!confirm('⚠️ ÚLTIMA CONFIRMACIÓN: ¿Borrar TODOS los datos de '+state.company.name+'? Esta acción NO se puede deshacer.'))return;
-  var count=3;var timer=setInterval(function(){
-    count--;toast('Borrando en '+count+'...','error');
-    if(count<=0){
-      clearInterval(timer);
-      // Clear localStorage
-      Object.keys(localStorage).forEach(function(k){if(k.indexOf(state.company.id)>=0||k.indexOf('cf_')>=0)localStorage.removeItem(k);});
-      toast('Datos locales borrados. Los asientos del servidor requieren borrado manual.','error');
-      render();
-    }
-  },1000);
+  api('/api/entries-all/'+state.company.id,{method:'DELETE'}).then(function(r){
+    Object.keys(localStorage).forEach(function(k){if(k.indexOf(state.company.id)>=0||k.indexOf('cf_')>=0)localStorage.removeItem(k);});
+    toast('✅ Borrados '+(r.deleted||0)+' asientos de '+state.company.name);
+    loadData().then(function(){render();});
+  }).catch(function(e){toast('Error al borrar: '+e.message,'error');});
 }
 function exportarTodoCSV(){
   var rows=['TIPO,DATO1,DATO2,DATO3,DATO4'];
