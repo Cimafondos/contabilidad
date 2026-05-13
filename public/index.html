@@ -4179,8 +4179,17 @@ async function restoreEntry(id){
     }
   }catch(e){toast('Error: '+e.message,'error');}
 }
-function emptyTrash(){
-  toast('⚠️ El vaciado permanente no está habilitado. Los datos borrados se mantienen por seguridad.','error');
+async function emptyTrash(){
+  if(!confirm('¿Vaciar la papelera PERMANENTEMENTE?\n\nEsta acción NO se puede deshacer.\nSe eliminarán todos los asientos borrados.'))return;
+  if(!confirm('¿SEGURO? Escribe OK para confirmar'))return;
+  try{
+    var r=await api('/api/purge-entries/'+state.company.id,{method:'POST',body:{}});
+    if(r&&r.ok){
+      auditLog('vaciar_papelera',r.count+' asientos purgados');
+      toast('✓ Papelera vaciada: '+r.count+' asientos eliminados permanentemente');
+      await loadData();checkIntegrity();render();
+    }
+  }catch(e){toast('Error al vaciar papelera: '+e.message,'error');}
 }
 
 // ═══ REGISTRO DE AUDITORÍA ═══

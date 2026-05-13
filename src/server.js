@@ -307,6 +307,22 @@ app.post('/api/recover-entries/:companyId', (req, res) => {
   res.json({ ok: true, count });
 });
 
+// Purge soft-deleted entries permanently
+app.post('/api/purge-entries/:companyId', (req, res) => {
+  const cid = req.params.companyId;
+  let count;
+  if (cid === '_all_') {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE deleted = 1').get().c;
+    db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE deleted = 1)').run();
+    db.prepare('DELETE FROM entries WHERE deleted = 1').run();
+  } else {
+    count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ? AND deleted = 1').get(cid).c;
+    db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ? AND deleted = 1)').run(cid);
+    db.prepare('DELETE FROM entries WHERE company_id = ? AND deleted = 1').run(cid);
+  }
+  res.json({ ok: true, count });
+});
+
 // ── TRANSACTIONS (bank imports) ──
 app.get('/api/transactions/:companyId', (req, res) => {
   const rows = db.prepare('SELECT * FROM transactions WHERE company_id = ? ORDER BY date').all(req.params.companyId);
