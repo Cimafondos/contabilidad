@@ -317,7 +317,7 @@ function render(){
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div>'+
   (function(){var emps=getEmpresas();if(!emps.length)emps=[{name:state.company.name}];var userEmps=emps;try{var users=getUsers();var cu=users.find(function(u){return u.name===(state.user?state.user.name:'');});if(cu&&cu.empresas&&cu.empresas.length>0){userEmps=emps.filter(function(em){return cu.empresas.indexOf(em.name)>=0;});}}catch(e){}return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+userEmps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
-  +'<span style="opacity:0.7">— v6.9</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  +'<span style="opacity:0.7">— v6.9.1</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){return '<div class="rgroup"><div class="rgroup-btns">'+g.items.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
@@ -1517,13 +1517,14 @@ function showFacturasImportResult(nuevas,duplicadas,tipo){
   '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+nuevas.length+'</div><div class="stat-l">Nuevas para importar</div></div><div class="stat"><div class="stat-v" style="color:var(--txM)">'+duplicadas.length+'</div><div class="stat-l">Duplicadas (saltadas)</div></div><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(totalNuevas)+'€</div><div class="stat-l">Importe total</div></div></div>'+
   (nuevas.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Nº Factura</th><th>Fecha</th><th>'+(tipo==='recibida'?'Proveedor':'Cliente')+'</th><th>CIF</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Tipo</th></tr></thead><tbody>'+
   nuevas.map(function(f,i){
-    // Don't double-count base0 when it's retention pattern
-    var rb0=f.base0;
-    if(f.base0!==0&&f.iva0&&f.iva0<0)rb0=0;
-    else if(f.base0!==0&&(f.base0===f.base21||f.base0===f.base10||f.base0===f.base4))rb0=0;
-    var totalBase=f.base21+f.base10+f.base4+rb0;
     var totalIva=f.iva21+f.iva10+f.iva4;
-    return '<tr class="'+(i%2?'alt':'')+'" style="'+(f.isAbono?'color:var(--rd)':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.numFact)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="font-size:9px;color:var(--txM)">'+h(f.cif)+'</td><td style="text-align:right">'+fmt(totalBase)+'€</td><td style="text-align:right">'+fmt(totalIva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.total)+'€</td><td style="font-size:9px"><span class="badge '+(f.isAbono?'badge-r':'badge-g')+'">'+(f.isAbono?'Abono':'Factura')+'</span></td></tr>';
+    var recargoP=0;
+    if(f.recargo&&f.recargo!==0)recargoP=f.recargo;
+    else if(f.iva0&&f.iva0>0)recargoP=f.iva0;
+    var retP=f.retencion||0;
+    if(f.iva0&&f.iva0<0)retP=Math.abs(f.iva0);
+    var realBase=Math.abs(f.total)-Math.abs(totalIva)-Math.abs(recargoP)+Math.abs(retP);
+    return '<tr class="'+(i%2?'alt':'')+'" style="'+(f.isAbono?'color:var(--rd)':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.numFact)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="font-size:9px;color:var(--txM)">'+h(f.cif)+'</td><td style="text-align:right">'+fmt(realBase)+'€</td><td style="text-align:right">'+fmt(totalIva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.total)+'€</td><td style="font-size:9px"><span class="badge '+(f.isAbono?'badge-r':'badge-g')+'">'+(f.isAbono?'Abono':'Factura')+'</span></td></tr>';
   }).join('')+'</tbody></table></div>'+
   '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button class="btn btn-d" onclick="clearImpResult()">Cancelar</button><button class="btn btn-p" style="font-size:13px;padding:8px 20px" onclick="contabilizarFacturas()">✓ Contabilizar '+nuevas.length+' facturas</button></div>':'<div class="empty">No hay facturas nuevas para importar</div>')+
   (duplicadas.length?'<div style="margin-top:8px;padding:8px;background:#FFF8E1;border-radius:6px;font-size:11px;color:var(--am)">⚠ '+duplicadas.length+' facturas ya contabilizadas: '+duplicadas.map(function(f){return f.numFact;}).join(', ')+'</div>':'')+
@@ -1570,21 +1571,15 @@ async function contabilizarFacturas(){
     await new Promise(function(r){setTimeout(r,10)}); // Let UI update
     var lines=[];
 
-    // Detect retention pattern from gestor documental:
-    // When Base 0% equals one of the other bases and IVA 0% is negative, 
-    // Base 0% is NOT a real exempt base — it's the retention base, and IVA 0% is the retention amount
-    var realBase0=f.base0;
+    // Base 0% from gestor documental is NEVER a real additional base.
+    // It's either a retention indicator or an informational duplicate.
+    // We ignore it completely and trust the Total from Excel.
     var realRetencion=f.retencion||0;
-    if(f.base0!==0&&f.iva0&&f.iva0<0){
-      // IVA 0% negative = this is IRPF retention, not a real base
+    if(f.iva0&&f.iva0<0){
+      // IVA 0% negative = this is IRPF retention amount
       realRetencion=Math.abs(f.iva0);
-      realBase0=0; // Don't count base0 as it duplicates base21/10/4
-    }else if(f.base0!==0&&(f.base0===f.base21||f.base0===f.base10||f.base0===f.base4)){
-      // Base 0% duplicates another base — skip it
-      realBase0=0;
     }
 
-    var totalBase=f.base21+f.base10+f.base4+realBase0;
     var totalIva=f.iva21+f.iva10+f.iva4;
 
     if(tipo==='recibida'){
@@ -1593,45 +1588,38 @@ async function contabilizarFacturas(){
       // If it's services, use 62X
       if(f.concepto&&f.concepto.toLowerCase().indexOf('asesor')>=0)cuentaGasto='62300000';
 
-      // Bases por tipo IVA → cuenta de gasto
-      if(f.base21!==0)lines.push({a:cuentaGasto,d:Math.max(f.base21,0),h:Math.max(-f.base21,0)});
-      if(f.base10!==0)lines.push({a:cuentaGasto,d:Math.max(f.base10,0),h:Math.max(-f.base10,0)});
-      if(f.base4!==0)lines.push({a:cuentaGasto,d:Math.max(f.base4,0),h:Math.max(-f.base4,0)});
-      if(realBase0!==0)lines.push({a:cuentaGasto,d:Math.max(realBase0,0),h:Math.max(-realBase0,0)});
+      // Calculate real base from Total: base = total - IVA - recargo + retención
+      var recargoTotal=0;
+      if(f.recargo&&f.recargo!==0){recargoTotal=f.recargo;}
+      else if(f.iva0&&f.iva0>0){recargoTotal=f.iva0;} // IVA 0% positive = recargo equiv
+      
+      // Derive the real base from Total to ensure perfect balance
+      var totalFactura=Math.abs(f.total);
+      var realBase=totalFactura-Math.abs(totalIva)-Math.abs(recargoTotal)+Math.abs(realRetencion);
+      
+      // Gasto = real base (derived from Total)
+      if(f.isAbono){
+        lines.push({a:cuentaGasto,d:0,h:Math.abs(realBase)});
+      }else{
+        lines.push({a:cuentaGasto,d:Math.abs(realBase),h:0});
+      }
 
       // IVA soportado
       if(f.iva21!==0)lines.push({a:'47200000',d:Math.max(f.iva21,0),h:Math.max(-f.iva21,0)});
       if(f.iva10!==0)lines.push({a:'47200000',d:Math.max(f.iva10,0),h:Math.max(-f.iva10,0)});
       if(f.iva4!==0)lines.push({a:'47200000',d:Math.max(f.iva4,0),h:Math.max(-f.iva4,0)});
 
-      // Retención IRPF (from explicit column or detected from IVA 0%)
+      // Retención IRPF
       if(realRetencion!==0)lines.push({a:'47510000',d:0,h:Math.abs(realRetencion)});
 
-      // Recargo equivalencia: from explicit column, or IVA 0% when positive (not retention)
-      var recargoTotal=0;
-      if(f.recargo&&f.recargo!==0){recargoTotal=f.recargo;}
-      else if(f.iva0&&f.iva0>0){recargoTotal=f.iva0;} // IVA 0% positive = recargo equiv
+      // Recargo equivalencia
       if(recargoTotal!==0)lines.push({a:'47200001',d:Math.max(recargoTotal,0),h:Math.max(-recargoTotal,0)});
 
-      // Proveedor (haber = lo que debemos) — ALWAYS use Total from Excel
-      var totalHaber=Math.abs(f.total);
+      // Proveedor (haber = lo que debemos) — Total from Excel
       if(f.isAbono){
-        lines.push({a:'40000000',d:totalHaber,h:0});
+        lines.push({a:'40000000',d:totalFactura,h:0});
       }else{
-        lines.push({a:'40000000',d:0,h:totalHaber});
-      }
-
-      // Auto-balance: if lines don't match Total, add difference as recargo equiv
-      var sumD=0,sumH=0;
-      lines.forEach(function(l){sumD+=l.d;sumH+=l.h;});
-      var balanceDiff=Math.round((sumD-sumH)*100)/100;
-      if(Math.abs(balanceDiff)>0.01){
-        if(balanceDiff<0){
-          // Need more debe → recargo de equivalencia
-          lines.push({a:'47200001',d:Math.abs(balanceDiff),h:0});
-        }else{
-          lines.push({a:cuentaGasto,d:0,h:Math.abs(balanceDiff)});
-        }
+        lines.push({a:'40000000',d:0,h:totalFactura});
       }
 
       // Auto-create supplier if not exists
