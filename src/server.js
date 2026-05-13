@@ -244,6 +244,17 @@ app.post('/api/entries/:companyId', (req, res) => {
   const companyId = req.params.companyId;
   ensureCompany(companyId);
 
+  // Validate entry balance (Debe = Haber)
+  if (lines && lines.length > 0) {
+    const totalD = lines.reduce((s, l) => s + (l.d || 0), 0);
+    const totalH = lines.reduce((s, l) => s + (l.h || 0), 0);
+    if (Math.abs(totalD - totalH) > 0.01) {
+      console.warn(`⚠ Asiento descuadrado rechazado: ${id} D=${totalD} H=${totalH} diff=${Math.abs(totalD-totalH)}`);
+      return res.status(400).json({ error: 'Asiento descuadrado', debe: totalD, haber: totalH, diff: Math.abs(totalD - totalH) });
+    }
+  }
+
+  // Validate company isolation - account codes should not contain other company references
   const insertEntry = db.prepare('INSERT OR REPLACE INTO entries (id, date, concept, type, company_id, deleted) VALUES (?, ?, ?, ?, ?, 0)');
   const deleteLine = db.prepare('DELETE FROM entry_lines WHERE entry_id = ?');
   const insertLine = db.prepare('INSERT INTO entry_lines (entry_id, account, debit, credit) VALUES (?, ?, ?, ?)');
@@ -486,6 +497,6 @@ app.get('*', (req, res) => {
 
 // ── Start ──
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✓ Cimafondos v6.9.7 running on port ${PORT}`);
+  console.log(`✓ Cimafondos v6.9.9 running on port ${PORT}`);
   console.log(`  Database: ${DB_PATH}`);
 });
