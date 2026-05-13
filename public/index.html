@@ -1565,18 +1565,23 @@ function showFacturasImportResult(nuevas,duplicadas,tipo,resumenIVA){
   var cuadreHTML='';
   if(resumenIVA&&(resumenIVA.totalIVA||resumenIVA.totalFacturado)){
     var allFacturas=nuevas.concat(duplicadas); // Test against ALL facturas from file
-    var sumIva21=0,sumIva10=0,sumIva4=0,sumBase21=0,sumBase10=0,sumBase4=0,sumTotal=0,sumRecargo=0,sumRetencion=0;
+    var sumIva21=0,sumIva10=0,sumIva4=0,sumBase21=0,sumBase10=0,sumBase4=0,sumBase0=0,sumTotal=0,sumRecargo=0,sumRetencion=0;
     allFacturas.forEach(function(f){
       sumIva21+=f.iva21;sumIva10+=f.iva10;sumIva4+=f.iva4;
-      sumBase21+=f.base21;sumBase10+=f.base10;sumBase4+=f.base4;
+      sumBase21+=f.base21;sumBase10+=f.base10;sumBase4+=f.base4;sumBase0+=(f.base0||0);
       sumTotal+=f.total;
-      var rec=0;if(f.recargo&&f.recargo!==0)rec=f.recargo;else if(f.iva0&&f.iva0>0)rec=f.iva0;
+      var rec=0;if(f.recargo&&f.recargo!==0){rec=f.recargo;}else{
+        var bEx=Math.abs(f.base21)+Math.abs(f.base10)+Math.abs(f.base4)+Math.abs(f.base0||0);
+        var iEx=Math.abs(f.iva21)+Math.abs(f.iva10)+Math.abs(f.iva4);
+        var dRec=Math.abs(f.total)-bEx-iEx+(f.retencion?Math.abs(f.retencion):0)+(f.iva0&&f.iva0<0?Math.abs(f.iva0):0);
+        if(dRec>0.01)rec=Math.round(dRec*100)/100;
+      }
       sumRecargo+=rec;
       var ret=f.retencion||0;if(f.iva0&&f.iva0<0)ret=Math.abs(f.iva0);
       sumRetencion+=ret;
     });
     var sumIvaTotal=sumIva21+sumIva10+sumIva4;
-    var sumBasesTotal=sumBase21+sumBase10+sumBase4;
+    var sumBasesTotal=sumBase21+sumBase10+sumBase4+sumBase0;
     
     var checks=[];
     function chk(name,prog,gestor,tolerance){
@@ -1682,10 +1687,19 @@ async function contabilizarFacturas(){
       // If it's services, use 62X
       if(f.concepto&&f.concepto.toLowerCase().indexOf('asesor')>=0)cuentaGasto='62300000';
 
-      // Calculate real base from Total: base = total - IVA - recargo + retención
+      // Calculate recargo: try explicit columns first, then derive from totals
       var recargoTotal=0;
-      if(f.recargo&&f.recargo!==0){recargoTotal=f.recargo;}
-      else if(f.iva0&&f.iva0>0){recargoTotal=f.iva0;} // IVA 0% positive = recargo equiv
+      if(f.recargo&&f.recargo!==0){
+        recargoTotal=f.recargo;
+      }else{
+        // Derive recargo from total: recargo = total - bases(21+10+4+0) - iva(21+10+4) + retención
+        var basesExcel=Math.abs(f.base21)+Math.abs(f.base10)+Math.abs(f.base4)+Math.abs(f.base0||0);
+        var ivaExcel=Math.abs(f.iva21)+Math.abs(f.iva10)+Math.abs(f.iva4);
+        var derivedRecargo=Math.abs(f.total)-basesExcel-ivaExcel+Math.abs(realRetencion);
+        if(derivedRecargo>0.01){
+          recargoTotal=Math.round(derivedRecargo*100)/100;
+        }
+      }
       
       // Use REAL bases from Excel per IVA type instead of a single derived base
       var totalFactura=Math.abs(f.total);
@@ -1708,8 +1722,15 @@ async function contabilizarFacturas(){
       // Retención IRPF
       if(realRetencion!==0)lines.push({a:'47510000',d:0,h:Math.abs(realRetencion)});
 
-      // Recargo equivalencia
-      if(recargoTotal!==0)lines.push({a:'47200001',d:Math.max(recargoTotal,0),h:Math.max(-recargoTotal,0)});
+      // Recargo equivalencia soportado = mayor gasto (NO es IVA deducible en régimen general)
+      // Va a la misma cuenta de gasto, no a la 472
+      if(recargoTotal!==0){
+        if(f.isAbono){
+          lines.push({a:cuentaGasto,d:0,h:Math.abs(recargoTotal)});
+        }else{
+          lines.push({a:cuentaGasto,d:Math.abs(recargoTotal),h:0});
+        }
+      }
 
       // Find or create supplier with individual account
       var provRecord=masters.supplier.find(function(s){return s.cif===f.cif||(s.name&&s.name===f.tercero);});
