@@ -1968,7 +1968,21 @@ function processAsientosFile(file){
   }else{
     reader.onload=function(e){
       var data=new Uint8Array(e.target.result);var wb=XLSX.read(data,{type:'array'});
-      var ws=wb.Sheets[wb.SheetNames[0]];var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      // Read raw cell values directly to avoid formatting issues
+      var range=XLSX.utils.decode_range(ws['!ref']);
+      var rows=[];
+      for(var R=range.s.r;R<=range.e.r;R++){
+        var row=[];
+        for(var C=range.s.c;C<=range.e.c;C++){
+          var cell=ws[XLSX.utils.encode_cell({r:R,c:C})];
+          row.push(cell?cell.v:undefined);
+        }
+        rows.push(row);
+      }
+      console.log('ASIENTOS DEBUG - Row 0 (header):',JSON.stringify(rows[0]));
+      console.log('ASIENTOS DEBUG - Row 1:',JSON.stringify(rows[1]),'types:',rows[1].map(function(v){return typeof v;}));
+      console.log('ASIENTOS DEBUG - Row 2:',JSON.stringify(rows[2]));
       processAsientosRows(rows);
     };reader.readAsArrayBuffer(file);
   }
