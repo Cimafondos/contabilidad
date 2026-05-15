@@ -318,7 +318,7 @@ function render(){
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div>'+
   (function(){var emps=getEmpresas();if(!emps.length)emps=[{name:state.company.name}];var userEmps=emps;try{var users=getUsers();var cu=users.find(function(u){return u.name===(state.user?state.user.name:'');});if(cu&&cu.empresas&&cu.empresas.length>0){userEmps=emps.filter(function(em){return cu.empresas.indexOf(em.name)>=0;});}}catch(e){}return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+userEmps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
-  +'<span style="opacity:0.7">— v6.9.9</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  +'<span style="opacity:0.7">— v7.0.0</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){return '<div class="rgroup"><div class="rgroup-btns">'+g.items.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
@@ -382,7 +382,7 @@ function showEmergencyAccess(){
   alert(msg);
 }
 function renderLogin(){
-  $('app').innerHTML='<div class="login-wrap"><div class="login-box"><div style="text-align:center;margin-bottom:24px"><div class="login-logo">CF</div><div style="font-size:20px;font-weight:700">Cimafondos</div><div style="font-size:11px;color:var(--txM);margin-top:3px">Sistema contable v6.9.9</div></div><div class="card"><div class="card-b"><div style="margin-bottom:10px"><div class="lbl">Usuario</div><input class="inp" id="lu" autofocus onkeydown="if(event.key===\'Enter\')doLogin()"></div><div style="margin-bottom:14px"><div class="lbl">Contraseña</div><input class="inp" type="password" id="lp" onkeydown="if(event.key===\'Enter\')doLogin()"></div><div id="lerr" style="color:var(--rd);font-size:11px;margin-bottom:8px;text-align:center"></div><button class="btn btn-p" style="width:100%;justify-content:center;padding:9px" onclick="doLogin()">Entrar</button></div></div><div style="font-size:10px;color:var(--txM);text-align:center">admin/admin · javier/1234<br><span style="font-size:9px;cursor:pointer;text-decoration:underline" onclick="showEmergencyAccess()">¿Olvidaste tu contraseña?</span></div><div style="margin-top:8px"><button class="btn btn-d" style="width:100%;font-size:10px" onclick="quickDemo()">🎭 Cargar demo rápido</button></div><div style="font-size:10px;color:var(--txM);text-align:center"></div></div></div>';
+  $('app').innerHTML='<div class="login-wrap"><div class="login-box"><div style="text-align:center;margin-bottom:24px"><div class="login-logo">CF</div><div style="font-size:20px;font-weight:700">Cimafondos</div><div style="font-size:11px;color:var(--txM);margin-top:3px">Sistema contable v7.0.0</div></div><div class="card"><div class="card-b"><div style="margin-bottom:10px"><div class="lbl">Usuario</div><input class="inp" id="lu" autofocus onkeydown="if(event.key===\'Enter\')doLogin()"></div><div style="margin-bottom:14px"><div class="lbl">Contraseña</div><input class="inp" type="password" id="lp" onkeydown="if(event.key===\'Enter\')doLogin()"></div><div id="lerr" style="color:var(--rd);font-size:11px;margin-bottom:8px;text-align:center"></div><button class="btn btn-p" style="width:100%;justify-content:center;padding:9px" onclick="doLogin()">Entrar</button></div></div><div style="font-size:10px;color:var(--txM);text-align:center">admin/admin · javier/1234<br><span style="font-size:9px;cursor:pointer;text-decoration:underline" onclick="showEmergencyAccess()">¿Olvidaste tu contraseña?</span></div><div style="margin-top:8px"><button class="btn btn-d" style="width:100%;font-size:10px" onclick="quickDemo()">🎭 Cargar demo rápido</button></div><div style="font-size:10px;color:var(--txM);text-align:center"></div></div></div>';
 }
 async function doLogin(){
   var u=$('lu').value,p=$('lp').value;
@@ -940,9 +940,18 @@ function exportLedgerExcel(){
 }
 
 // ═══ TRIAL BALANCE ═══
-var trialFilter={from:'',to:''};
+var trialFilter={from:'',to:'',digits:8};
+var PGC_GRUPOS={'1':'Financiación básica','2':'Activo no corriente','3':'Existencias','4':'Acreedores y deudores','5':'Cuentas financieras','6':'Compras y gastos','7':'Ventas e ingresos','10':'Capital','11':'Reservas','12':'Resultados pendientes aplicación','13':'Subvenciones','14':'Provisiones','17':'Deudas LP préstamos','18':'Pasivos fianzas LP','20':'Inmovilizaciones intangibles','21':'Inmovilizaciones materiales','22':'Inversiones inmobiliarias','23':'Inmov. material en curso','25':'Otras inversiones financieras LP','26':'Fianzas y depósitos LP','28':'Amort. acumulada inmovilizado','29':'Deterioro valor activos no corrientes','30':'Comerciales','31':'Materias primas','32':'Otros aprovisionamientos','33':'Productos en curso','34':'Productos semiterminados','35':'Productos terminados','36':'Subproductos','39':'Deterioro existencias','40':'Proveedores','41':'Acreedores varios','43':'Clientes','44':'Deudores varios','46':'Personal','47':'Administraciones Públicas','48':'Ajustes periodificación','49':'Deterioro créditos comerciales','52':'Deudas CP préstamos','55':'Otras cuentas no bancarias','56':'Fianzas y depósitos CP','57':'Tesorería','60':'Compras','61':'Variación existencias','62':'Servicios exteriores','63':'Tributos','64':'Gastos de personal','65':'Otros gastos gestión','66':'Gastos financieros','67':'Pérdidas activos no corrientes','68':'Dotaciones amortizaciones','69':'Pérdidas deterioro','70':'Ventas','71':'Variación existencias','73':'Trabajos realizados empresa','74':'Subvenciones explotación','75':'Otros ingresos gestión','76':'Ingresos financieros','77':'Beneficios activos no corrientes','79':'Excesos provisiones y deterioro'};
 function trialAcctFilterHTML(){
-  return '<div style="display:flex;gap:8px;align-items:center;padding:8px 14px;background:#F8F9FB;border-bottom:1px solid #EDF0F4"><span style="font-size:11px;color:var(--txM);font-weight:600">Filtrar cuentas:</span> <span style="font-size:10px">Desde</span> <input class="inp" style="width:90px;font-size:11px;padding:4px 6px" id="trialFrom" value="'+trialFilter.from+'" placeholder="00000000" maxlength="8"> <span style="font-size:10px">Hasta</span> <input class="inp" style="width:90px;font-size:11px;padding:4px 6px" id="trialTo" value="'+trialFilter.to+'" placeholder="99999999" maxlength="8"> <button class="btn btn-p" style="font-size:10px;padding:4px 10px" onclick="applyTrialFilter()">Filtrar</button> <button class="btn btn-d" style="font-size:10px;padding:4px 10px" onclick="clearTrialFilter()">Todo</button></div>';
+  return '<div style="display:flex;gap:8px;align-items:center;padding:8px 14px;background:#F8F9FB;border-bottom:1px solid #EDF0F4;flex-wrap:wrap"><span style="font-size:11px;color:var(--txM);font-weight:600">Filtrar cuentas:</span> <span style="font-size:10px">Desde</span> <input class="inp" style="width:90px;font-size:11px;padding:4px 6px" id="trialFrom" value="'+trialFilter.from+'" placeholder="00000000" maxlength="8"> <span style="font-size:10px">Hasta</span> <input class="inp" style="width:90px;font-size:11px;padding:4px 6px" id="trialTo" value="'+trialFilter.to+'" placeholder="99999999" maxlength="8"> <button class="btn btn-p" style="font-size:10px;padding:4px 10px" onclick="applyTrialFilter()">Filtrar</button> <button class="btn btn-d" style="font-size:10px;padding:4px 10px" onclick="clearTrialFilter()">Todo</button>'+
+  '<span style="font-size:11px;color:var(--txM);font-weight:600;margin-left:12px">Nivel:</span>'+
+  '<select class="inp" style="width:auto;font-size:11px;padding:4px 6px" onchange="trialFilter.digits=parseInt(this.value);render()">'+
+  '<option value="1"'+(trialFilter.digits===1?' selected':'')+'>1 dígito (Grupos)</option>'+
+  '<option value="2"'+(trialFilter.digits===2?' selected':'')+'>2 dígitos (Subgrupos)</option>'+
+  '<option value="3"'+(trialFilter.digits===3?' selected':'')+'>3 dígitos (Cuentas)</option>'+
+  '<option value="4"'+(trialFilter.digits===4?' selected':'')+'>4 dígitos (Subcuentas)</option>'+
+  '<option value="8"'+(trialFilter.digits===8?' selected':'')+'>8 dígitos (Detalle)</option>'+
+  '</select></div>';
 }
 function clearTrialFilter(){trialFilter.from='';trialFilter.to='';render();}
 function applyTrialFilter(){
@@ -955,12 +964,37 @@ function applyTrialFilter(){
 function renderTrial(c){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var m={};all.forEach(function(e){e.lines.forEach(function(l){if(!m[l.a])m[l.a]={d:0,h:0};m[l.a].d+=l.d;m[l.a].h+=l.h;});});
-  var bals=Object.entries(m).map(function(x){var code=x[0],v=x[1];return {code:code,name:am[code]?am[code].name:code,sd:v.d,sh:v.h,sdr:Math.max(v.d-v.h,0),scr:Math.max(v.h-v.d,0)};}).sort(function(a,b){return a.code.localeCompare(b.code);});
+  
+  // Agrupar por nivel de dígitos seleccionado
+  var dig=trialFilter.digits||8;
+  var grouped={};
+  Object.entries(m).forEach(function(x){
+    var code=x[0],v=x[1];
+    var key=code.substring(0,dig);
+    // Rellenar con ceros hasta 8 para mantener consistencia
+    while(key.length<8)key+='0';
+    // Pero la clave de agrupación es solo los N dígitos
+    var gkey=code.substring(0,dig);
+    if(!grouped[gkey])grouped[gkey]={d:0,h:0};
+    grouped[gkey].d+=v.d;
+    grouped[gkey].h+=v.h;
+  });
+  
+  var bals=Object.entries(grouped).map(function(x){
+    var gkey=x[0],v=x[1];
+    var fullCode=gkey;while(fullCode.length<8)fullCode+='0';
+    // Nombre: buscar en PGC_GRUPOS para niveles 1-3, en accounts para 4-8
+    var name='';
+    if(dig<=3&&PGC_GRUPOS[gkey])name=PGC_GRUPOS[gkey];
+    else if(am[fullCode])name=am[fullCode].name;
+    else name=gkey;
+    return {code:gkey,name:name,sd:v.d,sh:v.h,sdr:Math.max(v.d-v.h,0),scr:Math.max(v.h-v.d,0)};
+  }).sort(function(a,b){return a.code.localeCompare(b.code);});
+  
   // Apply account range filter
   if(trialFilter.from||trialFilter.to){
     var ff=(trialFilter.from||'0').replace(/[^0-9]/g,'');
     var ft=(trialFilter.to||'9').replace(/[^0-9]/g,'');
-    // Pad: from pads with 0s, to pads with 9s
     while(ff.length<8)ff+='0';
     while(ft.length<8)ft+='9';
     bals=bals.filter(function(b){
@@ -970,8 +1004,9 @@ function renderTrial(c){
     });
   }
   var t=bals.reduce(function(a,b){return {sd:a.sd+b.sd,sh:a.sh+b.sh,sdr:a.sdr+b.sdr,scr:a.scr+b.scr};},{sd:0,sh:0,sdr:0,scr:0});
-  c.innerHTML=dateFilterHTML()+trialAcctFilterHTML()+'<div class="card"><div class="card-h"><span>⚖️ Sumas y saldos — '+bals.length+' cuentas</span><div style="display:flex;gap:8px;align-items:center"><span class="badge '+(Math.abs(t.sdr-t.scr)<1?'badge-g':'badge-r')+'">'+(Math.abs(t.sdr-t.scr)<1?'✓ Cuadrado':'✗ Descuadre')+'</span><button class="btn btn-d" style="font-size:10px" onclick="exportTrialExcel()">📊</button></div></div>'+
-  (bals.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody><tr class="total"><td colspan="2">TOTALES ('+bals.length+' cuentas)</td><td style="text-align:right">'+fmt(t.sd)+'</td><td style="text-align:right">'+fmt(t.sh)+'</td><td style="text-align:right">'+fmt(t.sdr)+'</td><td style="text-align:right">'+fmt(t.scr)+'</td></tr></tbody></table><div class="scr"><table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody>'+
+  var nivelTxt={1:'Grupos',2:'Subgrupos',3:'Cuentas',4:'Subcuentas',8:'Detalle'}[dig]||'';
+  c.innerHTML=dateFilterHTML()+trialAcctFilterHTML()+'<div class="card"><div class="card-h"><span>⚖️ Sumas y saldos — '+bals.length+' '+nivelTxt.toLowerCase()+'</span><div style="display:flex;gap:8px;align-items:center"><span class="badge '+(Math.abs(t.sdr-t.scr)<1?'badge-g':'badge-r')+'">'+(Math.abs(t.sdr-t.scr)<1?'✓ Cuadrado':'✗ Descuadre')+'</span><button class="btn btn-d" style="font-size:10px" onclick="exportTrialExcel()">📊</button></div></div>'+
+  (bals.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody><tr class="total"><td colspan="2">TOTALES ('+bals.length+' '+nivelTxt.toLowerCase()+')</td><td style="text-align:right">'+fmt(t.sd)+'</td><td style="text-align:right">'+fmt(t.sh)+'</td><td style="text-align:right">'+fmt(t.sdr)+'</td><td style="text-align:right">'+fmt(t.scr)+'</td></tr></tbody></table><div class="scr"><table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody>'+
   bals.map(function(b,i){return '<tr class="'+(i%2?'alt':'')+'"><td class="acct">'+b.code+'</td><td>'+h(b.name)+'</td><td style="text-align:right">'+fmt(b.sd)+'</td><td style="text-align:right">'+fmt(b.sh)+'</td><td style="text-align:right;font-weight:600">'+(b.sdr>0?fmt(b.sdr):'—')+'</td><td style="text-align:right;font-weight:600">'+(b.scr>0?fmt(b.scr):'—')+'</td></tr>';}).join('')+
   '</tbody></table></div>':'<div class="empty">Sin datos</div>')+'</div>';
 }
@@ -2085,6 +2120,17 @@ async function importAsientosAll(){
   var asientos=window._impAsientos;if(!asientos)return;
   var newAccts=window._impNewAccts||[];
   var cid=state.company.id;
+  
+  // Show progress modal
+  var total=asientos.filter(function(a){return a.cuadra;}).length+newAccts.length;
+  var done=0;
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.innerHTML='<div style="background:#fff;border-radius:12px;padding:30px;text-align:center;min-width:400px"><div style="font-size:32px">⏳</div><div style="font-weight:700;font-size:16px;margin:12px 0" id="progTitle">Contabilizando asientos...</div><div style="font-size:12px;color:var(--txM);margin:8px 0" id="progDetail">Preparando...</div><div style="background:#E0E0E0;border-radius:6px;height:8px;margin:16px 0;overflow:hidden"><div id="progBar" style="height:100%;background:var(--pri);border-radius:6px;width:0%;transition:width 0.3s"></div></div><div style="font-size:11px;color:var(--txM)" id="progCount">0 / '+total+'</div></div>';
+  document.body.appendChild(modal);
+  function updateProg(msg){done++;$('progBar').style.width=Math.round(done/total*100)+'%';$('progDetail').textContent=msg;$('progCount').textContent=done+' / '+total;}
+  
+  // 1. Create missing accounts
   for(var j=0;j<newAccts.length;j++){
     var na=newAccts[j];
     var g=parseInt(na.code[0])||0;
@@ -2094,7 +2140,11 @@ async function importAsientosAll(){
     if(g===4){var c3=na.code.substring(0,3);if(c3==='400')t='proveedor';else if(c3==='430')t='cliente';else t='gasto';}
     if(g===7)t='ingreso';
     try{await api('/api/accounts/'+cid,{method:'POST',body:{code:na.code,name:name,g:g,t:t}});}catch(e){}
+    updateProg('Cuenta '+na.code);
   }
+  
+  // 2. Import entries (only balanced ones)
+  $('progTitle').textContent='Contabilizando asientos...';
   var count=0,skipped=0;
   for(var i=0;i<asientos.length;i++){
     var a=asientos[i];
@@ -2102,7 +2152,10 @@ async function importAsientosAll(){
     var concept=a.descs.join(' / ').substring(0,120)||'Asiento '+a.num;
     await api('/api/entries/'+cid,{method:'POST',body:{id:'asi_'+uid(),date:a.date,concept:concept,type:'import_asiento',lines:a.lines}});
     count++;
+    updateProg('Asiento '+a.num+' — '+concept.substring(0,40));
   }
+  
+  document.body.removeChild(modal);
   await loadData();checkIntegrity();
   toast(count+' asientos contabilizados'+(skipped?' ('+skipped+' descuadrados omitidos)':''));
   render();

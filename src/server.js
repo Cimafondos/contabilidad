@@ -99,6 +99,12 @@ db.exec(`
     data TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS user_companies (
+    user_id TEXT REFERENCES users(id),
+    company_id TEXT REFERENCES companies(id),
+    PRIMARY KEY (user_id, company_id)
+  );
 `);
 
 // ── Seed default data if empty ──
@@ -117,40 +123,147 @@ if (companyCount === 0) {
   const insertUser = db.prepare('INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)');
   users.forEach(u => insertUser.run(...u));
 
-  // Default PGC accounts
+  // Default PGC accounts - Plan General Contable Pymes completo (219 cuentas)
   const pgc = [
-    ['10000000','Capital social',1,'P'],['11200000','Reserva legal',1,'P'],
-    ['12900000','Resultado del ejercicio',1,'P'],['17000000','Deudas LP ent. crédito',1,'P'],
-    ['21100000','Construcciones',2,'A'],['21600000','Mobiliario',2,'A'],
-    ['21700000','Equipos proceso información',2,'A'],['21800000','Elementos de transporte',2,'A'],
-    ['25000000','Inversiones financieras LP',2,'A'],['28100000','Amort. acum. inmov. material',2,'A'],
-    ['30000000','Mercaderías (NPL)',3,'A'],
-    ['40000000','Proveedores',4,'P'],['41000000','Acreedores prest. servicios',4,'P'],
-    ['43000000','Clientes',4,'A'],['44000000','Deudores',4,'A'],
-    ['46500000','Remuneraciones ptes. pago',4,'P'],
-    ['47200000','HP IVA soportado',4,'A'],['47300000','HP retenciones',4,'A'],
-    ['47200001','HP Recargo equivalencia soportado',4,'A'],
-    ['47500000','HP acreedora',4,'P'],['47700000','HP IVA repercutido',4,'P'],
-    ['52000000','Deudas CP ent. crédito',5,'P'],['55100000','C/C con socios',5,'P'],
-    ['55100001','C/C Pepe',5,'P'],['55100002','C/C Fernanda',5,'P'],
-    ['55100003','C/C Sergio',5,'P'],['55100004','C/C Santi',5,'P'],
-    ['55100005','C/C Salva',5,'P'],
-    ['57000000','Caja',5,'A'],['57200000','Bancos c/c',5,'A'],
-    ['60000000','Compras mercaderías',6,'G'],
-    ['62100000','Arrendamientos',6,'G'],['62200000','Reparaciones',6,'G'],
-    ['62300000','Servicios profesionales',6,'G'],['62400000','Transportes',6,'G'],
-    ['62500000','Primas seguros',6,'G'],['62600000','Servicios bancarios',6,'G'],
-    ['62700000','Publicidad y RRPP',6,'G'],['62800000','Suministros',6,'G'],
-    ['62900000','Otros servicios',6,'G'],['63100000','Otros tributos',6,'G'],
-    ['64000000','Sueldos y salarios',6,'G'],['64200000','Seg. Social empresa',6,'G'],
-    ['66200000','Intereses deudas',6,'G'],['66900000','Otros gtos. financieros',6,'G'],
-    ['68100000','Amortización inmov.',6,'G'],
-    ['70000000','Ventas mercaderías',7,'I'],['70500000','Prestaciones servicios',7,'I'],
-    ['75200000','Ingresos arrendamientos',7,'I'],['75900000','Ingresos serv. diversos',7,'I'],
-    ['76200000','Ingresos de créditos',7,'I'],['76900000','Otros ing. financieros',7,'I'],
+    // GRUPO 1 - FINANCIACIÓN BÁSICA
+    ['10000000','Capital social',1,'P'],['10100000','Fondo social',1,'P'],['10200000','Capital',1,'P'],
+    ['10300000','Socios por desembolsos no exigidos',1,'A'],['10400000','Socios por aportaciones no dinerarias ptes.',1,'A'],
+    ['11000000','Prima de emisión o asunción',1,'P'],['11200000','Reserva legal',1,'P'],
+    ['11300000','Reservas voluntarias',1,'P'],['11400000','Reservas especiales',1,'P'],
+    ['11800000','Aportaciones de socios o propietarios',1,'P'],['11900000','Diferencias por ajuste de capital a euros',1,'P'],
+    ['12000000','Remanente',1,'P'],['12100000','Resultados negativos de ejercicios anteriores',1,'A'],
+    ['12900000','Resultado del ejercicio',1,'P'],
+    ['13000000','Subvenciones oficiales de capital',1,'P'],['13100000','Donaciones y legados de capital',1,'P'],
+    ['14100000','Provisión para impuestos',1,'P'],['14200000','Provisión otras responsabilidades',1,'P'],
+    ['14300000','Provisión por desmantelamiento, retiro o rehabilitación',1,'P'],
+    ['17000000','Deudas LP con entidades de crédito',1,'P'],['17100000','Deudas a largo plazo',1,'P'],
+    ['17200000','Deudas LP transformables en subvenciones',1,'P'],['17300000','Proveedores de inmovilizado a largo plazo',1,'P'],
+    ['17400000','Acreedores por arrendamiento financiero LP',1,'P'],['17500000','Efectos a pagar a largo plazo',1,'P'],
+    ['18000000','Fianzas recibidas a largo plazo',1,'P'],['18100000','Anticipos recibidos por ventas LP',1,'P'],
+    // GRUPO 2 - ACTIVO NO CORRIENTE
+    ['20000000','Gastos de investigación',2,'A'],['20100000','Desarrollo',2,'A'],
+    ['20200000','Concesiones administrativas',2,'A'],['20300000','Propiedad industrial',2,'A'],
+    ['20500000','Derechos de traspaso',2,'A'],['20600000','Aplicaciones informáticas',2,'A'],
+    ['21000000','Terrenos y bienes naturales',2,'A'],['21100000','Construcciones',2,'A'],
+    ['21200000','Instalaciones técnicas',2,'A'],['21300000','Maquinaria',2,'A'],
+    ['21400000','Utillaje',2,'A'],['21500000','Otras instalaciones',2,'A'],
+    ['21600000','Mobiliario',2,'A'],['21700000','Equipos para procesos de información',2,'A'],
+    ['21800000','Elementos de transporte',2,'A'],['21900000','Otro inmovilizado material',2,'A'],
+    ['22000000','Inversiones en terrenos y bienes naturales',2,'A'],['22100000','Inversiones en construcciones',2,'A'],
+    ['23000000','Adaptación de terrenos y bienes naturales',2,'A'],['23100000','Construcciones en curso',2,'A'],
+    ['23200000','Instalaciones técnicas en montaje',2,'A'],['23300000','Maquinaria en montaje',2,'A'],
+    ['25000000','Inversiones financieras LP instrumentos patrimonio',2,'A'],['25100000','Valores representativos de deuda LP',2,'A'],
+    ['25200000','Créditos a largo plazo',2,'A'],['25300000','Créditos LP por enajenación de inmovilizado',2,'A'],
+    ['26000000','Fianzas constituidas a largo plazo',2,'A'],['26500000','Depósitos constituidos a largo plazo',2,'A'],
+    ['28000000','Amort. acum. inmovilizado intangible',2,'A'],['28100000','Amort. acum. inmovilizado material',2,'A'],
+    ['28200000','Amort. acum. inversiones inmobiliarias',2,'A'],
+    ['29000000','Deterioro valor inmovilizado intangible',2,'A'],['29100000','Deterioro valor inmovilizado material',2,'A'],
+    ['29200000','Deterioro valor inversiones inmobiliarias',2,'A'],['29700000','Deterioro valor créditos LP',2,'A'],
+    ['29800000','Deterioro valor participaciones LP',2,'A'],
+    // GRUPO 3 - EXISTENCIAS
+    ['30000000','Mercaderías A',3,'A'],['30100000','Mercaderías B',3,'A'],
+    ['31000000','Materias primas A',3,'A'],['32000000','Otros aprovisionamientos',3,'A'],
+    ['32800000','Material de oficina',3,'A'],['33000000','Productos en curso A',3,'A'],
+    ['34000000','Productos semiterminados A',3,'A'],['35000000','Productos terminados A',3,'A'],
+    ['36000000','Subproductos, residuos y materiales recuperados',3,'A'],
+    ['39000000','Deterioro valor mercaderías',3,'A'],['39100000','Deterioro valor materias primas',3,'A'],
+    ['39200000','Deterioro valor otros aprovisionamientos',3,'A'],['39300000','Deterioro valor productos en curso',3,'A'],
+    ['39400000','Deterioro valor productos semiterminados',3,'A'],['39500000','Deterioro valor productos terminados',3,'A'],
+    ['39600000','Deterioro valor subproductos',3,'A'],
+    // GRUPO 4 - ACREEDORES Y DEUDORES
+    ['40000000','Proveedores',4,'P'],['40100000','Proveedores, efectos comerciales a pagar',4,'P'],
+    ['40300000','Proveedores, empresas del grupo',4,'P'],['40600000','Envases y embalajes a devolver a proveedores',4,'A'],
+    ['40700000','Anticipos a proveedores',4,'A'],
+    ['41000000','Acreedores por prestaciones de servicios',4,'P'],['41100000','Acreedores, efectos comerciales a pagar',4,'P'],
+    ['43000000','Clientes',4,'A'],['43100000','Clientes, efectos comerciales a cobrar',4,'A'],
+    ['43200000','Clientes, operaciones de factoring',4,'A'],['43500000','Clientes de dudoso cobro',4,'A'],
+    ['43600000','Clientes de dudoso cobro, efectos comerciales',4,'A'],
+    ['43700000','Envases y embalajes a devolver por clientes',4,'P'],['43800000','Anticipos de clientes',4,'P'],
+    ['44000000','Deudores',4,'A'],['44100000','Deudores, efectos comerciales a cobrar',4,'A'],
+    ['46000000','Anticipos de remuneraciones',4,'A'],['46500000','Remuneraciones pendientes de pago',4,'P'],
+    ['47000000','HP deudora por diversos conceptos',4,'A'],['47100000','Organismos SS acreedores',4,'P'],
+    ['47200000','HP IVA soportado',4,'A'],['47200001','HP Recargo equivalencia soportado',4,'A'],
+    ['47300000','HP retenciones y pagos a cuenta',4,'A'],['47400000','Activos por impuesto diferido',4,'A'],
+    ['47500000','HP acreedora por conceptos fiscales',4,'P'],['47510000','HP acreedora retenciones practicadas',4,'P'],
+    ['47520000','HP acreedora impuesto sociedades',4,'P'],
+    ['47700000','HP IVA repercutido',4,'P'],['47700001','HP Recargo equivalencia repercutido',4,'P'],
+    ['47900000','Pasivos por diferencias temporarias imponibles',4,'P'],
+    ['48000000','Gastos anticipados',4,'A'],['48500000','Ingresos anticipados',4,'P'],
+    ['49000000','Deterioro valor créditos operaciones comerciales',4,'A'],
+    ['49300000','Deterioro valor créditos operaciones comerciales',4,'A'],
+    ['49400000','Provisiones por operaciones comerciales',4,'P'],
+    // GRUPO 5 - CUENTAS FINANCIERAS
+    ['52000000','Deudas CP con entidades de crédito',5,'P'],['52100000','Deudas a corto plazo',5,'P'],
+    ['52200000','Deudas CP transformables en subvenciones',5,'P'],['52300000','Proveedores de inmovilizado CP',5,'P'],
+    ['52400000','Acreedores arrendamiento financiero CP',5,'P'],['52500000','Efectos a pagar CP',5,'P'],
+    ['52600000','Dividendo activo a pagar',5,'P'],
+    ['55100000','Cuenta corriente con socios y administradores',5,'P'],['55500000','Partidas pendientes de aplicación',5,'P'],
+    ['56000000','Fianzas recibidas CP',5,'P'],['56100000','Depósitos recibidos CP',5,'P'],
+    ['56500000','Fianzas constituidas CP',5,'A'],['56600000','Depósitos constituidos CP',5,'A'],
+    ['57000000','Caja, euros',5,'A'],['57100000','Caja, moneda extranjera',5,'A'],
+    ['57200000','Bancos c/c vista, euros',5,'A'],['57300000','Bancos, cuentas de ahorro',5,'A'],
+    ['57400000','Bancos, moneda extranjera',5,'A'],
+    // GRUPO 6 - COMPRAS Y GASTOS
+    ['60000000','Compras de mercaderías',6,'G'],['60100000','Compras de materias primas',6,'G'],
+    ['60200000','Compras de otros aprovisionamientos',6,'G'],['60600000','Descuentos s/ compras por pronto pago',6,'G'],
+    ['60700000','Trabajos realizados por otras empresas',6,'G'],['60800000','Devoluciones de compras',6,'G'],
+    ['60900000','Rappels por compras',6,'G'],
+    ['61000000','Variación existencias mercaderías',6,'G'],['61100000','Variación existencias materias primas',6,'G'],
+    ['61200000','Variación existencias otros aprovisionamientos',6,'G'],
+    ['62100000','Arrendamientos y cánones',6,'G'],['62200000','Reparaciones y conservación',6,'G'],
+    ['62300000','Servicios profesionales independientes',6,'G'],['62400000','Transportes',6,'G'],
+    ['62500000','Primas de seguros',6,'G'],['62600000','Servicios bancarios y similares',6,'G'],
+    ['62700000','Publicidad, propaganda y RRPP',6,'G'],['62800000','Suministros',6,'G'],
+    ['62900000','Otros servicios',6,'G'],
+    ['63000000','Impuesto sobre beneficios',6,'G'],['63100000','Otros tributos',6,'G'],
+    ['63300000','Ajustes negativos imposición s/ beneficios',6,'G'],['63400000','Ajustes negativos imposición indirecta',6,'G'],
+    ['63600000','Devolución de impuestos',6,'G'],
+    ['64000000','Sueldos y salarios',6,'G'],['64100000','Indemnizaciones',6,'G'],
+    ['64200000','Seguridad Social a cargo de la empresa',6,'G'],['64900000','Otros gastos sociales',6,'G'],
+    ['65000000','Pérdidas créditos comerciales incobrables',6,'G'],['65900000','Otras pérdidas en gestión corriente',6,'G'],
+    ['66200000','Intereses de deudas',6,'G'],['66500000','Intereses descuento efectos y factoring',6,'G'],
+    ['66600000','Pérdidas en participaciones y val. repr. deuda',6,'G'],['66700000','Pérdidas de créditos no comerciales',6,'G'],
+    ['66800000','Diferencias negativas de cambio',6,'G'],['66900000','Otros gastos financieros',6,'G'],
+    ['67000000','Pérdidas procedentes inmovilizado intangible',6,'G'],['67100000','Pérdidas procedentes inmovilizado material',6,'G'],
+    ['67200000','Pérdidas procedentes inversiones inmobiliarias',6,'G'],
+    ['68000000','Amortización inmovilizado intangible',6,'G'],['68100000','Amortización inmovilizado material',6,'G'],
+    ['68200000','Amortización inversiones inmobiliarias',6,'G'],
+    ['69000000','Pérdidas deterioro inmovilizado intangible',6,'G'],['69100000','Pérdidas deterioro inmovilizado material',6,'G'],
+    ['69200000','Pérdidas deterioro inversiones inmobiliarias',6,'G'],['69300000','Pérdidas deterioro existencias',6,'G'],
+    ['69400000','Pérdidas deterioro créditos comerciales',6,'G'],['69500000','Dotación provisión operaciones comerciales',6,'G'],
+    ['69600000','Pérdidas deterioro participaciones val. repr. deuda LP',6,'G'],
+    ['69800000','Pérdidas deterioro participaciones val. repr. deuda CP',6,'G'],
+    // GRUPO 7 - VENTAS E INGRESOS
+    ['70000000','Ventas de mercaderías',7,'I'],['70100000','Ventas de productos terminados',7,'I'],
+    ['70200000','Ventas de productos semiterminados',7,'I'],['70300000','Ventas de subproductos y residuos',7,'I'],
+    ['70400000','Ventas de envases y embalajes',7,'I'],['70500000','Prestaciones de servicios',7,'I'],
+    ['70600000','Descuentos s/ ventas por pronto pago',7,'I'],['70800000','Devoluciones de ventas',7,'I'],
+    ['70900000','Rappels sobre ventas',7,'I'],
+    ['71000000','Variación existencias productos en curso',7,'I'],['71100000','Variación existencias productos semiterminados',7,'I'],
+    ['71200000','Variación existencias productos terminados',7,'I'],
+    ['73000000','Trabajos realizados para inmovilizado intangible',7,'I'],['73100000','Trabajos realizados para inmovilizado material',7,'I'],
+    ['74000000','Subvenciones, donaciones y legados a la explotación',7,'I'],
+    ['74600000','Subvenciones, donaciones y legados de capital transferidos',7,'I'],
+    ['75200000','Ingresos por arrendamientos',7,'I'],['75300000','Ingresos propiedad industrial cedida',7,'I'],
+    ['75400000','Ingresos por comisiones',7,'I'],['75500000','Ingresos por servicios al personal',7,'I'],
+    ['75900000','Ingresos por servicios diversos',7,'I'],
+    ['76000000','Ingresos participaciones instrumentos patrimonio',7,'I'],['76100000','Ingresos valores representativos deuda',7,'I'],
+    ['76200000','Ingresos de créditos',7,'I'],['76800000','Diferencias positivas de cambio',7,'I'],
+    ['76900000','Otros ingresos financieros',7,'I'],
+    ['77000000','Beneficios procedentes inmovilizado intangible',7,'I'],['77100000','Beneficios procedentes inmovilizado material',7,'I'],
+    ['77200000','Beneficios procedentes inversiones inmobiliarias',7,'I'],
+    ['79000000','Reversión deterioro inmovilizado intangible',7,'I'],['79100000','Reversión deterioro inmovilizado material',7,'I'],
+    ['79200000','Reversión deterioro inversiones inmobiliarias',7,'I'],['79300000','Reversión deterioro existencias',7,'I'],
+    ['79400000','Reversión deterioro créditos comerciales',7,'I'],['79500000','Exceso de provisiones',7,'I'],
+    ['79600000','Reversión deterioro participaciones val. repr. deuda LP',7,'I'],
+    ['79800000','Reversión deterioro participaciones val. repr. deuda CP',7,'I'],
   ];
   const insertAcct = db.prepare('INSERT INTO accounts VALUES (?, ?, ?, ?, ?)');
   pgc.forEach(a => insertAcct.run(a[0], a[1], a[2], a[3], 'c1'));
+
+  // Seed user_companies (all users can access c1)
+  const insertUC = db.prepare('INSERT OR IGNORE INTO user_companies VALUES (?, ?)');
+  users.forEach(u => insertUC.run(u[0], 'c1'));
 
   // Default rules
   const rules = [
@@ -199,16 +312,28 @@ app.post('/api/login', (req, res) => {
   res.json({ user, company });
 });
 
-// ── Helper: auto-create company if needed ──
+// ── Helper: auto-create company if needed, with full PGC ──
 function ensureCompany(companyId) {
   const existing = db.prepare('SELECT id FROM companies WHERE id = ?').get(companyId);
   if (!existing) {
     db.prepare('INSERT INTO companies VALUES (?, ?, ?, ?, ?)').run(companyId, companyId, '', '', '{}');
-    // Copy default PGC accounts for new company
+    // Copy PGC accounts from c1 (the seed company has full PGC)
     const defaultAccounts = db.prepare('SELECT code, name, group_num, type FROM accounts WHERE company_id = ?').all('c1');
     const insertAcct = db.prepare('INSERT OR IGNORE INTO accounts VALUES (?, ?, ?, ?, ?)');
     defaultAccounts.forEach(a => insertAcct.run(a.code, a.name, a.group_num, a.type, companyId));
   }
+}
+
+// ── Helper: load PGC into existing company that has few accounts ──
+function loadPGCForCompany(companyId) {
+  const defaultAccounts = db.prepare('SELECT code, name, group_num, type FROM accounts WHERE company_id = ?').all('c1');
+  const insertAcct = db.prepare('INSERT OR IGNORE INTO accounts VALUES (?, ?, ?, ?, ?)');
+  let added = 0;
+  defaultAccounts.forEach(a => {
+    const exists = db.prepare('SELECT code FROM accounts WHERE code = ? AND company_id = ?').get(a.code, companyId);
+    if (!exists) { insertAcct.run(a.code, a.name, a.group_num, a.type, companyId); added++; }
+  });
+  return added;
 }
 
 // ── ACCOUNTS ──
@@ -474,20 +599,61 @@ app.delete('/api/users/:companyId/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// ── COMPANIES MANAGEMENT ──
+// ── COMPANIES MANAGEMENT (filtered by user access) ──
 app.get('/api/companies', (req, res) => {
-  const rows = db.prepare('SELECT * FROM companies').all();
-  res.json(rows);
+  const userId = req.query.userId;
+  const userRole = req.query.role;
+  if (userRole === 'admin') {
+    // Admin sees all companies
+    const rows = db.prepare('SELECT * FROM companies').all();
+    res.json(rows);
+  } else if (userId) {
+    // Regular user only sees assigned companies
+    const rows = db.prepare('SELECT c.* FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ?').all(userId);
+    res.json(rows);
+  } else {
+    const rows = db.prepare('SELECT * FROM companies').all();
+    res.json(rows);
+  }
 });
 
 app.post('/api/companies', (req, res) => {
   const { id, name, cif, address, config } = req.body;
   try {
     db.prepare('INSERT OR REPLACE INTO companies VALUES (?, ?, ?, ?, ?)').run(id, name, cif || '', address || '', config || '{}');
+    // Load full PGC for new company
+    loadPGCForCompany(id);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ── USER-COMPANY ACCESS ──
+app.get('/api/user-companies/:userId', (req, res) => {
+  const rows = db.prepare('SELECT company_id FROM user_companies WHERE user_id = ?').all(req.params.userId);
+  res.json(rows.map(r => r.company_id));
+});
+
+app.post('/api/user-companies', (req, res) => {
+  const { userId, companyId } = req.body;
+  try {
+    db.prepare('INSERT OR IGNORE INTO user_companies VALUES (?, ?)').run(userId, companyId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/user-companies/:userId/:companyId', (req, res) => {
+  db.prepare('DELETE FROM user_companies WHERE user_id = ? AND company_id = ?').run(req.params.userId, req.params.companyId);
+  res.json({ ok: true });
+});
+
+// ── LOAD PGC for existing company ──
+app.post('/api/load-pgc/:companyId', (req, res) => {
+  const added = loadPGCForCompany(req.params.companyId);
+  res.json({ ok: true, added });
 });
 
 // ── SPA fallback ──
@@ -497,6 +663,6 @@ app.get('*', (req, res) => {
 
 // ── Start ──
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✓ Cimafondos v6.9.9 running on port ${PORT}`);
+  console.log(`✓ Cimafondos v7.0.0 running on port ${PORT}`);
   console.log(`  Database: ${DB_PATH}`);
 });
