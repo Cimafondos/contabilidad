@@ -3329,63 +3329,35 @@ function deleteUsuarioGrupo(userId,nombre){
 }
 
 async function renderAdmin(c){
-  if(!state.user||state.user.role!=='superadmin'){c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">\u26d4 Acceso restringido a superadministradores</div></div>';return;}
-  c.innerHTML='<div style="text-align:center;padding:40px;color:var(--txM)">Cargando...</div>';
-  try{
-  var serverEmps=await api('/api/companies');
-  var serverUsers=await api('/api/group-users');
-  var groups=await api('/api/groups');
-  var groupMap={};groups.forEach(function(g){groupMap[g.id]=g.name;});
-  var groupOpts=groups.map(function(g){return '<option value="'+g.id+'">'+h(g.name)+'</option>';}).join('');
-  c.innerHTML='<div class="card"><div class="card-h"><span>\ud83d\udc64 Panel de administraci\u00f3n (Superadmin)</span><button class="btn btn-p" style="font-size:10px" onclick="runTestCuadre()">\ud83e\uddea Test de cuadre fiscal</button></div><div class="card-b">'+
-  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
-  '<div class="card"><div class="card-h">\ud83c\udfe2 Grupos \u2014 '+groups.length+'<button class="btn btn-p" style="margin-left:auto;font-size:10px" onclick="newGrupoAdmin()">+ Nuevo grupo</button></div><table><thead><tr><th>Grupo</th><th>Empresas</th><th>Usuarios</th></tr></thead><tbody>'+
-  groups.map(function(g,i){var ne=serverEmps.filter(function(e){return e.group_id===g.id;}).length;var nu=serverUsers.filter(function(u){return u.group_id===g.id;}).length;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(g.name)+'</td><td>'+ne+'</td><td>'+nu+'</td></tr>';}).join('')+
-  '</tbody></table></div>'+
-  '<div class="card"><div class="card-h">\ud83d\udc65 Usuarios \u2014 '+serverUsers.length+'</div><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Grupo</th></tr></thead><tbody>'+
-  serverUsers.map(function(u,i){var rl=u.role==='superadmin'?'Superadmin':u.role==='group_admin'?'Admin Grupo':'Usuario';var rc=u.role==='superadmin'?'badge-r':u.role==='group_admin'?'badge-b':'badge-g';return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(u.username)+'</td><td>'+h(u.name)+'</td><td><span class="badge '+rc+'">'+rl+'</span></td><td>'+h(groupMap[u.group_id]||'\u2014')+'</td></tr>';}).join('')+
-  '</tbody></table></div>'+
-  '</div>'+
-  '<div class="card" style="margin-top:8px"><div class="card-h">\ud83c\udfe2 Todas las empresas \u2014 '+serverEmps.length+'</div><table><thead><tr><th>Empresa</th><th>CIF</th><th>Grupo</th><th style="width:120px">Mover a grupo</th></tr></thead><tbody>'+
-  serverEmps.map(function(em,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(em.name)+'</td><td style="font-size:10px">'+h(em.cif||'\u2014')+'</td><td><span class="badge badge-b">'+h(groupMap[em.group_id]||'Sin grupo')+'</span></td><td><select class="sel" style="font-size:10px;padding:2px 4px" onchange="moveEmpresaGrupo(\''+em.id+'\',this.value)"><option value="">\u2014</option>'+groupOpts+'</select></td></tr>';}).join('')+
-  '</tbody></table></div>'+
-  '<div class="card" style="margin-top:8px"><div class="card-h" style="color:var(--rd)">\u26a0\ufe0f Zona peligrosa</div><div class="card-b">'+
+  if(!state.user||state.user.role!=='superadmin'){c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">⛔ Acceso restringido a superadministradores</div></div>';return;}
+  c.innerHTML='<div class="card"><div class="card-h"><span>👤 Panel de administración (Superadmin)</span><button class="btn btn-p" style="font-size:10px" onclick="runTestCuadre()">🧪 Test de cuadre fiscal</button></div><div class="card-b">'+
+  '<div class="card" style="margin-bottom:8px"><div class="card-h">📊 Estadísticas del sistema</div><div class="card-b"><div class="row">'+
+  '<div class="stat"><div class="stat-v" style="color:var(--bl)">'+state.entries.length+'</div><div class="stat-l">Asientos</div></div>'+
+  '<div class="stat"><div class="stat-v" style="color:var(--ok)">'+state.accounts.length+'</div><div class="stat-l">Cuentas</div></div>'+
+  '<div class="stat"><div class="stat-v" style="color:var(--am)">'+state.rules.length+'</div><div class="stat-l">Reglas</div></div>'+
+  '</div></div></div>'+
+  '<div class="card" style="margin-top:8px"><div class="card-h" style="color:var(--rd)">⚠️ Zona peligrosa</div><div class="card-b">'+
   '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-  '<button class="btn btn-a" onclick="softDeleteAsientos(\'empresa\')">\ud83d\uddd1 Marcar asientos empresa actual como eliminados</button>'+
-  '<button class="btn btn-r" onclick="softDeleteAsientos(\'todas\')">\ud83d\uddd1 Marcar asientos TODAS las empresas como eliminados</button>'+
-  '<button class="btn btn-p" onclick="recuperarAsientos()">\u267b\ufe0f Recuperar asientos eliminados</button>'+
-  '<button class="btn" style="background:#B71C1C;color:#fff" onclick="borrarDatosEmpresa()">\ud83d\udc80 Borrar TODOS los datos de esta empresa</button>'+
-  '<button class="btn btn-d" onclick="exportarTodoCSV()">\ud83d\udcca Exportar todo CSV</button>'+
+  '<button class="btn btn-a" onclick="softDeleteAsientos(\'empresa\')">🗑 Marcar asientos empresa actual como eliminados</button>'+
+  '<button class="btn btn-r" onclick="softDeleteAsientos(\'todas\')">🗑 Marcar asientos TODAS las empresas como eliminados</button>'+
+  '<button class="btn btn-p" onclick="recuperarAsientos()">♻️ Recuperar asientos eliminados</button>'+
+  '<button class="btn btn-d" onclick="exportarTodoCSV()">📊 Exportar todo CSV</button>'+
   '</div>'+
-  '<div style="margin-top:8px;font-size:10px;color:var(--txM)">\u2139\ufe0f Los asientos marcados como eliminados no se muestran pero se pueden recuperar (como en Sage).</div>'+
+  '<div style="margin-top:8px;font-size:10px;color:var(--txM)">ℹ️ Los asientos marcados como eliminados no se muestran pero se pueden recuperar (como en Sage). Para borrado definitivo usa la Papelera.</div>'+
   '</div></div>'+
   '<div id="testResults"></div>'+
   '</div></div>';
-  }catch(e){c.innerHTML='<div class="card"><div class="card-b" style="color:var(--rd);padding:20px">Error: '+e.message+'</div></div>';}
 }
 function getEmpresas(){try{return JSON.parse(localStorage.getItem('cf_empresas')||'[]');}catch(e){return [];}}
 function saveEmpresas(arr){try{localStorage.setItem('cf_empresas',JSON.stringify(arr));}catch(e){}}
 
 // Map of company IDs to real names — never lose the real name
-var EMPRESA_MAP={
-  'c1':'Cimafondos S.L.',
-  'valentia_alimentaci_n_s_l_':'Valentia Alimentación S.L.',
-  'valentia_alimentacion_s_l_':'Valentia Alimentación S.L.',
-  'espacio_cf':'Espacio CF',
-  'default':'Cimafondos S.L.'
-};
+var EMPRESA_MAP={};
 function resolveCompanyName(idOrName){
-  // Direct ID lookup
   if(EMPRESA_MAP[idOrName])return EMPRESA_MAP[idOrName];
-  // Check if it already is a real name in empresas list
-  var emps=getEmpresas();
-  var found=emps.find(function(e){return e.name===idOrName;});
+  var emps=state.serverEmpresas||[];
+  var found=emps.find(function(e){return e.id===idOrName||e.name===idOrName;});
   if(found)return found.name;
-  // Check if it's a known ID pattern (underscored version of a name)
-  for(var key in EMPRESA_MAP){
-    if(key===idOrName||EMPRESA_MAP[key]===idOrName)return EMPRESA_MAP[key];
-  }
-  // Last resort: return as-is but cleaned up
   return idOrName;
 }
 function fixCompanyState(){
