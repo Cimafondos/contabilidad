@@ -1650,36 +1650,60 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     facturas.push(fact);
   }
 
-  // Check for duplicates against ALL existing entries (including soft-deleted!)
+  // ═══ ANTI-DUPLICADOS TRIPLE CAPA ═══
+  // Capa 1: Verificar contra TODOS los asientos del servidor (incluidos borrados)
   var existingNums={};
-  // Load ALL entries from server (the endpoint returns deleted ones too)
+  var existingHashes={}; // CIF + importe + fecha para detección por contenido
   try{
-    var allEntries=await api('/api/entries/'+state.company.id);
+    var allEntries=await api('/api/entries/'+state.company.id+'?deleted=1');
     if(allEntries&&allEntries.length){
       allEntries.forEach(function(e){
         if(e.concept){
           var m=e.concept.match(/\[([^\]]+)\]/);
-          if(m)existingNums[m[1]]=true;
+          if(m){existingNums[m[1]]=true;existingNums[m[1].toUpperCase()]=true;}
+          // Hash by content: CIF from concept + total debe
+          var totalD=0;if(e.lines)e.lines.forEach(function(l){totalD+=l.d||0;});
+          var contentHash=(e.date||'')+'_'+Math.round(totalD*100);
+          existingHashes[contentHash]=true;
         }
       });
     }
   }catch(e){
-    // Fallback to state.entries if server fails
     state.entries.forEach(function(e){
-      if(e.concept){var m=e.concept.match(/\[([^\]]+)\]/);if(m)existingNums[m[1]]=true;}
+      if(e.concept){var m=e.concept.match(/\[([^\]]+)\]/);if(m){existingNums[m[1]]=true;existingNums[m[1].toUpperCase()]=true;}}
     });
   }
 
+  // Capa 2: Deduplicar dentro del propio lote de importación
+  var seenInBatch={};
+  var seenHashInBatch={};
+  
   var nuevas=[],duplicadas=[];
-  var seenInBatch={}; // Also prevent duplicates within the same import batch
   facturas.forEach(function(f){
-    var key=f.numFact+'_'+f.cif;
-    if(existingNums[f.numFact]||existingNums[key]||seenInBatch[f.numFact]||seenInBatch[key]){
+    var numUpper=(f.numFact||'').toUpperCase();
+    var key=numUpper+'_'+f.cif;
+    // Capa 3: Hash por contenido (fecha + CIF + importe) para detectar mismo documento con nº diferente
+    var contentHash=(f.fecha||'')+'_'+Math.round(Math.abs(f.total)*100);
+    
+    var isDup=false;
+    var reason='';
+    // Check Capa 1: servidor
+    if(existingNums[f.numFact]||existingNums[numUpper]||existingNums[key]){isDup=true;reason='ya contabilizada';}
+    // Check Capa 2: mismo lote
+    if(!isDup&&(seenInBatch[f.numFact]||seenInBatch[numUpper]||seenInBatch[key])){isDup=true;reason='duplicada en lote';}
+    // Check Capa 3: mismo contenido (fecha+importe)
+    if(!isDup&&existingHashes[contentHash]){isDup=true;reason='mismo importe y fecha ya existe';}
+    if(!isDup&&seenHashInBatch[contentHash]){isDup=true;reason='mismo importe y fecha en lote';}
+    
+    if(isDup){
+      f._dupReason=reason;
       duplicadas.push(f);
     }else{
       nuevas.push(f);
       seenInBatch[f.numFact]=true;
+      seenInBatch[numUpper]=true;
       seenInBatch[key]=true;
+      seenHashInBatch[contentHash]=true;
     }
   });
 
@@ -1688,6 +1712,7 @@ async function processFacturasRows(rows,tipo,resumenIVA){
 }
 
 function showFacturasImportResult(nuevas,duplicadas,tipo,resumenIVA){
+  window._lastResumenIVA=resumenIVA; // Save for post-contabilization test
   var res=$('impResult');if(!res)return;
   var totalNuevas=nuevas.reduce(function(s,f){return s+f.total;},0);
 
@@ -1995,11 +2020,35 @@ async function contabilizarFacturas(){
   // Remove progress overlay
   var ov=$('impProgress');if(ov)ov.remove();
   auditLog('importar_facturas',tipo+': '+created+' facturas');
+  
+  // ═══ TEST POST-CONTABILIZACIÓN ═══
+  // Verify totals match the gestor if we have resumenIVA
+  var postTestMsg='';
+  if(window._lastResumenIVA){
+    var ri=window._lastResumenIVA;
+    var postIvaSop=0,postIvaRep=0;
+    state.entries.forEach(function(e){
+      e.lines.forEach(function(l){
+        if(l.a==='47200000')postIvaSop+=l.d-l.h;
+        if(l.a&&l.a.startsWith('477'))postIvaRep+=l.h-l.d;
+      });
+    });
+    postIvaSop=Math.round(postIvaSop*100)/100;
+    if(ri.totalIVA&&Math.abs(postIvaSop-ri.totalIVA)>0.05){
+      postTestMsg='\n\n⚠️ ALERTA: IVA Soportado post-contabilización ('+fmt(postIvaSop)+'€) NO cuadra con gestor ('+fmt(ri.totalIVA)+'€). Diferencia: '+fmt(Math.abs(postIvaSop-ri.totalIVA))+'€. Revisa antes de continuar.';
+    }
+    var numAsientos=state.entries.length;
+    if(ri.totalIVA&&Math.abs(postIvaSop-ri.totalIVA)<0.05){
+      postTestMsg='\n\n✅ IVA verificado post-contabilización: '+fmt(postIvaSop)+'€ = gestor '+fmt(ri.totalIVA)+'€';
+    }
+  }
+  
   var msg='✓ '+created+' facturas contabilizadas';
   if(provsCreated>0)msg+=' · '+provsCreated+' proveedores nuevos';
   if(clientsCreated>0)msg+=' · '+clientsCreated+' clientes nuevos';
   if(window._facturasSkipped&&window._facturasSkipped>0)msg+=' · '+window._facturasSkipped+' duplicadas saltadas';
-  toast(msg,'ok');
+  if(postTestMsg)msg+=postTestMsg;
+  toast(msg,postTestMsg&&postTestMsg.indexOf('ALERTA')>=0?'error':'ok');
   render();
 }
 
