@@ -306,6 +306,7 @@ function changeEmpresa(name){
   EMPRESA_MAP[compId]=em.name;
   // Remember last selected company — ALWAYS save real name
   try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:compId,name:em.name}));}catch(e){}
+  showProgress('Cambiando empresa','Cargando '+name+'...');
   loadData().then(function(){checkIntegrity();fixCompanyState();render();}).catch(function(){
     state.accounts=[];state.entries=[];state.rules=[];render();
     toast('Empresa '+name+': sin datos en el servidor','ok');
@@ -458,9 +459,39 @@ async function doLogin(){
     var el=$('lerr');if(el)el.textContent='Usuario o contraseña incorrectos';
   }
 }
+function closeModal(){var m=document.getElementById('modalOverlay');if(m)m.remove();}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
+
+// ═══ SISTEMA DE PROGRESO CENTRALIZADO ═══
+function showProgress(title,detail){
+  var existing=document.getElementById('progressOverlay');
+  if(existing)existing.remove();
+  var overlay=document.createElement('div');
+  overlay.id='progressOverlay';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999';
+  overlay.innerHTML='<div style="background:#fff;border-radius:12px;padding:30px 50px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);min-width:320px">'+
+    '<div style="font-size:28px;margin-bottom:10px" id="progressIcon">⏳</div>'+
+    '<div style="font-size:16px;font-weight:700;margin-bottom:6px" id="progressTitle">'+h(title||'Procesando...')+'</div>'+
+    '<div style="font-size:12px;color:var(--txM);margin-bottom:4px" id="progressDetail">'+h(detail||'Espera un momento...')+'</div>'+
+    '<div style="margin-top:12px;background:#E8E8E8;border-radius:6px;height:8px;overflow:hidden"><div id="progressBar" style="background:var(--pri);height:100%;width:0%;transition:width 0.3s;border-radius:6px"></div></div>'+
+    '<div style="font-size:10px;color:var(--txM);margin-top:6px" id="progressCount"></div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+function updateProgress(pct,detail,count){
+  var bar=document.getElementById('progressBar');if(bar)bar.style.width=Math.min(pct,100)+'%';
+  if(detail){var d=document.getElementById('progressDetail');if(d)d.textContent=detail;}
+  if(count!==undefined){var c=document.getElementById('progressCount');if(c)c.textContent=count;}
+}
+function hideProgress(icon,title){
+  var i=document.getElementById('progressIcon');if(i)i.textContent=icon||'✅';
+  var t=document.getElementById('progressTitle');if(t)t.textContent=title||'Completado';
+  var bar=document.getElementById('progressBar');if(bar)bar.style.width='100%';
+  setTimeout(function(){var o=document.getElementById('progressOverlay');if(o)o.remove();},1500);
+}
 function showChangePassword(){
   var modal=document.createElement('div');
-  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';modal.onclick=function(e){if(e.target===modal)modal.remove();};
   modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
     '<h3 style="margin:0 0 16px">🔑 Cambiar contraseña</h3>'+
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Contraseña actual</label><input type="password" id="cpOld" class="inp" style="width:100%"></div>'+
@@ -468,7 +499,7 @@ function showChangePassword(){
     '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">Repetir nueva contraseña</label><input type="password" id="cpNew2" class="inp" style="width:100%"></div>'+
     '<div id="cpError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end">'+
-    '<button class="btn btn-d" onclick="this.closest(\'div[style]\').remove()">Cancelar</button>'+
+    '<button class="btn btn-d" onclick="closeModal()">Cancelar</button>'+
     '<button class="btn btn-p" onclick="doChangePassword()">Cambiar</button>'+
     '</div></div>';
   document.body.appendChild(modal);
@@ -486,7 +517,7 @@ async function doChangePassword(){
     var r=await api('/api/change-password',{method:'POST',body:{oldPassword:old,newPassword:n1}});
     if(r&&r.ok){
       toast('✓ Contraseña cambiada correctamente');
-      document.querySelector('div[style*="position:fixed"]').remove();
+      closeModal();
     }else{
       err.textContent=r.error||'Error al cambiar contraseña';
     }
@@ -499,9 +530,13 @@ function logout(){
 }
 
 async function loadData(){
+  showProgress('Cargando datos','Conectando con el servidor...');
   var cid=state.company.id;
+  updateProgress(30,'Descargando cuentas, asientos y reglas...');
   var res=await Promise.all([api('/api/accounts/'+cid),api('/api/entries/'+cid),api('/api/rules/'+cid)]);
   state.accounts=res[0];state.entries=res[1].filter(function(e){return !e.del&&!e.deleted;});state.rules=res[2];
+  updateProgress(100,'Datos cargados');
+  var o=document.getElementById('progressOverlay');if(o)o.remove();
 }
 
 // Destroy existing charts to prevent "Canvas already in use" error
@@ -2169,7 +2204,7 @@ async function importAsientosAll(){
   var total=asientos.filter(function(a){return a.cuadra;}).length+newAccts.length;
   var done=0;
   var modal=document.createElement('div');
-  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';modal.onclick=function(e){if(e.target===modal)modal.remove();};
   modal.innerHTML='<div style="background:#fff;border-radius:12px;padding:30px;text-align:center;min-width:400px"><div style="font-size:32px">⏳</div><div style="font-weight:700;font-size:16px;margin:12px 0" id="progTitle">Contabilizando asientos...</div><div style="font-size:12px;color:var(--txM);margin:8px 0" id="progDetail">Preparando...</div><div style="background:#E0E0E0;border-radius:6px;height:8px;margin:16px 0;overflow:hidden"><div id="progBar" style="height:100%;background:var(--pri);border-radius:6px;width:0%;transition:width 0.3s"></div></div><div style="font-size:11px;color:var(--txM)" id="progCount">0 / '+total+'</div></div>';
   document.body.appendChild(modal);
   function updateProg(msg){done++;$('progBar').style.width=Math.round(done/total*100)+'%';$('progDetail').textContent=msg;$('progCount').textContent=done+' / '+total;}
@@ -3026,7 +3061,7 @@ function newEmpresaGrupo(){
       return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:3px 0"><input type="checkbox" class="neUserCheck" value="'+u.id+'" checked>'+h(u.name)+' ('+u.username+')</label>';
     }).join('');
     var modal=document.createElement('div');
-    modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;overflow-y:auto';
+    modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;overflow-y:auto';modal.onclick=function(e){if(e.target===modal)modal.remove();};
     modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
       '<h3 style="margin:0 0 16px">\ud83c\udfe2 Nueva empresa</h3>'+
       '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre de la empresa *</label><input id="neNombre" class="inp" style="width:100%" placeholder="Ej: Mi Empresa S.L."></div>'+
@@ -3046,7 +3081,7 @@ function newEmpresaGrupo(){
       '</div>'+
       '<div id="neError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
       '<div style="display:flex;gap:8px;justify-content:flex-end">'+
-      '<button class="btn btn-d" onclick="this.closest(\'div[style]\').remove()">Cancelar</button>'+
+      '<button class="btn btn-d" onclick="closeModal()">Cancelar</button>'+
       '<button class="btn btn-p" onclick="doNewEmpresaGrupo()">Crear empresa</button>'+
       '</div></div>';
     document.body.appendChild(modal);
@@ -3070,7 +3105,7 @@ function doNewEmpresaGrupo(){
     var promises=selectedUsers.map(function(uid){return api('/api/user-companies',{method:'POST',body:{userId:uid,companyId:id}});});
     return Promise.all(promises);
   }).then(function(){
-    document.querySelector('div[style*="position:fixed"]').remove();
+    closeModal();
     toast('\u2713 Empresa '+nombre+' creada con Plan Contable Pymes');
     api('/api/companies').then(function(emps){state.serverEmpresas=emps;render();});
   }).catch(function(e){if(err)err.textContent='Error: '+e.message;});
@@ -3078,7 +3113,7 @@ function doNewEmpresaGrupo(){
 
 function newUsuarioGrupo(){
   var modal=document.createElement('div');
-  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';modal.onclick=function(e){if(e.target===modal)modal.remove();};
   modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
     '<h3 style="margin:0 0 16px">👤 Nuevo usuario</h3>'+
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Usuario (para iniciar sesión)</label><input id="nuUser" class="inp" style="width:100%" placeholder="Ej: juan"></div>'+
@@ -3087,7 +3122,7 @@ function newUsuarioGrupo(){
     '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">Rol</label><select id="nuRol" class="sel" style="width:100%"><option value="user">Usuario</option><option value="group_admin">Administrador del grupo</option></select></div>'+
     '<div id="nuError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end">'+
-    '<button class="btn btn-d" onclick="this.closest(\'div[style]\').remove()">Cancelar</button>'+
+    '<button class="btn btn-d" onclick="closeModal()">Cancelar</button>'+
     '<button class="btn btn-p" onclick="doNewUsuarioGrupo()">Crear usuario</button>'+
     '</div></div>';
   document.body.appendChild(modal);
@@ -3104,21 +3139,23 @@ function doNewUsuarioGrupo(){
   if(!pass||pass.length<4){err.textContent='Contraseña mínimo 4 caracteres';return;}
   var id='u_'+Date.now();
   api('/api/group-users',{method:'POST',body:{id:id,username:username,name:nombre,password:pass,role:rol}}).then(function(){
-    document.querySelector('div[style*="position:fixed"]').remove();
+    closeModal();
     toast('✓ Usuario '+nombre+' creado');render();
   }).catch(function(e){err.textContent='Error: '+e.message;});
 }
 
 function editEmpresaGrupo(id,nombre,cif){
   var modal=document.createElement('div');
-  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.id='modalOverlay';
+  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';modal.onclick=function(e){if(e.target===modal)modal.remove();};
+  modal.onclick=function(e){if(e.target===modal)modal.remove();};
   modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
     '<h3 style="margin:0 0 16px">✏️ Editar empresa</h3>'+
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre</label><input id="eeNombre" class="inp" style="width:100%" value="'+h(nombre)+'"></div>'+
     '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">CIF</label><input id="eeCif" class="inp" style="width:100%" value="'+h(cif)+'"></div>'+
     '<div id="eeError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end">'+
-    '<button class="btn btn-d" onclick="this.closest(\'div[style]\').remove()">Cancelar</button>'+
+    '<button class="btn btn-d" onclick="document.getElementById(\'modalOverlay\').remove()">Cancelar</button>'+
     '<button class="btn btn-p" onclick="doEditEmpresaGrupo(\''+h(id)+'\')">Guardar</button>'+
     '</div></div>';
   document.body.appendChild(modal);
@@ -3128,7 +3165,7 @@ function doEditEmpresaGrupo(id){
   var cif=document.getElementById('eeCif').value.trim();
   if(!nombre){document.getElementById('eeError').textContent='El nombre es obligatorio';return;}
   api('/api/companies',{method:'POST',body:{id:id,name:nombre,cif:cif}}).then(function(){
-    document.querySelector('div[style*="position:fixed"]').remove();
+    closeModal();
     toast('✓ Empresa actualizada');
     api('/api/companies').then(function(emps){state.serverEmpresas=emps;render();});
   }).catch(function(e){document.getElementById('eeError').textContent='Error: '+e.message;});
@@ -3136,7 +3173,7 @@ function doEditEmpresaGrupo(id){
 
 function editUsuarioGrupo(id,username,nombre,rol){
   var modal=document.createElement('div');
-  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';modal.onclick=function(e){if(e.target===modal)modal.remove();};
   modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
     '<h3 style="margin:0 0 16px">✏️ Editar usuario</h3>'+
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Usuario</label><input id="euUser" class="inp" style="width:100%" value="'+h(username)+'"></div>'+
@@ -3145,7 +3182,7 @@ function editUsuarioGrupo(id,username,nombre,rol){
     '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">Rol</label><select id="euRol" class="sel" style="width:100%"><option value="user"'+(rol==='user'?' selected':'')+'>Usuario</option><option value="group_admin"'+(rol==='group_admin'?' selected':'')+'>Administrador del grupo</option></select></div>'+
     '<div id="euError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end">'+
-    '<button class="btn btn-d" onclick="this.closest(\'div[style]\').remove()">Cancelar</button>'+
+    '<button class="btn btn-d" onclick="closeModal()">Cancelar</button>'+
     '<button class="btn btn-p" onclick="doEditUsuarioGrupo(\''+h(id)+'\')">Guardar</button>'+
     '</div></div>';
   document.body.appendChild(modal);
@@ -3162,7 +3199,7 @@ function doEditUsuarioGrupo(id){
   var body={id:id,username:username,name:nombre,role:rol};
   if(pass)body.password=pass;
   api('/api/group-users',{method:'POST',body:body}).then(function(){
-    document.querySelector('div[style*="position:fixed"]').remove();
+    closeModal();
     toast('✓ Usuario actualizado');render();
   }).catch(function(e){err.textContent='Error: '+e.message;});
 }
@@ -3644,23 +3681,27 @@ async function softDeleteAsientos(scope){
   var msg=scope==='todas'?'¿Marcar como eliminados TODOS los asientos de TODAS las empresas?':'¿Marcar como eliminados todos los asientos de '+state.company.name+'?';
   if(!confirm(msg))return;
   if(scope==='todas'&&!confirm('⚠️ SEGUNDA CONFIRMACIÓN: Esto afecta a TODAS las empresas. ¿Continuar?'))return;
+  showProgress('Eliminando asientos','Marcando como eliminados...');
   try{
     var url=scope==='todas'?'/api/soft-delete-entries/_all_':'/api/soft-delete-entries/'+state.company.id;
     var r=await api(url,{method:'POST'});
+    updateProgress(70,'Recargando datos...');
     await loadData();checkIntegrity();
-    toast('✓ '+(r.count||0)+' asientos marcados como eliminados. Se pueden recuperar desde aquí.','ok');
+    hideProgress('✅',(r.count||0)+' asientos eliminados');
     render();
-  }catch(e){toast('Error: '+e.message,'error');}
+  }catch(e){hideProgress('❌','Error');toast('Error: '+e.message,'error');}
 }
 
 async function recuperarAsientos(){
   if(!confirm('¿Recuperar todos los asientos eliminados de '+state.company.name+'?'))return;
+  showProgress('Recuperando asientos','Restaurando datos...');
   try{
     var r=await api('/api/recover-entries/'+state.company.id,{method:'POST'});
+    updateProgress(70,'Recargando datos...');
     await loadData();checkIntegrity();
-    toast('✓ '+(r.count||0)+' asientos recuperados','ok');
+    hideProgress('✅',(r.count||0)+' asientos recuperados');
     render();
-  }catch(e){toast('Error: '+e.message,'error');}
+  }catch(e){hideProgress('❌','Error');toast('Error: '+e.message,'error');}
 }
 
 // ═══ CARTERA DE EXPEDIENTES ═══
@@ -4750,16 +4791,19 @@ async function restoreEntry(id){
 async function emptyTrash(){
   if(!confirm('¿Vaciar la papelera PERMANENTEMENTE?\n\nEsta acción NO se puede deshacer.\nSe eliminarán todos los asientos borrados de la empresa actual.'))return;
   if(!confirm('SEGUNDA CONFIRMACIÓN\n\n¿Estás completamente seguro?\nPulsa Aceptar para eliminar permanentemente.'))return;
+  showProgress('Vaciando papelera','Eliminando asientos permanentemente...');
   try{
     var r=await api('/api/purge-entries/'+state.company.id,{method:'POST',body:{}});
     if(r&&r.ok){
       auditLog('vaciar_papelera',r.count+' asientos purgados');
-      toast('✓ Papelera vaciada: '+r.count+' asientos eliminados permanentemente');
-      await loadData();checkIntegrity();render();
+      updateProgress(70,'Recargando datos...');
+      await loadData();checkIntegrity();
+      hideProgress('✅',r.count+' asientos eliminados permanentemente');
+      render();
     }else{
-      toast('Error: el servidor no respondió correctamente','error');
+      hideProgress('❌','Error');toast('Error: el servidor no respondió correctamente','error');
     }
-  }catch(e){toast('Error al vaciar papelera: '+e.message,'error');}
+  }catch(e){hideProgress('❌','Error');toast('Error al vaciar papelera: '+e.message,'error');}
 }
 
 // ═══ REGISTRO DE AUDITORÍA ═══
@@ -4819,17 +4863,19 @@ function getLastBackupInfo(){
   return {text:'⚠ hace '+days+' días',ok:false};
 }
 async function doBackup(){
+  showProgress('Creando backup','Preparando datos...');
   try{
+    updateProgress(30,'Empaquetando cuentas, asientos y reglas...');
     var data={accounts:state.accounts,entries:state.entries,rules:state.rules,masters:masters,date:new Date().toISOString(),company:state.company};
+    updateProgress(60,'Generando fichero...');
     var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
     var url=URL.createObjectURL(blob);
     var a=document.createElement('a');a.href=url;a.download='backup_cimafondos_'+state.ejercicio+'_'+today()+'.json';
     document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
-    // Log the backup
     logBackup('manual','Descarga fichero JSON');
     auditLog('backup_manual','Backup descargado');
-    toast('Backup descargado');
-  }catch(e){toast('Error: '+e.message,'error');}
+    hideProgress('✅','Backup descargado');
+  }catch(e){hideProgress('❌','Error');toast('Error: '+e.message,'error');}
 }
 function logBackup(tipo,detalle){
   try{
