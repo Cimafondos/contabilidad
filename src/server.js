@@ -300,6 +300,7 @@ if (companyCount === 0) {
     ['79800000','Reversión deterioro participaciones val. repr. deuda CP',7,'I'],
   ];
   // Store PGC as template (company_id = '_pgc_template_') for loading into new companies
+  db.prepare("INSERT OR IGNORE INTO companies VALUES ('_pgc_template_', 'PGC Template', '', '', '{}', NULL)").run();
   const insertAcct = db.prepare('INSERT INTO accounts VALUES (?, ?, ?, ?, ?)');
   pgc.forEach(a => insertAcct.run(a[0], a[1], a[2], a[3], '_pgc_template_'));
 
