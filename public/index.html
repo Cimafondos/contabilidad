@@ -1792,6 +1792,18 @@ async function contabilizarFacturas(){
   var tipo=window._facturasType;
   if(!facturas||!facturas.length){toast('No hay facturas','error');return;}
 
+  // DIAGNOSTIC: verify IVA totals before contabilizing
+  var diagIva=0,diagNoIva=[];
+  facturas.forEach(function(f){
+    var iva=f.iva21+f.iva10+f.iva4;
+    diagIva+=iva;
+    if(Math.abs(iva)<0.01&&Math.abs(f.total)>1)diagNoIva.push(f.numFact+' (total='+f.total+')');
+  });
+  console.log('PRE-CONTABILIZACIÓN: '+facturas.length+' facturas, IVA total='+diagIva.toFixed(2)+', sin IVA: '+diagNoIva.join(', '));
+  if(diagNoIva.length>5){
+    console.warn('ALERTA: '+diagNoIva.length+' facturas sin IVA detectadas');
+  }
+
   // Show progress overlay
   var overlay=document.createElement('div');
   overlay.id='impProgress';
@@ -1869,6 +1881,11 @@ async function contabilizarFacturas(){
       if(f.iva21!==0)lines.push({a:'47200000',d:Math.max(f.iva21,0),h:Math.max(-f.iva21,0),_noConsolidate:true});
       if(f.iva10!==0)lines.push({a:'47200000',d:Math.max(f.iva10,0),h:Math.max(-f.iva10,0),_noConsolidate:true});
       if(f.iva4!==0)lines.push({a:'47200000',d:Math.max(f.iva4,0),h:Math.max(-f.iva4,0),_noConsolidate:true});
+      // DIAGNOSTIC: check IVA lines exist
+      var ivaLines47=lines.filter(function(l){return l.a==='47200000';});
+      if(ivaLines47.length===0&&Math.abs(f.iva21+f.iva10+f.iva4)>0.01){
+        console.error('FALTA IVA en '+f.numFact+': iva21='+f.iva21+' iva10='+f.iva10+' iva4='+f.iva4);
+      }
 
       // Retención IRPF
       if(realRetencion!==0)lines.push({a:'47510000',d:0,h:Math.abs(realRetencion)});
@@ -1969,11 +1986,11 @@ async function contabilizarFacturas(){
       lines.push({a:cuentaCli,d:totalFacturaEm,h:0});
     }
 
-    // Consolidate lines with same account (but NOT IVA lines marked _noConsolidate)
+    // Consolidate lines with same account (but NEVER consolidate 47200000 IVA soportado)
     var consolidated={};
     var noConsolidateLines=[];
     lines.forEach(function(l){
-      if(l._noConsolidate){
+      if(l.a==='47200000'||l._noConsolidate){
         noConsolidateLines.push({a:l.a,d:l.d,h:l.h});
       }else{
         if(!consolidated[l.a])consolidated[l.a]={a:l.a,d:0,h:0};
@@ -1984,6 +2001,11 @@ async function contabilizarFacturas(){
     var finalLines=Object.values(consolidated).filter(function(l){return l.d>0.001||l.h>0.001;});
     // Add non-consolidated IVA lines
     noConsolidateLines.forEach(function(l){if(l.d>0.001||l.h>0.001)finalLines.push(l);});
+    // DIAGNOSTIC: verify IVA survived consolidation
+    var postIva=finalLines.filter(function(l){return l.a==='47200000';});
+    if(postIva.length===0&&Math.abs(f.iva21+f.iva10+f.iva4)>0.01){
+      console.error('IVA PERDIDO tras consolidación en '+f.numFact+': noConsolidate='+noConsolidateLines.length+' final='+finalLines.length);
+    }
 
     // Round to 2 decimals
     finalLines.forEach(function(l){l.d=Math.round(l.d*100)/100;l.h=Math.round(l.h*100)/100;});
