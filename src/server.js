@@ -124,45 +124,43 @@ db.exec(`
 try { db.exec('ALTER TABLE companies ADD COLUMN group_id TEXT REFERENCES groups(id)'); } catch(e) {}
 try { db.exec('ALTER TABLE users ADD COLUMN group_id TEXT REFERENCES groups(id)'); } catch(e) {}
 
-// ── Migrate existing data to groups ──
-const groupCount = db.prepare('SELECT COUNT(*) as c FROM groups').get().c;
-if (groupCount === 0) {
-  // Create default group for existing companies
-  db.prepare('INSERT OR IGNORE INTO groups VALUES (?, ?, datetime(\'now\'))').run('g_cimafondos', 'Cimafondos');
-  // Assign all existing companies to default group
-  db.prepare('UPDATE companies SET group_id = ? WHERE group_id IS NULL').run('g_cimafondos');
-  // Assign admin/javier to default group, santi gets his own group
-  db.prepare('INSERT OR IGNORE INTO groups VALUES (?, ?, datetime(\'now\'))').run('g_santi', 'Santi');
-  db.prepare('UPDATE users SET group_id = ? WHERE username IN (\'admin\', \'javier\', \'pepe\')').run('g_cimafondos');
-  db.prepare('UPDATE users SET group_id = ? WHERE username = \'santi\'').run('g_santi');
-  console.log('✓ Groups migrated');
+// ═══ FULL RESET: Clean slate — only PGC survives ═══
+const RESET_FLAG = db.prepare("SELECT COUNT(*) as c FROM companies WHERE name = '__RESET_V7_DONE__'").get().c;
+if (!RESET_FLAG) {
+  console.log('🔄 FULL RESET: Cleaning all data...');
+  // Backup first
+  try { autoBackup('pre-reset'); } catch(e) {}
+  // Delete everything
+  db.exec('DELETE FROM entry_lines');
+  db.exec('DELETE FROM entries');
+  db.exec('DELETE FROM transactions');
+  db.exec('DELETE FROM rules');
+  db.exec('DELETE FROM masters');
+  db.exec('DELETE FROM user_companies');
+  db.exec('DELETE FROM users');
+  db.exec('DELETE FROM companies');
+  db.exec('DELETE FROM groups');
+  db.exec('DELETE FROM accounts');
+  try { db.exec('DELETE FROM audit_log'); } catch(e) {}
+  // Mark reset as done
+  db.prepare("INSERT INTO companies VALUES ('__reset__', '__RESET_V7_DONE__', '', '', '{}', NULL)").run();
+  db.prepare("DELETE FROM companies WHERE id = '__reset__'").run();
+  console.log('✓ FULL RESET complete');
 }
-
-// ── Migrate roles: admin→superadmin for javier/admin, user→group_admin for santi ──
-try {
-  db.prepare("UPDATE users SET role = 'superadmin' WHERE username IN ('admin', 'javier') AND role = 'admin'").run();
-  db.prepare("UPDATE users SET role = 'group_admin' WHERE username = 'santi' AND role IN ('user', 'admin')").run();
-  // Remove Santi from Cimafondos companies (he should only see his own group)
-  db.prepare("DELETE FROM user_companies WHERE user_id = (SELECT id FROM users WHERE username = 'santi') AND company_id IN (SELECT id FROM companies WHERE group_id = 'g_cimafondos')").run();
-  // Rename Cimafondos S.L. to Javier
-  db.prepare("UPDATE companies SET name = 'Javier' WHERE id = 'c1' AND name = 'Cimafondos S.L.'").run();
-} catch(e) {}
 
 // ── Seed default data if empty ──
 const companyCount = db.prepare('SELECT COUNT(*) as c FROM companies').get().c;
 if (companyCount === 0) {
-  db.prepare('INSERT INTO companies VALUES (?, ?, ?, ?, ?, ?)').run(
-    'c1', 'Javier', 'B98000001', 'Valencia', '{}', 'g_cimafondos'
-  );
+  // Create default group
+  db.prepare("INSERT INTO groups VALUES ('g_default', 'Principal', datetime('now'))").run();
   
+  // Only admin and javier — no other users
   const users = [
-    ['u1', 'admin', 'admin', 'Administrador', 'superadmin', 'c1'],
-    ['u2', 'javier', '1234', 'Javier', 'superadmin', 'c1'],
-    ['u3', 'pepe', '1234', 'Pepe', 'user', 'c1'],
-    ['u4', 'santi', '1234', 'Santi', 'group_admin', 'c1'],
+    ['u1', 'admin', 'admin', 'Administrador', 'superadmin', null],
+    ['u2', 'javier', '1234', 'Javier', 'superadmin', null],
   ];
-  const insertUser = db.prepare('INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)');
-  users.forEach(u => insertUser.run(...u));
+  const insertUser = db.prepare('INSERT INTO users (id, username, password, name, role, company_id, group_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  users.forEach(u => insertUser.run(u[0], u[1], u[2], u[3], u[4], u[5], 'g_default'));
 
   // Default PGC accounts - Plan General Contable Pymes completo (219 cuentas)
   const pgc = [
@@ -299,44 +297,11 @@ if (companyCount === 0) {
     ['79600000','Reversión deterioro participaciones val. repr. deuda LP',7,'I'],
     ['79800000','Reversión deterioro participaciones val. repr. deuda CP',7,'I'],
   ];
+  // Store PGC as template (company_id = '_pgc_template_') for loading into new companies
   const insertAcct = db.prepare('INSERT INTO accounts VALUES (?, ?, ?, ?, ?)');
-  pgc.forEach(a => insertAcct.run(a[0], a[1], a[2], a[3], 'c1'));
+  pgc.forEach(a => insertAcct.run(a[0], a[1], a[2], a[3], '_pgc_template_'));
 
-  // Seed user_companies (all users can access c1)
-  const insertUC = db.prepare('INSERT OR IGNORE INTO user_companies VALUES (?, ?)');
-  users.forEach(u => insertUC.run(u[0], 'c1'));
-
-  // Default rules
-  const rules = [
-    ['r1','ALQUILER|ARRENDAMIENTO|RENTA','62100000','Alquiler',1,'general'],
-    ['r2','SEGURO|MAPFRE|ALLIANZ','62500000','Seguros',1,'exento'],
-    ['r3','NOMINA|SALARIO|SUELDO','64000000','Nóminas',1,'na'],
-    ['r4','SEGURIDAD SOCIAL|TGSS','64200000','Seg. Social',1,'na'],
-    ['r5','COMISION|COMISIÓN','62600000','Comisiones banco',2,'exento'],
-    ['r6','INTERES|INTERÉS','66200000','Intereses',2,'exento'],
-    ['r7','ENDESA|IBERDROLA|NATURGY|LUZ','62800000','Suministros',1,'general'],
-    ['r8','VODAFONE|MOVISTAR|ORANGE|TELEFON','62900000','Comunicaciones',1,'general'],
-    ['r9','HACIENDA|AEAT|MODELO','47500000','Hacienda',1,'na'],
-    ['r10','NOTARI|REGISTRO|ESCRITURA','62300000','Notaría/Registro',1,'general'],
-    ['r11','ABOGADO|PROCURADOR|LETRADO','62300000','Abogado',1,'general'],
-    ['r12','RESTAURANTE|COMIDA|CENA|ALMUERZO|BAR|CAFETERIA','62700000','Gtos. representación',1,'nodeducible'],
-    ['r13','HOTEL|ALOJAMIENTO|HOSTAL|BOOKING','62900000','Viajes/Alojamiento',1,'nodeducible'],
-    ['r14','TAXI|UBER|CABIFY|PARKING|GASOLINA|REPSOL|CEPSA','62400000','Transportes',1,'general'],
-  ];
-  const insertRule = db.prepare('INSERT INTO rules VALUES (?, ?, ?, ?, ?, ?, ?)');
-  rules.forEach(r => insertRule.run(r[0], r[1], r[2], r[3], r[4], r[5], 'c1'));
-
-  // Default masters (clients, suppliers, banks)
-  const masters = [
-    ['cl1', 'client', JSON.stringify({name:'Gusiluz Inversiones S.L.',cif:'B12345678',phone:'963000000',email:'info@gusiluz.es',contact:'Luis Martínez'}), 'c1'],
-    ['su1', 'supplier', JSON.stringify({name:'Notaría Pérez Sanchis',cif:'12345678A',phone:'963111111',email:'notaria@perez.es',acct:'62300000'}), 'c1'],
-    ['bk1', 'bank', JSON.stringify({name:'Santander',iban:'ES12 0049 XXXX XXXX',notes:'Cuenta principal',acct:'57200000'}), 'c1'],
-    ['bk2', 'bank', JSON.stringify({name:'CaixaBank',iban:'ES34 2100 XXXX XXXX',notes:'Secundaria',acct:'57200001'}), 'c1'],
-  ];
-  const insertMaster = db.prepare('INSERT INTO masters VALUES (?, ?, ?, ?)');
-  masters.forEach(m => insertMaster.run(...m));
-
-  console.log('✓ Database seeded with default data');
+  console.log('✓ Database reset: 2 users (admin, javier), PGC template, no companies');
 }
 
 // ── Middleware ──
@@ -455,7 +420,20 @@ function ensureCompany(companyId) {
 
 // ── Helper: load PGC into existing company that has few accounts ──
 function loadPGCForCompany(companyId) {
-  const defaultAccounts = db.prepare('SELECT code, name, group_num, type FROM accounts WHERE company_id = ?').all('c1');
+  // Copy PGC from template
+  const defaultAccounts = db.prepare('SELECT code, name, group_num, type FROM accounts WHERE company_id = ?').all('_pgc_template_');
+  if (!defaultAccounts.length) {
+    // Fallback: try from any company that has accounts
+    const anyCompany = db.prepare('SELECT DISTINCT company_id FROM accounts WHERE company_id != ? LIMIT 1').get('_pgc_template_');
+    if (anyCompany) {
+      const fallback = db.prepare('SELECT code, name, group_num, type FROM accounts WHERE company_id = ?').all(anyCompany.company_id);
+      const insertAcct = db.prepare('INSERT OR IGNORE INTO accounts VALUES (?, ?, ?, ?, ?)');
+      let added = 0;
+      fallback.forEach(a => { insertAcct.run(a.code, a.name, a.group_num, a.type, companyId); added++; });
+      return added;
+    }
+    return 0;
+  }
   const insertAcct = db.prepare('INSERT OR IGNORE INTO accounts VALUES (?, ?, ?, ?, ?)');
   let added = 0;
   defaultAccounts.forEach(a => {
