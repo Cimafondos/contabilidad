@@ -131,6 +131,7 @@ if (!RESET_FLAG) {
   // Backup first
   try { autoBackup('pre-reset'); } catch(e) {}
   // Delete everything
+    db.exec('PRAGMA foreign_keys = OFF');
   db.exec('DELETE FROM entry_lines');
   db.exec('DELETE FROM entries');
   db.exec('DELETE FROM transactions');
@@ -142,7 +143,8 @@ if (!RESET_FLAG) {
   db.exec('DELETE FROM groups');
   db.exec('DELETE FROM accounts');
   try { db.exec('DELETE FROM audit_log'); } catch(e) {}
-  // Mark reset as done
+    db.exec('PRAGMA foreign_keys = ON');
+      // Mark reset as done
   db.prepare("INSERT INTO companies VALUES ('__reset__', '__RESET_V7_DONE__', '', '', '{}', NULL)").run();
   db.prepare("DELETE FROM companies WHERE id = '__reset__'").run();
   console.log('✓ FULL RESET complete');
