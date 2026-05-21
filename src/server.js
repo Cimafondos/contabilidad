@@ -112,7 +112,37 @@ db.exec(`
     company_id TEXT REFERENCES companies(id),
     PRIMARY KEY (user_id, company_id)
   );
+
+  CREATE TABLE IF NOT EXISTS groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
+
+// ── Migration: add group_id columns if not exist ──
+try { db.exec('ALTER TABLE companies ADD COLUMN group_id TEXT REFERENCES groups(id)'); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN group_id TEXT REFERENCES groups(id)'); } catch(e) {}
+
+// ── Migrate existing data to groups ──
+const groupCount = db.prepare('SELECT COUNT(*) as c FROM groups').get().c;
+if (groupCount === 0) {
+  // Create default group for existing companies
+  db.prepare('INSERT OR IGNORE INTO groups VALUES (?, ?, datetime(\'now\'))').run('g_cimafondos', 'Cimafondos');
+  // Assign all existing companies to default group
+  db.prepare('UPDATE companies SET group_id = ? WHERE group_id IS NULL').run('g_cimafondos');
+  // Assign admin/javier to default group, santi gets his own group
+  db.prepare('INSERT OR IGNORE INTO groups VALUES (?, ?, datetime(\'now\'))').run('g_santi', 'Santi');
+  db.prepare('UPDATE users SET group_id = ? WHERE username IN (\'admin\', \'javier\', \'pepe\')').run('g_cimafondos');
+  db.prepare('UPDATE users SET group_id = ? WHERE username = \'santi\'').run('g_santi');
+  console.log('✓ Groups migrated');
+}
+
+// ── Migrate roles: admin→superadmin for javier/admin, user→group_admin for santi ──
+try {
+  db.prepare("UPDATE users SET role = 'superadmin' WHERE username IN ('admin', 'javier') AND role = 'admin'").run();
+  db.prepare("UPDATE users SET role = 'group_admin' WHERE username = 'santi' AND role IN ('user', 'admin')").run();
+} catch(e) {}
 
 // ── Seed default data if empty ──
 const companyCount = db.prepare('SELECT COUNT(*) as c FROM companies').get().c;
@@ -122,10 +152,10 @@ if (companyCount === 0) {
   );
   
   const users = [
-    ['u1', 'admin', 'admin', 'Administrador', 'admin', 'c1'],
-    ['u2', 'javier', '1234', 'Javier', 'admin', 'c1'],
+    ['u1', 'admin', 'admin', 'Administrador', 'superadmin', 'c1'],
+    ['u2', 'javier', '1234', 'Javier', 'superadmin', 'c1'],
     ['u3', 'pepe', '1234', 'Pepe', 'user', 'c1'],
-    ['u4', 'santi', '1234', 'Santi', 'user', 'c1'],
+    ['u4', 'santi', '1234', 'Santi', 'group_admin', 'c1'],
   ];
   const insertUser = db.prepare('INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)');
   users.forEach(u => insertUser.run(...u));
@@ -337,8 +367,19 @@ function authRequired(req, res, next) {
   catch (e) { return res.status(401).json({ error: 'Token inválido o expirado' }); }
 }
 function adminRequired(req, res, next) {
-  if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
+  if (!req.user || (req.user.role !== 'superadmin' && req.user.role !== 'admin')) return res.status(403).json({ error: 'Solo administradores' });
   next();
+}
+function superadminRequired(req, res, next) {
+  if (!req.user || req.user.role !== 'superadmin') return res.status(403).json({ error: 'Solo superadministradores' });
+  next();
+}
+// Group admin can manage their own group
+function groupAdminRequired(req, res, next) {
+  if (!req.user) return res.status(403).json({ error: 'No autorizado' });
+  if (req.user.role === 'superadmin') return next(); // superadmin can do everything
+  if (req.user.role === 'group_admin' || req.user.role === 'admin') return next();
+  return res.status(403).json({ error: 'Solo administradores de grupo' });
 }
 
 // ── Server-side audit log ──
@@ -380,11 +421,11 @@ function scheduleDailyBackup() {
 // ── AUTH ──
 app.post('/api/login', rateLimitLogin, (req, res) => {
   const { username, password } = req.body;
-  const user = db.prepare('SELECT id, username, password, name, role, company_id FROM users WHERE username = ?').get(username);
+  const user = db.prepare('SELECT id, username, password, name, role, company_id, group_id FROM users WHERE username = ?').get(username);
   if (!user) return res.status(401).json({ error: 'Credenciales incorrectas' });
   const valid = user.password.startsWith('$2') ? bcrypt.compareSync(password, user.password) : password === user.password;
   if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
-  const token = jwt.sign({ id: user.id, username: user.username, name: user.name, role: user.role, company_id: user.company_id }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+  const token = jwt.sign({ id: user.id, username: user.username, name: user.name, role: user.role, company_id: user.company_id, group_id: user.group_id }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
   const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(user.company_id);
   if (loginAttempts[req.ip]) delete loginAttempts[req.ip];
   auditLog(req, 'login', username);
@@ -704,34 +745,94 @@ app.delete('/api/users/:companyId/:id', authRequired, adminRequired, (req, res) 
   res.json({ ok: true });
 });
 
-// ── COMPANIES MANAGEMENT (filtered by user access) ──
+// ── COMPANIES MANAGEMENT (filtered by user group) ──
 app.get('/api/companies', authRequired, (req, res) => {
-  const userId = req.query.userId;
-  const userRole = req.query.role;
-  if (userRole === 'admin') {
-    // Admin sees all companies
-    const rows = db.prepare('SELECT * FROM companies').all();
+  if (req.user.role === 'superadmin') {
+    const rows = db.prepare('SELECT c.*, g.name as group_name FROM companies c LEFT JOIN groups g ON c.group_id = g.id').all();
     res.json(rows);
-  } else if (userId) {
-    // Regular user only sees assigned companies
-    const rows = db.prepare('SELECT c.* FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ?').all(userId);
+  } else if (req.user.group_id) {
+    // Group admin or user: only see companies in their group
+    const rows = db.prepare('SELECT c.*, g.name as group_name FROM companies c LEFT JOIN groups g ON c.group_id = g.id WHERE c.group_id = ?').all(req.user.group_id);
     res.json(rows);
   } else {
-    const rows = db.prepare('SELECT * FROM companies').all();
+    // Fallback: only companies assigned via user_companies
+    const rows = db.prepare('SELECT c.* FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ?').all(req.user.id);
     res.json(rows);
   }
 });
 
-app.post('/api/companies', authRequired, adminRequired, (req, res) => {
+app.post('/api/companies', authRequired, groupAdminRequired, (req, res) => {
   const { id, name, cif, address, config } = req.body;
+  // Group admins can only create companies in their own group
+  const groupId = req.user.role === 'superadmin' ? (req.body.group_id || req.user.group_id) : req.user.group_id;
   try {
-    db.prepare('INSERT OR REPLACE INTO companies VALUES (?, ?, ?, ?, ?)').run(id, name, cif || '', address || '', config || '{}');
-    // Load full PGC for new company
+    db.prepare('INSERT OR REPLACE INTO companies VALUES (?, ?, ?, ?, ?, ?)').run(id, name, cif || '', address || '', config || '{}', groupId);
     loadPGCForCompany(id);
+    // Auto-assign the creator to this company
+    db.prepare('INSERT OR IGNORE INTO user_companies VALUES (?, ?)').run(req.user.id, id);
+    auditLog(req, 'create-company', name);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ── GROUPS MANAGEMENT ──
+app.get('/api/groups', authRequired, (req, res) => {
+  if (req.user.role === 'superadmin') {
+    res.json(db.prepare('SELECT * FROM groups').all());
+  } else {
+    res.json(db.prepare('SELECT * FROM groups WHERE id = ?').all(req.user.group_id));
+  }
+});
+
+app.post('/api/groups', authRequired, superadminRequired, (req, res) => {
+  const { id, name } = req.body;
+  try {
+    db.prepare("INSERT OR REPLACE INTO groups VALUES (?, ?, datetime('now'))").run(id, name);
+    auditLog(req, 'create-group', name);
+    res.json({ ok: true });
+  } catch(err) { res.status(400).json({ error: err.message }); }
+});
+
+// ── GROUP-SCOPED USERS ──
+app.get('/api/group-users', authRequired, groupAdminRequired, (req, res) => {
+  if (req.user.role === 'superadmin') {
+    const rows = db.prepare('SELECT u.id, u.username, u.name, u.role, u.group_id, g.name as group_name FROM users u LEFT JOIN groups g ON u.group_id = g.id').all();
+    res.json(rows);
+  } else {
+    const rows = db.prepare('SELECT id, username, name, role, group_id FROM users WHERE group_id = ?').all(req.user.group_id);
+    res.json(rows);
+  }
+});
+
+app.post('/api/group-users', authRequired, groupAdminRequired, (req, res) => {
+  const { id, username, password, name, role } = req.body;
+  // Group admins can only create users in their group, max role = group_admin
+  const groupId = req.user.role === 'superadmin' ? (req.body.group_id || req.user.group_id) : req.user.group_id;
+  const safeRole = req.user.role === 'superadmin' ? (role || 'user') : (role === 'superadmin' ? 'user' : (role || 'user'));
+  const hashed = password ? bcrypt.hashSync(password, BCRYPT_ROUNDS) : null;
+  try {
+    const existing = db.prepare('SELECT id, password FROM users WHERE id = ?').get(id);
+    const pwd = hashed || (existing ? existing.password : bcrypt.hashSync('1234', BCRYPT_ROUNDS));
+    db.prepare('INSERT OR REPLACE INTO users (id, username, password, name, role, company_id, group_id) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      id, username, pwd, name, safeRole, req.user.company_id, groupId
+    );
+    auditLog(req, 'manage-user', `${username} role=${safeRole} group=${groupId}`);
+    res.json({ ok: true });
+  } catch(err) { res.status(400).json({ error: err.message }); }
+});
+
+app.delete('/api/group-users/:userId', authRequired, groupAdminRequired, (req, res) => {
+  const target = db.prepare('SELECT group_id, role FROM users WHERE id = ?').get(req.params.userId);
+  if (!target) return res.status(404).json({ error: 'Usuario no encontrado' });
+  // Can't delete superadmin, can't delete users from other groups
+  if (target.role === 'superadmin') return res.status(403).json({ error: 'No se puede eliminar un superadmin' });
+  if (req.user.role !== 'superadmin' && target.group_id !== req.user.group_id) return res.status(403).json({ error: 'No puedes eliminar usuarios de otro grupo' });
+  db.prepare('DELETE FROM user_companies WHERE user_id = ?').run(req.params.userId);
+  db.prepare('DELETE FROM users WHERE id = ?').run(req.params.userId);
+  auditLog(req, 'delete-user', req.params.userId);
+  res.json({ ok: true });
 });
 
 // ── USER-COMPANY ACCESS ──
