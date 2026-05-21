@@ -526,6 +526,10 @@ function logout(){
 }
 
 async function loadData(){
+  if(!state.company||state.company.id==='_none_'){
+    state.accounts=[];state.entries=[];state.rules=[];
+    return;
+  }
   showProgress('Cargando datos','Conectando con el servidor...');
   var cid=state.company.id;
   updateProgress(30,'Descargando cuentas, asientos y reglas...');
@@ -546,6 +550,10 @@ function getChart(id,config){
 
 // ═══ DASHBOARD PROFESIONAL ═══
 function renderDash(c){
+  if(!state.company||state.company.id==='_none_'){
+    c.innerHTML='<div style="text-align:center;padding:60px 20px"><div style="font-size:48px;margin-bottom:16px">🏢</div><h2 style="margin:0 0 8px">Bienvenido a Cimafondos</h2><p style="color:var(--txM);margin-bottom:24px">No tienes ninguna empresa asignada. Crea una empresa para empezar.</p><button class="btn btn-p" style="font-size:14px;padding:12px 24px" onclick="setView(\'migrupo\')">+ Crear mi primera empresa</button></div>';
+    return;
+  }
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var ti=0,tg=0,tb=0,tiva_rep=0,tiva_sop=0;
   var monthI=new Array(12).fill(0),monthG=new Array(12).fill(0),monthT=new Array(12).fill(0);

@@ -398,12 +398,11 @@ app.post('/api/login', rateLimitLogin, (req, res) => {
   const valid = user.password.startsWith('$2') ? bcrypt.compareSync(password, user.password) : password === user.password;
   if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
   const token = jwt.sign({ id: user.id, username: user.username, name: user.name, role: user.role, company_id: user.company_id, group_id: user.group_id }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
-  // Get company: first try user's assigned company, then first company in their group
-  let company = db.prepare('SELECT * FROM companies WHERE id = ?').get(user.company_id);
-  if (!company && user.group_id) {
-    company = db.prepare('SELECT * FROM companies WHERE group_id = ? LIMIT 1').get(user.group_id);
-  }
-  if (!company) company = { id: 'none', name: 'Sin empresa', cif: '', address: '', config: '{}' };
+  // Get company: first try user's assigned company, then first company in their group, then any accessible
+  let company = null;
+  if (user.company_id) company = db.prepare("SELECT * FROM companies WHERE id = ? AND id != '_pgc_template_'").get(user.company_id);
+  if (!company && user.group_id) company = db.prepare("SELECT * FROM companies WHERE group_id = ? AND id != '_pgc_template_' LIMIT 1").get(user.group_id);
+  if (!company) company = { id: '_none_', name: 'Sin empresa', cif: '', address: '', config: '{}' };
   if (loginAttempts[req.ip]) delete loginAttempts[req.ip];
   auditLog(req, 'login', username);
   res.json({ user: { id: user.id, username: user.username, name: user.name, role: user.role }, company, token });
@@ -411,13 +410,11 @@ app.post('/api/login', rateLimitLogin, (req, res) => {
 
 // ── Helper: auto-create company if needed, with full PGC ──
 function ensureCompany(companyId) {
+  if (companyId === '_none_' || companyId === '_pgc_template_') return;
   const existing = db.prepare('SELECT id FROM companies WHERE id = ?').get(companyId);
   if (!existing) {
-    db.prepare('INSERT INTO companies VALUES (?, ?, ?, ?, ?)').run(companyId, companyId, '', '', '{}');
-    // Copy PGC accounts from c1 (the seed company has full PGC)
-    const defaultAccounts = db.prepare('SELECT code, name, group_num, type FROM accounts WHERE company_id = ?').all('c1');
-    const insertAcct = db.prepare('INSERT OR IGNORE INTO accounts VALUES (?, ?, ?, ?, ?)');
-    defaultAccounts.forEach(a => insertAcct.run(a.code, a.name, a.group_num, a.type, companyId));
+    db.prepare("INSERT INTO companies VALUES (?, ?, '', '', '{}', NULL)").run(companyId, companyId);
+    loadPGCForCompany(companyId);
   }
 }
 
@@ -741,16 +738,15 @@ app.delete('/api/users/:companyId/:id', authRequired, adminRequired, (req, res) 
 
 // ── COMPANIES MANAGEMENT (filtered by user group) ──
 app.get('/api/companies', authRequired, (req, res) => {
+  const hidePGC = " AND c.id != '_pgc_template_'";
   if (req.user.role === 'superadmin') {
-    const rows = db.prepare('SELECT c.*, g.name as group_name FROM companies c LEFT JOIN groups g ON c.group_id = g.id').all();
+    const rows = db.prepare('SELECT c.*, g.name as group_name FROM companies c LEFT JOIN groups g ON c.group_id = g.id WHERE 1=1' + hidePGC).all();
     res.json(rows);
   } else if (req.user.group_id) {
-    // Group admin or user: only see companies in their group
-    const rows = db.prepare('SELECT c.*, g.name as group_name FROM companies c LEFT JOIN groups g ON c.group_id = g.id WHERE c.group_id = ?').all(req.user.group_id);
+    const rows = db.prepare('SELECT c.*, g.name as group_name FROM companies c LEFT JOIN groups g ON c.group_id = g.id WHERE c.group_id = ?' + hidePGC).all(req.user.group_id);
     res.json(rows);
   } else {
-    // Fallback: only companies assigned via user_companies
-    const rows = db.prepare('SELECT c.* FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ?').all(req.user.id);
+    const rows = db.prepare('SELECT c.* FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ?' + hidePGC).all(req.user.id);
     res.json(rows);
   }
 });
@@ -802,15 +798,23 @@ app.get('/api/group-users', authRequired, groupAdminRequired, (req, res) => {
 
 app.post('/api/group-users', authRequired, groupAdminRequired, (req, res) => {
   const { id, username, password, name, role } = req.body;
-  // Group admins can only create users in their group, max role = group_admin
-  const groupId = req.user.role === 'superadmin' ? (req.body.group_id || req.user.group_id) : req.user.group_id;
   const safeRole = req.user.role === 'superadmin' ? (role || 'user') : (role === 'superadmin' ? 'user' : (role || 'user'));
   const hashed = password ? bcrypt.hashSync(password, BCRYPT_ROUNDS) : null;
+  
+  // Determine group: group_admin gets their own group, others stay in creator's group
+  let groupId = req.body.group_id || req.user.group_id;
+  if (safeRole === 'group_admin' && !req.body.group_id) {
+    // Create a dedicated group for this group_admin
+    const gid = 'g_' + username.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    try { db.prepare("INSERT OR IGNORE INTO groups VALUES (?, ?, datetime('now'))").run(gid, name); } catch(e) {}
+    groupId = gid;
+  }
+  
   try {
     const existing = db.prepare('SELECT id, password FROM users WHERE id = ?').get(id);
     const pwd = hashed || (existing ? existing.password : bcrypt.hashSync('1234', BCRYPT_ROUNDS));
     db.prepare('INSERT OR REPLACE INTO users (id, username, password, name, role, company_id, group_id) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-      id, username, pwd, name, safeRole, req.user.company_id, groupId
+      id, username, pwd, name, safeRole, null, groupId
     );
     auditLog(req, 'manage-user', `${username} role=${safeRole} group=${groupId}`);
     res.json({ ok: true });
