@@ -473,6 +473,10 @@ app.get('/api/accounts/:companyId', authRequired, (req, res) => {
 
 app.post('/api/accounts/:companyId', authRequired, (req, res) => {
   const { code, name, g, t } = req.body;
+  // Validate account code: max 8 digits, only numbers
+  if (!code || !/^\d{1,8}$/.test(code)) {
+    return res.status(400).json({ error: 'Código de cuenta inválido: solo números, máximo 8 dígitos. Recibido: ' + code });
+  }
   ensureCompany(req.params.companyId);
   try {
     db.prepare('INSERT INTO accounts VALUES (?, ?, ?, ?, ?)').run(code, name, g, t, req.params.companyId);
@@ -867,8 +871,11 @@ app.delete('/api/user-companies/:userId/:companyId', authRequired, adminRequired
 
 // ── LOAD PGC for existing company ──
 app.post('/api/load-pgc/:companyId', authRequired, adminRequired, (req, res) => {
+  // Clean up invalid accounts (non-numeric codes, codes > 8 digits)
+  const invalid = db.prepare("DELETE FROM accounts WHERE company_id = ? AND (length(code) > 8 OR code GLOB '*[^0-9]*')").run(req.params.companyId);
   const added = loadPGCForCompany(req.params.companyId);
-  res.json({ ok: true, added });
+  auditLog(req, 'load-pgc', `${req.params.companyId}: added=${added}, cleaned=${invalid.changes}`);
+  res.json({ ok: true, added, cleaned: invalid.changes });
 });
 
 // ── MOVE COMPANY BETWEEN GROUPS ──

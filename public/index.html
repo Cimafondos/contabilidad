@@ -1283,13 +1283,24 @@ function exportPartnersExcel(){
 // ═══ ACCOUNTS with edit/delete ═══
 function renderAccounts(c){
   var grouped={};state.accounts.forEach(function(a){if(!grouped[a.g])grouped[a.g]=[];grouped[a.g].push(a);});
-  c.innerHTML='<div class="card"><div class="card-h"><span>📑 Plan cuentas — '+state.accounts.length+'</span><button class="btn btn-d" style="font-size:10px" onclick="exportAccountsExcel()">📊 Excel</button></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>📑 Plan cuentas — '+state.accounts.length+'</span><div style="display:flex;gap:6px"><button class="btn btn-d" style="font-size:10px" onclick="reloadPGC()">🔄 Recargar PGC</button><button class="btn btn-d" style="font-size:10px" onclick="exportAccountsExcel()">📊 Excel</button></div></div>'+
   '<div style="padding:8px 14px;border-bottom:1px solid #EDF0F4;display:flex;gap:6px;align-items:end;flex-wrap:wrap"><div><div class="lbl">Código ('+getAccountLevels().join(',')+' díg)</div><input class="inp" style="width:95px" id="acCode" maxlength="8" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')" placeholder="43000001"></div><div style="flex:1;min-width:100px"><div class="lbl">Nombre</div><input class="inp" id="acName"></div><div><div class="lbl">Tipo</div><select class="sel" id="acType"><option value="A">A</option><option value="P">P</option><option value="G">G</option><option value="I">I</option></select></div><button class="btn btn-p" onclick="addAccount()">+ Añadir</button></div></div>'+
   Object.entries(grouped).sort(function(a,b){return a[0]-b[0];}).map(function(x){var g=x[0],accs=x[1];return '<div class="card"><div class="card-h"><span>G'+g+' '+(GROUPS[g]||'')+'</span><span class="badge badge-g">'+accs.length+'</span></div><table><tbody>'+accs.map(function(a,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:700;color:var(--pri);width:85px;font-family:monospace">'+a.code+'</td><td>'+h(a.name)+'</td><td style="width:40px"><span class="badge '+(a.t==='A'?'badge-b':a.t==='P'?'badge-a':a.t==='G'?'badge-r':'badge-g')+'">'+a.t+'</span></td><td style="width:60px;white-space:nowrap"><button class="abtn" onclick="editAccount(\''+a.code+'\',\''+h(a.name)+'\',\''+a.t+'\')" title="Editar">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteAccount(\''+a.code+'\')" title="Borrar">🗑</button></td></tr>';}).join('')+'</tbody></table></div>';}).join('');
 }
 function getAccountLevels(){
   try{var empresas=getEmpresas();var emp=empresas.find(function(e){return e.name===(state.company?state.company.name:'');});
   return emp&&emp.nivelesCtaArr?emp.nivelesCtaArr:[1,3,8];}catch(e){return [1,3,8];}
+}
+async function reloadPGC(){
+  if(!confirm('Esto limpiará cuentas inválidas y recargará el Plan General Contable Pymes.\n\nLas cuentas que ya existan no se duplicarán.\n¿Continuar?'))return;
+  showProgress('Recargando Plan Contable','Limpiando cuentas inválidas...');
+  try{
+    var r=await api('/api/load-pgc/'+state.company.id,{method:'POST'});
+    updateProgress(80,'Recargando datos...');
+    await loadData();
+    hideProgress('✅','PGC recargado: '+r.added+' cuentas añadidas'+(r.cleaned?' · '+r.cleaned+' inválidas limpiadas':''));
+    render();
+  }catch(e){hideProgress('❌','Error');toast('Error: '+e.message,'error');}
 }
 async function addAccount(){
   var code=$('acCode').value.replace(/[^0-9]/g,'');if(code.length>8)code=code.slice(0,8);if(code.length<1){toast('Código obligatorio','error');return;}
@@ -2035,7 +2046,7 @@ function showImportResults(txns){
   window._impTxns=txns;
   var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var res=$('impResult');
-  res.innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:14px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 '+txns.length+' movimientos encontrados</span><div><button class="btn btn-p" onclick="importAll()">✅ Contabilizar todos</button></div></div>'+
+  res.innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:14px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 '+txns.length+' movimientos encontrados</span><div><button class="btn btn-d" onclick="clearImpResult()" style="margin-right:6px">✕ Cancelar</button><button class="btn btn-p" onclick="importAll()">✅ Contabilizar todos</button></div></div>'+
   '<div class="scr"><table><thead><tr><th style="width:30px">✓</th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th>Cuenta</th><th>Regla</th><th>Estado</th></tr></thead><tbody>'+
   txns.map(function(t,i){
     var cls=t.isDup?'background:#FFF3E0':t.matched?'background:#E8F8ED':'';
@@ -2181,6 +2192,7 @@ function processAsientosRows(rows){
   var res=$('impAsientosResult');
   res.innerHTML='<div class="card" style="border:2px solid #7B1FA2;margin-top:14px"><div class="card-h" style="background:#F3E5F5"><span style="color:#7B1FA2">📒 '+asientos.length+' asientos · '+asientos.reduce(function(s,a){return s+a.lines.length;},0)+' apuntes</span><div>'+
   (nErr?'<span class="badge badge-a" style="margin-right:8px">⚠ '+nErr+' descuadrados</span>':'')+
+  '<button class="btn btn-d" onclick="$(\'impAsientosResult\').innerHTML=\'\'" style="margin-right:6px">✕ Cancelar</button>'+
   '<button class="btn" style="background:#7B1FA2;color:#fff" onclick="importAsientosAll()">✅ Contabilizar '+nOk+' asientos</button></div></div>'+
   '<div style="padding:10px;font-size:11px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">'+
   '<div><strong>Total Debe:</strong> '+fmt(totalD)+'€</div>'+
@@ -2218,6 +2230,11 @@ async function importAsientosAll(){
     if(g<=2||g===3||g===5)t='activo';
     if(g===4){var c3=na.code.substring(0,3);if(c3==='400')t='proveedor';else if(c3==='430')t='cliente';else t='gasto';}
     if(g===7)t='ingreso';
+    // Validate account code before creating
+    if(!/^\d{1,8}$/.test(na.code)){
+      console.warn('Cuenta inválida ignorada:', na.code);
+      continue;
+    }
     try{await api('/api/accounts/'+cid,{method:'POST',body:{code:na.code,name:name,g:g,t:t}});}catch(e){}
     updateProg('Cuenta '+na.code);
   }
