@@ -4826,7 +4826,7 @@ function renderPeriods(c){
 // ═══ PAPELERA — Asientos eliminados ═══
 function renderTrash(c){
   // Get ALL entries including deleted from server
-  api('/api/entries/'+state.company.id).then(function(allEntries){
+  api('/api/entries/'+state.company.id+'?deleted=1').then(function(allEntries){
     var deleted=allEntries.filter(function(e){return e.del||e.deleted;});
     var am={};state.accounts.forEach(function(a){am[a.code]=a;});
     c.innerHTML='<div class="card"><div class="card-h"><span>🗑️ Papelera — '+deleted.length+' asientos eliminados</span>'+(deleted.length?'<button class="btn btn-r" style="font-size:10px" onclick="emptyTrash()">Vaciar papelera</button>':'')+'</div>'+
@@ -4841,7 +4841,7 @@ async function restoreEntry(id){
   if(!confirm('¿Restaurar este asiento?'))return;
   try{
     // Re-save entry with deleted=0 (POST overwrites with deleted=0)
-    var allEntries=await api('/api/entries/'+state.company.id);
+    var allEntries=await api('/api/entries/'+state.company.id+'?deleted=1');
     var entry=allEntries.find(function(e){return e.id===id;});
     if(entry){
       await api('/api/entries/'+state.company.id,{method:'POST',body:{id:entry.id,date:entry.date,concept:entry.concept,type:entry.type||'manual',lines:(entry.lines||[]).map(function(l){return {a:l.a,d:l.d||0,h:l.h||0};})}});
