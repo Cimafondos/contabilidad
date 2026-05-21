@@ -2,14 +2,21 @@ const express = require('express');
 const Database = require('better-sqlite3');
 const path = require('path');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'cf_sec_' + require('crypto').randomBytes(32).toString('hex');
+const TOKEN_EXPIRY = '24h';
+const BCRYPT_ROUNDS = 10;
 
 // ── Database setup (SQLite — persistent on Railway volume) ──
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'cimafondos.db');
-const fs = require('fs');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+const BACKUP_DIR = path.join(path.dirname(DB_PATH), 'backups');
+fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
@@ -299,17 +306,82 @@ if (companyCount === 0) {
 }
 
 // ── Middleware ──
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// ── Rate limiting (login) ──
+const loginAttempts = {};
+function rateLimitLogin(req, res, next) {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  if (!loginAttempts[ip]) loginAttempts[ip] = [];
+  loginAttempts[ip] = loginAttempts[ip].filter(t => now - t < 60000);
+  if (loginAttempts[ip].length >= 5) return res.status(429).json({ error: 'Demasiados intentos. Espera 1 minuto.' });
+  loginAttempts[ip].push(now);
+  next();
+}
+
+// ── JWT Auth middleware ──
+function authRequired(req, res, next) {
+  const h = req.headers.authorization;
+  if (!h || !h.startsWith('Bearer ')) return res.status(401).json({ error: 'Token requerido' });
+  try { req.user = jwt.verify(h.split(' ')[1], JWT_SECRET); next(); }
+  catch (e) { return res.status(401).json({ error: 'Token inválido o expirado' }); }
+}
+function adminRequired(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
+  next();
+}
+
+// ── Server-side audit log ──
+db.exec('CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT DEFAULT (datetime(\'now\')), username TEXT, action TEXT, detail TEXT, ip TEXT)');
+function auditLog(req, action, detail) {
+  try { db.prepare('INSERT INTO audit_log (username, action, detail, ip) VALUES (?, ?, ?, ?)').run(req.user ? req.user.username : 'anon', action, (detail||'').slice(0,500), req.ip||''); } catch(e) {}
+}
+
+// ── Auto-backup ──
+function autoBackup(label) {
+  try {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const bp = path.join(BACKUP_DIR, 'backup_' + label + '_' + ts + '.db');
+    db.backup(bp).then(() => {
+      console.log('✓ Auto-backup:', bp);
+      const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.db')).sort();
+      while (files.length > 20) { fs.unlinkSync(path.join(BACKUP_DIR, files.shift())); }
+    }).catch(e => console.error('Backup failed:', e.message));
+  } catch(e) { console.error('Auto-backup error:', e.message); }
+}
+
+// ── Migrate plain-text passwords to bcrypt on startup ──
+function migratePasswords() {
+  const users = db.prepare('SELECT id, password FROM users').all();
+  const upd = db.prepare('UPDATE users SET password = ? WHERE id = ?');
+  users.forEach(u => {
+    if (!u.password.startsWith('$2')) {
+      upd.run(bcrypt.hashSync(u.password, BCRYPT_ROUNDS), u.id);
+      console.log('✓ Password hashed for user', u.id);
+    }
+  });
+}
+
+function scheduleDailyBackup() {
+  autoBackup('startup');
+  setInterval(() => autoBackup('daily'), 24 * 60 * 60 * 1000);
+}
+
 // ── AUTH ──
-app.post('/api/login', (req, res) => {
+app.post('/api/login', rateLimitLogin, (req, res) => {
   const { username, password } = req.body;
-  const user = db.prepare('SELECT id, username, name, role, company_id FROM users WHERE username = ? AND password = ?').get(username, password);
+  const user = db.prepare('SELECT id, username, password, name, role, company_id FROM users WHERE username = ?').get(username);
   if (!user) return res.status(401).json({ error: 'Credenciales incorrectas' });
+  const valid = user.password.startsWith('$2') ? bcrypt.compareSync(password, user.password) : password === user.password;
+  if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
+  const token = jwt.sign({ id: user.id, username: user.username, name: user.name, role: user.role, company_id: user.company_id }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
   const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(user.company_id);
-  res.json({ user, company });
+  if (loginAttempts[req.ip]) delete loginAttempts[req.ip];
+  auditLog(req, 'login', username);
+  res.json({ user: { id: user.id, username: user.username, name: user.name, role: user.role }, company, token });
 });
 
 // ── Helper: auto-create company if needed, with full PGC ──
@@ -337,12 +409,12 @@ function loadPGCForCompany(companyId) {
 }
 
 // ── ACCOUNTS ──
-app.get('/api/accounts/:companyId', (req, res) => {
+app.get('/api/accounts/:companyId', authRequired, (req, res) => {
   const rows = db.prepare('SELECT code, name, group_num as g, type as t FROM accounts WHERE company_id = ? ORDER BY code').all(req.params.companyId);
   res.json(rows);
 });
 
-app.post('/api/accounts/:companyId', (req, res) => {
+app.post('/api/accounts/:companyId', authRequired, (req, res) => {
   const { code, name, g, t } = req.body;
   ensureCompany(req.params.companyId);
   try {
@@ -354,7 +426,7 @@ app.post('/api/accounts/:companyId', (req, res) => {
 });
 
 // ── ENTRIES ──
-app.get('/api/entries/:companyId', (req, res) => {
+app.get('/api/entries/:companyId', authRequired, (req, res) => {
   const showDeleted = req.query.deleted === '1';
   const entries = db.prepare('SELECT * FROM entries WHERE company_id = ?' + (showDeleted ? '' : ' AND deleted = 0') + ' ORDER BY date').all(req.params.companyId);
   const lines = db.prepare('SELECT * FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ?' + (showDeleted ? '' : ' AND deleted = 0') + ')').all(req.params.companyId);
@@ -364,7 +436,7 @@ app.get('/api/entries/:companyId', (req, res) => {
   res.json(result);
 });
 
-app.post('/api/entries/:companyId', (req, res) => {
+app.post('/api/entries/:companyId', authRequired, (req, res) => {
   const { id, date, concept, type, lines } = req.body;
   const companyId = req.params.companyId;
   ensureCompany(companyId);
@@ -393,13 +465,15 @@ app.post('/api/entries/:companyId', (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/entries/:companyId/:id', (req, res) => {
+app.delete('/api/entries/:companyId/:id', authRequired, (req, res) => {
   db.prepare('UPDATE entries SET deleted = 1 WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
   res.json({ ok: true });
 });
 
 // Delete ALL entries for a company (or all companies)
-app.delete('/api/entries-all/:companyId', (req, res) => {
+app.delete('/api/entries-all/:companyId', authRequired, adminRequired, (req, res) => {
+  autoBackup('pre-delete-all');
+  auditLog(req, 'delete-all-entries', req.params.companyId);
   const cid = req.params.companyId;
   if (cid === '_all_') {
     const count = db.prepare('SELECT COUNT(*) as c FROM entries').get().c;
@@ -417,7 +491,7 @@ app.delete('/api/entries-all/:companyId', (req, res) => {
 });
 
 // Delete all accounts for a company (to reimport clean)
-app.delete('/api/accounts-all/:companyId', (req, res) => {
+app.delete('/api/accounts-all/:companyId', authRequired, adminRequired, (req, res) => {
   const cid = req.params.companyId;
   const count = db.prepare('SELECT COUNT(*) as c FROM accounts WHERE company_id = ?').get(cid).c;
   db.prepare('DELETE FROM accounts WHERE company_id = ?').run(cid);
@@ -425,7 +499,7 @@ app.delete('/api/accounts-all/:companyId', (req, res) => {
 });
 
 // Soft-delete: mark entries as deleted (recoverable)
-app.post('/api/soft-delete-entries/:companyId', (req, res) => {
+app.post('/api/soft-delete-entries/:companyId', authRequired, adminRequired, (req, res) => {
   const cid = req.params.companyId;
   let count;
   if (cid === '_all_') {
@@ -439,7 +513,7 @@ app.post('/api/soft-delete-entries/:companyId', (req, res) => {
 });
 
 // Recover soft-deleted entries
-app.post('/api/recover-entries/:companyId', (req, res) => {
+app.post('/api/recover-entries/:companyId', authRequired, adminRequired, (req, res) => {
   const cid = req.params.companyId;
   let count;
   if (cid === '_all_') {
@@ -453,7 +527,9 @@ app.post('/api/recover-entries/:companyId', (req, res) => {
 });
 
 // Purge soft-deleted entries permanently
-app.post('/api/purge-entries/:companyId', (req, res) => {
+app.post('/api/purge-entries/:companyId', authRequired, adminRequired, (req, res) => {
+  autoBackup('pre-purge');
+  auditLog(req, 'purge-entries', req.params.companyId);
   const cid = req.params.companyId;
   let count;
   if (cid === '_all_') {
@@ -469,12 +545,12 @@ app.post('/api/purge-entries/:companyId', (req, res) => {
 });
 
 // ── TRANSACTIONS (bank imports) ──
-app.get('/api/transactions/:companyId', (req, res) => {
+app.get('/api/transactions/:companyId', authRequired, (req, res) => {
   const rows = db.prepare('SELECT * FROM transactions WHERE company_id = ? ORDER BY date').all(req.params.companyId);
   res.json(rows.map(r => ({ ...r, del: !!r.deleted, matched: !!r.matched })));
 });
 
-app.post('/api/transactions/:companyId', (req, res) => {
+app.post('/api/transactions/:companyId', authRequired, (req, res) => {
   const insert = db.prepare('INSERT OR REPLACE INTO transactions (id, date, amount, description, matched, matched_account, matched_rule, iva, paid_by, company_id, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)');
   const tx = db.transaction(() => {
     (req.body.transactions || []).forEach(t => {
@@ -486,41 +562,41 @@ app.post('/api/transactions/:companyId', (req, res) => {
 });
 
 // ── RULES ──
-app.get('/api/rules/:companyId', (req, res) => {
+app.get('/api/rules/:companyId', authRequired, (req, res) => {
   const rows = db.prepare('SELECT id, pattern as p, account as a, description as d, priority as pr, iva as iv FROM rules WHERE company_id = ?').all(req.params.companyId);
   res.json(rows);
 });
 
-app.post('/api/rules/:companyId', (req, res) => {
+app.post('/api/rules/:companyId', authRequired, (req, res) => {
   const { id, p, a, d, pr, iv } = req.body;
   db.prepare('INSERT OR REPLACE INTO rules VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, p, a, d, pr || 1, iv || 'na', req.params.companyId);
   res.json({ ok: true });
 });
 
-app.delete('/api/rules/:companyId/:id', (req, res) => {
+app.delete('/api/rules/:companyId/:id', authRequired, (req, res) => {
   db.prepare('DELETE FROM rules WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
   res.json({ ok: true });
 });
 
 // ── MASTERS (clients, suppliers, banks) ──
-app.get('/api/masters/:companyId/:type', (req, res) => {
+app.get('/api/masters/:companyId/:type', authRequired, (req, res) => {
   const rows = db.prepare('SELECT id, data FROM masters WHERE company_id = ? AND type = ?').all(req.params.companyId, req.params.type);
   res.json(rows.map(r => ({ id: r.id, ...JSON.parse(r.data) })));
 });
 
-app.post('/api/masters/:companyId/:type', (req, res) => {
+app.post('/api/masters/:companyId/:type', authRequired, (req, res) => {
   const { id, ...data } = req.body;
   db.prepare('INSERT OR REPLACE INTO masters VALUES (?, ?, ?, ?)').run(id, req.params.type, JSON.stringify(data), req.params.companyId);
   res.json({ ok: true });
 });
 
-app.delete('/api/masters/:companyId/:type/:id', (req, res) => {
+app.delete('/api/masters/:companyId/:type/:id', authRequired, (req, res) => {
   db.prepare('DELETE FROM masters WHERE id = ? AND type = ? AND company_id = ?').run(req.params.id, req.params.type, req.params.companyId);
   res.json({ ok: true });
 });
 
 // ── BACKUP ──
-app.get('/api/backup/:companyId', (req, res) => {
+app.get('/api/backup/:companyId', authRequired, (req, res) => {
   const cid = req.params.companyId;
   const data = {
     version: '6.1',
@@ -579,12 +655,12 @@ app.post('/api/ocr', async (req, res) => {
 });
 
 // ── USERS MANAGEMENT ──
-app.get('/api/users/:companyId', (req, res) => {
+app.get('/api/users/:companyId', authRequired, adminRequired, (req, res) => {
   const rows = db.prepare('SELECT id, username, name, role, company_id FROM users WHERE company_id = ?').all(req.params.companyId);
   res.json(rows);
 });
 
-app.post('/api/users/:companyId', (req, res) => {
+app.post('/api/users/:companyId', authRequired, adminRequired, (req, res) => {
   const { id, username, password, name, role } = req.body;
   try {
     db.prepare('INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?)').run(id, username, password, name, role || 'user', req.params.companyId);
@@ -594,13 +670,13 @@ app.post('/api/users/:companyId', (req, res) => {
   }
 });
 
-app.delete('/api/users/:companyId/:id', (req, res) => {
+app.delete('/api/users/:companyId/:id', authRequired, adminRequired, (req, res) => {
   db.prepare('DELETE FROM users WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
   res.json({ ok: true });
 });
 
 // ── COMPANIES MANAGEMENT (filtered by user access) ──
-app.get('/api/companies', (req, res) => {
+app.get('/api/companies', authRequired, (req, res) => {
   const userId = req.query.userId;
   const userRole = req.query.role;
   if (userRole === 'admin') {
@@ -617,7 +693,7 @@ app.get('/api/companies', (req, res) => {
   }
 });
 
-app.post('/api/companies', (req, res) => {
+app.post('/api/companies', authRequired, adminRequired, (req, res) => {
   const { id, name, cif, address, config } = req.body;
   try {
     db.prepare('INSERT OR REPLACE INTO companies VALUES (?, ?, ?, ?, ?)').run(id, name, cif || '', address || '', config || '{}');
@@ -630,12 +706,12 @@ app.post('/api/companies', (req, res) => {
 });
 
 // ── USER-COMPANY ACCESS ──
-app.get('/api/user-companies/:userId', (req, res) => {
+app.get('/api/user-companies/:userId', authRequired, (req, res) => {
   const rows = db.prepare('SELECT company_id FROM user_companies WHERE user_id = ?').all(req.params.userId);
   res.json(rows.map(r => r.company_id));
 });
 
-app.post('/api/user-companies', (req, res) => {
+app.post('/api/user-companies', authRequired, adminRequired, (req, res) => {
   const { userId, companyId } = req.body;
   try {
     db.prepare('INSERT OR IGNORE INTO user_companies VALUES (?, ?)').run(userId, companyId);
@@ -645,13 +721,13 @@ app.post('/api/user-companies', (req, res) => {
   }
 });
 
-app.delete('/api/user-companies/:userId/:companyId', (req, res) => {
+app.delete('/api/user-companies/:userId/:companyId', authRequired, adminRequired, (req, res) => {
   db.prepare('DELETE FROM user_companies WHERE user_id = ? AND company_id = ?').run(req.params.userId, req.params.companyId);
   res.json({ ok: true });
 });
 
 // ── LOAD PGC for existing company ──
-app.post('/api/load-pgc/:companyId', (req, res) => {
+app.post('/api/load-pgc/:companyId', authRequired, adminRequired, (req, res) => {
   const added = loadPGCForCompany(req.params.companyId);
   res.json({ ok: true, added });
 });
@@ -662,7 +738,11 @@ app.get('*', (req, res) => {
 });
 
 // ── Start ──
+migratePasswords();
+scheduleDailyBackup();
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✓ Cimafondos v7.0.0 running on port ${PORT}`);
+  console.log(`✓ Cimafondos v7.1.0 running on port ${PORT}`);
   console.log(`  Database: ${DB_PATH}`);
+  console.log(`  Backups: ${BACKUP_DIR}`);
+  console.log(`  JWT: active, ${TOKEN_EXPIRY} expiry`);
 });

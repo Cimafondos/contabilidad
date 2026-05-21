@@ -99,7 +99,11 @@ var MONTHS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','D
 
 async function api(path,opts){
   opts=opts||{};
-  var r=await fetch(API+path,{headers:{'Content-Type':'application/json'},method:opts.method||'GET',body:opts.body?JSON.stringify(opts.body):undefined});
+  var headers={'Content-Type':'application/json'};
+  var token=sessionStorage.getItem('cf_token');
+  if(token)headers['Authorization']='Bearer '+token;
+  var r=await fetch(API+path,{headers:headers,method:opts.method||'GET',body:opts.body?JSON.stringify(opts.body):undefined});
+  if(r.status===401){sessionStorage.removeItem('cf_token');state.user=null;render();throw new Error('Sesión expirada');}
   if(!r.ok)throw new Error('Error '+r.status);return r.json();
 }
 
@@ -320,7 +324,7 @@ function render(){
   (function(){var emps=getEmpresas();if(!emps.length)emps=[{name:state.company.name}];var userEmps=emps;try{var users=getUsers();var cu=users.find(function(u){return u.name===(state.user?state.user.name:'');});if(cu&&cu.empresas&&cu.empresas.length>0){userEmps=emps.filter(function(em){return cu.empresas.indexOf(em.name)>=0;});}}catch(e){}return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+userEmps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
   +'<span style="opacity:0.7">— v7.0.0</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
-  '<div class="ribbon">'+tab.groups.map(function(g){return '<div class="rgroup"><div class="rgroup-btns">'+g.items.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
+  '<div class="ribbon">'+tab.groups.map(function(g){var filteredItems=g.items.filter(function(it){if(it.id==='admin'&&state.user&&state.user.role!=='admin')return false;return true;});if(!filteredItems.length)return '';return '<div class="rgroup"><div class="rgroup-btns">'+filteredItems.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
   renderView();
 }
@@ -406,6 +410,7 @@ async function doLogin(){
     console.log('Server response:',r);
     if(r&&r.user){
       state.user=r.user;state.company=r.company;
+      if(r.token)sessionStorage.setItem('cf_token',r.token);
       try{await loadData();}catch(e){console.log('loadData error:',e);}
       try{checkIntegrity();}catch(e){}
       try{loadClosedPeriods();}catch(e){}
@@ -451,6 +456,7 @@ async function doLogin(){
   }
 }
 function logout(){
+  sessionStorage.removeItem('cf_token');
   state.user=null;state.company=null;render();
 }
 
@@ -2937,6 +2943,7 @@ function saveUsers(u){try{localStorage.setItem('cf_users',JSON.stringify(u));}ca
 function initUsers(){var u=getUsers();if(!u.length){u=[{user:'admin',name:'Administrador',role:'admin',pass:'admin',empresas:[]},{user:'javier',name:'Javier',role:'user',pass:'1234',empresas:[]},{user:'pepe',name:'Pepe',role:'user',pass:'1234',empresas:[]},{user:'santi',name:'Santi',role:'user',pass:'1234',empresas:[]}];saveUsers(u);}}
 initUsers();
 function renderAdmin(c){
+  if(!state.user||state.user.role!=='admin'){c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">⛔ Acceso restringido a administradores</div></div>';return;}
   var empresas=getEmpresas();var users=getUsers();
   c.innerHTML='<div class="card"><div class="card-h"><span>👤 Panel de administración</span><button class="btn btn-p" style="font-size:10px" onclick="runTestCuadre()">🧪 Test de cuadre fiscal</button></div><div class="card-b">'+
   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
