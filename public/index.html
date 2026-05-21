@@ -292,24 +292,19 @@ function applyFilter(){
 }
 function resetFilter(){state.dateFrom=state.ejercicio+'-01-01';state.dateTo=state.ejercicio+'-12-31';renderView();}
 async function doRefresh(){await loadData();checkIntegrity();toast('Datos recargados');render();}
-function changeEmpresa(name){
-  var empresas=getEmpresas();var em=empresas.find(function(e){return e.name===name;});
+function changeEmpresa(idOrName){
+  var empresas=state.serverEmpresas||[];
+  if(!empresas.length)empresas=getEmpresas();
+  var em=empresas.find(function(e){return e.id===idOrName;})||empresas.find(function(e){return e.name===idOrName;});
   if(!em)return;
-  // Store ALL company IDs we've seen from the server
-  if(!window._companyIds)window._companyIds={};
-  if(state.company&&state.company.id)window._companyIds[state.company.name]=state.company.id;
-  // Use stored server ID if we have one, otherwise create local ID
-  var compId=window._companyIds[name]||name.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
-  // Always use the real empresa name, not the ID
-  state.company={id:compId,name:em.name};
-  // Register mapping
-  EMPRESA_MAP[compId]=em.name;
-  // Remember last selected company — ALWAYS save real name
-  try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:compId,name:em.name}));}catch(e){}
-  showProgress('Cambiando empresa','Cargando '+name+'...');
-  loadData().then(function(){checkIntegrity();fixCompanyState();render();}).catch(function(){
+  var compId=em.id||idOrName;
+  state.company={id:compId,name:em.name||idOrName};
+  EMPRESA_MAP[compId]=em.name||idOrName;
+  try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:compId,name:em.name||idOrName}));}catch(e){}
+  showProgress('Cambiando empresa','Cargando '+(em.name||idOrName)+'...');
+  loadData().then(function(){checkIntegrity();render();}).catch(function(){
     state.accounts=[];state.entries=[];state.rules=[];render();
-    toast('Empresa '+name+': sin datos en el servidor','ok');
+    toast('Empresa '+(em.name||idOrName)+': sin datos en el servidor','ok');
   });
 }
 function changeEjercicio(y){state.ejercicio=parseInt(y);initDates();render();}
@@ -322,7 +317,7 @@ function render(){
   var intBadge=state.integrity?(state.integrity.ok?'<span class="integrity-ok">✓ OK</span>':'<span class="integrity-err" style="cursor:pointer" onclick="state.tab=\'config\';state.view=\'incidencias\';render();">✗ '+state.integrity.errors.length+' errores</span>'):'';
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div>'+
-  (function(){var emps=state.serverEmpresas||[];if(!emps.length){emps=getEmpresas();}if(!emps.length&&state.company)emps=[{name:state.company.name}];return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+emps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
+  (function(){var emps=state.serverEmpresas||[];if(!emps.length){emps=getEmpresas();}if(!emps.length&&state.company)emps=[{id:state.company.id,name:state.company.name}];return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+emps.map(function(em){var eid=em.id||em.name;return '<option value="'+h(eid)+'"'+(state.company&&(state.company.id===eid||state.company.name===em.name)?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
   +'<span style="opacity:0.7">— v7.0.0</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7;cursor:pointer" onclick="showChangePassword()" title="Cambiar contraseña">'+h(state.user.name)+' 🔑</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){var filteredItems=g.items.filter(function(it){if(it.id==='admin'&&state.user&&state.user.role!=='superadmin'&&state.user.role!=='admin')return false;if(it.id==='migrupo'&&state.user&&state.user.role!=='superadmin'&&state.user.role!=='admin'&&state.user.role!=='group_admin')return false;return true;});if(!filteredItems.length)return '';return '<div class="rgroup"><div class="rgroup-btns">'+filteredItems.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
@@ -3491,19 +3486,18 @@ function resetPassUsuario(idx){
   toast('Contraseña de '+u.user+' cambiada a: '+newPass);
 }
 
-function borrarDatosEmpresa(){
-  var nombre=prompt('Escribe el nombre de la empresa para confirmar el borrado TOTAL:');
+async function borrarDatosEmpresa(){
+  var nombre=prompt('Escribe el nombre de la empresa para confirmar el borrado:');
   if(!nombre||nombre!==state.company.name){toast('Nombre incorrecto. Borrado cancelado.','error');return;}
-  if(!confirm('⚠️ ÚLTIMA CONFIRMACIÓN: ¿Borrar TODOS los datos de '+state.company.name+'? Esta acción NO se puede deshacer.'))return;
-  var cid=state.company.id;
-  Promise.all([
-    api('/api/entries-all/'+cid,{method:'DELETE'}),
-    api('/api/accounts-all/'+cid,{method:'DELETE'})
-  ]).then(function(results){
-    Object.keys(localStorage).forEach(function(k){if(k.indexOf(cid)>=0||k.indexOf('cf_')>=0)localStorage.removeItem(k);});
-    toast('✅ Borrados '+(results[0].deleted||0)+' asientos y '+(results[1].deleted||0)+' cuentas de '+state.company.name);
-    loadData().then(function(){render();});
-  }).catch(function(e){toast('Error al borrar: '+e.message,'error');});
+  if(!confirm('⚠️ Los asientos se marcarán como eliminados (recuperables desde la Papelera).\n\n¿Continuar?'))return;
+  showProgress('Eliminando datos','Marcando asientos como eliminados...');
+  try{
+    var r=await api('/api/soft-delete-entries/'+state.company.id,{method:'POST'});
+    updateProgress(80,'Recargando datos...');
+    await loadData();checkIntegrity();
+    hideProgress('✅',(r.count||0)+' asientos marcados como eliminados. Puedes recuperarlos desde la Papelera.');
+    render();
+  }catch(e){hideProgress('❌','Error');toast('Error: '+e.message,'error');}
 }
 function exportarTodoCSV(){
   var rows=['TIPO,DATO1,DATO2,DATO3,DATO4'];
