@@ -322,7 +322,7 @@ function render(){
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div>'+
   (function(){var emps=getEmpresas();if(!emps.length)emps=[{name:state.company.name}];var userEmps=emps;try{var users=getUsers();var cu=users.find(function(u){return u.name===(state.user?state.user.name:'');});if(cu&&cu.empresas&&cu.empresas.length>0){userEmps=emps.filter(function(em){return cu.empresas.indexOf(em.name)>=0;});}}catch(e){}return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+userEmps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
-  +'<span style="opacity:0.7">— v7.0.0</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7">'+h(state.user.name)+'</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  +'<span style="opacity:0.7">— v7.0.0</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7;cursor:pointer" onclick="showChangePassword()" title="Cambiar contraseña">'+h(state.user.name)+' 🔑</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){var filteredItems=g.items.filter(function(it){if(it.id==='admin'&&state.user&&state.user.role!=='admin')return false;return true;});if(!filteredItems.length)return '';return '<div class="rgroup"><div class="rgroup-btns">'+filteredItems.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
   '<div class="main" id="content"></div>';
@@ -455,6 +455,41 @@ async function doLogin(){
     var el=$('lerr');if(el)el.textContent='Usuario o contraseña incorrectos';
   }
 }
+function showChangePassword(){
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
+    '<h3 style="margin:0 0 16px">🔑 Cambiar contraseña</h3>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Contraseña actual</label><input type="password" id="cpOld" class="inp" style="width:100%"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nueva contraseña</label><input type="password" id="cpNew" class="inp" style="width:100%"></div>'+
+    '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">Repetir nueva contraseña</label><input type="password" id="cpNew2" class="inp" style="width:100%"></div>'+
+    '<div id="cpError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+    '<button class="btn btn-d" onclick="this.closest(\'div[style]\').remove()">Cancelar</button>'+
+    '<button class="btn btn-p" onclick="doChangePassword()">Cambiar</button>'+
+    '</div></div>';
+  document.body.appendChild(modal);
+  document.getElementById('cpOld').focus();
+}
+async function doChangePassword(){
+  var old=document.getElementById('cpOld').value;
+  var n1=document.getElementById('cpNew').value;
+  var n2=document.getElementById('cpNew2').value;
+  var err=document.getElementById('cpError');
+  if(!old||!n1){err.textContent='Rellena todos los campos';return;}
+  if(n1!==n2){err.textContent='Las contraseñas nuevas no coinciden';return;}
+  if(n1.length<4){err.textContent='Mínimo 4 caracteres';return;}
+  try{
+    var r=await api('/api/change-password',{method:'POST',body:{oldPassword:old,newPassword:n1}});
+    if(r&&r.ok){
+      toast('✓ Contraseña cambiada correctamente');
+      document.querySelector('div[style*="position:fixed"]').remove();
+    }else{
+      err.textContent=r.error||'Error al cambiar contraseña';
+    }
+  }catch(e){err.textContent=e.message||'Error de conexión';}
+}
+
 function logout(){
   sessionStorage.removeItem('cf_token');
   state.user=null;state.company=null;render();

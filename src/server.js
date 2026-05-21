@@ -306,6 +306,13 @@ if (companyCount === 0) {
 }
 
 // ── Middleware ──
+// Force HTTPS in production
+app.use((req, res, next) => {
+  if (process.env.RAILWAY_ENVIRONMENT && req.headers['x-forwarded-proto'] !== 'https') {
+    return res.redirect('https://' + req.headers.host + req.url);
+  }
+  next();
+});
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -652,6 +659,28 @@ app.post('/api/ocr', async (req, res) => {
           console.error('Error en /api/ocr:', err);
           res.status(500).json({ error: err.message });
     }
+});
+
+// ── CHANGE PASSWORD ──
+app.post('/api/change-password', authRequired, (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword) return res.status(400).json({ error: 'Faltan campos' });
+  if (newPassword.length < 4) return res.status(400).json({ error: 'Mínimo 4 caracteres' });
+  
+  const user = db.prepare('SELECT id, password FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+  
+  // Verify old password
+  const valid = user.password.startsWith('$2') 
+    ? bcrypt.compareSync(oldPassword, user.password)
+    : oldPassword === user.password;
+  if (!valid) return res.status(401).json({ error: 'Contraseña actual incorrecta' });
+  
+  // Hash and save new password
+  const hashed = bcrypt.hashSync(newPassword, BCRYPT_ROUNDS);
+  db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, req.user.id);
+  auditLog(req, 'change-password', `User ${req.user.username} changed password`);
+  res.json({ ok: true });
 });
 
 // ── USERS MANAGEMENT ──
