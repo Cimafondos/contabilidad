@@ -836,6 +836,22 @@ app.delete('/api/group-users/:userId', authRequired, groupAdminRequired, (req, r
 // ── USER-COMPANY ACCESS ──
 app.get('/api/user-companies/:userId', authRequired, (req, res) => {
   const rows = db.prepare('SELECT company_id FROM user_companies WHERE user_id = ?').all(req.params.userId);
+  res.json(rows);
+});
+
+app.post('/api/user-companies/sync', authRequired, groupAdminRequired, (req, res) => {
+  const { userId, companyIds } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId requerido' });
+  // Delete all current assignments for this user
+  db.prepare('DELETE FROM user_companies WHERE user_id = ?').run(userId);
+  // Insert new assignments
+  const insert = db.prepare('INSERT OR IGNORE INTO user_companies VALUES (?, ?)');
+  (companyIds || []).forEach(cid => insert.run(userId, cid));
+  auditLog(req, 'sync-user-companies', `${userId}: ${(companyIds||[]).join(', ')}`);
+  res.json({ ok: true });
+});
+app.get('/api/user-companies/:userId', authRequired, (req, res) => {
+  const rows = db.prepare('SELECT company_id FROM user_companies WHERE user_id = ?').all(req.params.userId);
   res.json(rows.map(r => r.company_id));
 });
 

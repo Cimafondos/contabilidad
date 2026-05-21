@@ -3264,20 +3264,36 @@ function doEditEmpresaGrupo(id){
 }
 
 function editUsuarioGrupo(id,username,nombre,rol){
-  var modal=document.createElement('div');
-  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';modal.onclick=function(e){if(e.target===modal)modal.remove();};
-  modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
-    '<h3 style="margin:0 0 16px">✏️ Editar usuario</h3>'+
-    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Usuario</label><input id="euUser" class="inp" style="width:100%" value="'+h(username)+'"></div>'+
-    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre completo</label><input id="euNombre" class="inp" style="width:100%" value="'+h(nombre)+'"></div>'+
-    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nueva contraseña (dejar vacío para no cambiar)</label><input id="euPass" type="password" class="inp" style="width:100%" placeholder="Sin cambios"></div>'+
-    '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">Rol</label><select id="euRol" class="sel" style="width:100%"><option value="user"'+(rol==='user'?' selected':'')+'>Usuario</option><option value="group_admin"'+(rol==='group_admin'?' selected':'')+'>Administrador del grupo</option></select></div>'+
-    '<div id="euError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
-    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
-    '<button class="btn btn-d" onclick="closeModal()">Cancelar</button>'+
-    '<button class="btn btn-p" onclick="doEditUsuarioGrupo(\''+h(id)+'\')">Guardar</button>'+
-    '</div></div>';
-  document.body.appendChild(modal);
+  // Load companies and user's current assignments
+  Promise.all([
+    api('/api/companies'),
+    api('/api/user-companies/'+id).catch(function(){return [];})
+  ]).then(function(results){
+    var companies=results[0]||[];
+    var assigned=results[1]||[];
+    var assignedIds={};assigned.forEach(function(a){assignedIds[a.company_id||a.id]=true;});
+    
+    var empChecks=companies.map(function(em){
+      var checked=assignedIds[em.id]?'checked':'';
+      return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:3px 0"><input type="checkbox" class="euEmpCheck" value="'+em.id+'" '+checked+'>'+h(em.name)+'</label>';
+    }).join('')||'<span style="font-size:11px;color:var(--txM)">Sin empresas en el grupo</span>';
+    
+    var modal=document.createElement('div');
+    modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;overflow-y:auto';modal.onclick=function(e){if(e.target===modal)modal.remove();};
+    modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:380px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
+      '<h3 style="margin:0 0 16px">✏️ Editar usuario</h3>'+
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Usuario</label><input id="euUser" class="inp" style="width:100%" value="'+h(username)+'"></div>'+
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre completo</label><input id="euNombre" class="inp" style="width:100%" value="'+h(nombre)+'"></div>'+
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nueva contraseña (dejar vacío para no cambiar)</label><input id="euPass" type="password" class="inp" style="width:100%" placeholder="Sin cambios"></div>'+
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Rol</label><select id="euRol" class="sel" style="width:100%"><option value="user"'+(rol==='user'?' selected':'')+'>Usuario</option><option value="group_admin"'+(rol==='group_admin'?' selected':'')+'>Administrador del grupo</option></select></div>'+
+      '<div style="margin-bottom:16px;padding:10px;background:#F8F9FB;border-radius:6px"><label style="font-size:11px;font-weight:600">🏢 Empresas asignadas</label><div style="margin-top:4px">'+empChecks+'</div></div>'+
+      '<div id="euError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+      '<button class="btn btn-d" onclick="closeModal()">Cancelar</button>'+
+      '<button class="btn btn-p" onclick="doEditUsuarioGrupo(\''+h(id)+'\')">Guardar</button>'+
+      '</div></div>';
+    document.body.appendChild(modal);
+  });
 }
 function doEditUsuarioGrupo(id){
   var username=document.getElementById('euUser').value.trim();
@@ -3288,9 +3304,18 @@ function doEditUsuarioGrupo(id){
   if(!username){err.textContent='El usuario es obligatorio';return;}
   if(!nombre){err.textContent='El nombre es obligatorio';return;}
   if(pass&&pass.length<4){err.textContent='Contraseña mínimo 4 caracteres';return;}
+  
+  // Get selected companies
+  var selectedEmps=[];
+  document.querySelectorAll('.euEmpCheck').forEach(function(cb){if(cb.checked)selectedEmps.push(cb.value);});
+  
   var body={id:id,username:username,name:nombre,role:rol};
   if(pass)body.password=pass;
+  
   api('/api/group-users',{method:'POST',body:body}).then(function(){
+    // Update company assignments
+    return api('/api/user-companies/sync',{method:'POST',body:{userId:id,companyIds:selectedEmps}});
+  }).then(function(){
     closeModal();
     toast('✓ Usuario actualizado');render();
   }).catch(function(e){err.textContent='Error: '+e.message;});
