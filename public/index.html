@@ -321,7 +321,7 @@ function render(){
   var intBadge=state.integrity?(state.integrity.ok?'<span class="integrity-ok">✓ OK</span>':'<span class="integrity-err" style="cursor:pointer" onclick="state.tab=\'config\';state.view=\'incidencias\';render();">✗ '+state.integrity.errors.length+' errores</span>'):'';
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div>'+
-  (function(){var emps=getEmpresas();if(!emps.length)emps=[{name:state.company.name}];var userEmps=emps;try{var users=getUsers();var cu=users.find(function(u){return u.name===(state.user?state.user.name:'');});if(cu&&cu.empresas&&cu.empresas.length>0){userEmps=emps.filter(function(em){return cu.empresas.indexOf(em.name)>=0;});}}catch(e){}return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+userEmps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
+  (function(){var emps=state.serverEmpresas||[];if(!emps.length){emps=getEmpresas();}if(!emps.length&&state.company)emps=[{name:state.company.name}];return '<select class="sel" style="background:rgba(0,0,0,0.3);color:#fff;border-color:rgba(255,255,255,0.4);font-size:12px;padding:3px 8px;max-width:220px;font-weight:600" onchange="changeEmpresa(this.value)">'+emps.map(function(em){return '<option value="'+h(em.name)+'"'+(state.company&&state.company.name===em.name?' selected':'')+'>'+h(em.name)+'</option>';}).join('')+'</select>';})()
   +'<span style="opacity:0.7">— v7.0.0</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7;cursor:pointer" onclick="showChangePassword()" title="Cambiar contraseña">'+h(state.user.name)+' 🔑</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
   '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   '<div class="ribbon">'+tab.groups.map(function(g){var filteredItems=g.items.filter(function(it){if(it.id==='admin'&&state.user&&state.user.role!=='superadmin'&&state.user.role!=='admin')return false;if(it.id==='migrupo'&&state.user&&state.user.role!=='superadmin'&&state.user.role!=='admin'&&state.user.role!=='group_admin')return false;return true;});if(!filteredItems.length)return '';return '<div class="rgroup"><div class="rgroup-btns">'+filteredItems.map(function(it){return '<button class="rbtn '+(state.view===it.id?'active':'')+'" onclick="setView(\''+it.id+'\')"><span class="ico">'+it.icon+'</span>'+it.label+'</button>';}).join('')+'</div><div class="rgroup-label">'+g.label+'</div></div>';}).join('')+'</div>'+
@@ -412,6 +412,8 @@ async function doLogin(){
     if(r&&r.user){
       state.user=r.user;state.company=r.company;
       if(r.token)sessionStorage.setItem('cf_token',r.token);
+      // Load empresas from server (filtered by group)
+      try{state.serverEmpresas=await api('/api/companies');}catch(e){state.serverEmpresas=[];}
       try{await loadData();}catch(e){console.log('loadData error:',e);}
       try{checkIntegrity();}catch(e){}
       try{loadClosedPeriods();}catch(e){}
@@ -2994,9 +2996,9 @@ async function renderMiGrupo(c){
     // Empresas del grupo
     '<div class="card"><div class="card-h">🏢 Empresas — '+companies.length+
     '<button class="btn btn-p" style="margin-left:auto;font-size:10px" onclick="newEmpresaGrupo()">+ Nueva empresa</button></div>'+
-    '<table><thead><tr><th>Empresa</th><th>CIF</th><th>Estado</th></tr></thead><tbody>'+
+    '<table><thead><tr><th>Empresa</th><th>CIF</th><th>Estado</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
     companies.map(function(em,i){
-      return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(em.name)+'</td><td>'+h(em.cif||'—')+'</td><td><span class="badge badge-g">Activa</span></td></tr>';
+      return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(em.name)+'</td><td>'+h(em.cif||'—')+'</td><td><span class="badge badge-g">Activa</span></td><td><button class="abtn" onclick="editEmpresaGrupo(\''+h(em.id)+'\',\''+h(em.name)+'\',\''+h(em.cif||'')+'\')">✏️</button></td></tr>';
     }).join('')+
     '</tbody></table></div>'+
     
@@ -3008,7 +3010,7 @@ async function renderMiGrupo(c){
       var rolLabel=u.role==='superadmin'?'Superadmin':u.role==='group_admin'?'Admin Grupo':'Usuario';
       var rolClass=u.role==='superadmin'?'badge-r':u.role==='group_admin'?'badge-b':'badge-g';
       return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(u.username)+'</td><td>'+h(u.name)+'</td><td><span class="badge '+rolClass+'">'+rolLabel+'</span></td>'+
-      '<td>'+(u.role!=='superadmin'?'<button class="abtn" style="color:var(--rd)" onclick="deleteUsuarioGrupo(\''+u.id+'\',\''+h(u.name)+'\')">🗑</button>':'')+'</td></tr>';
+      '<td>'+(u.role!=='superadmin'?'<button class="abtn" onclick="editUsuarioGrupo(\''+u.id+'\',\''+h(u.username)+'\',\''+h(u.name)+'\',\''+u.role+'\')">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteUsuarioGrupo(\''+u.id+'\',\''+h(u.name)+'\')">🗑</button>':'')+'</td></tr>';
     }).join('')+
     '</tbody></table></div>'+
     
@@ -3019,26 +3021,150 @@ async function renderMiGrupo(c){
 }
 
 function newEmpresaGrupo(){
-  var nombre=prompt('Nombre de la nueva empresa:');
-  if(!nombre)return;
-  var cif=prompt('CIF (opcional):');
-  var id=nombre.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
-  api('/api/companies',{method:'POST',body:{id:id,name:nombre,cif:cif||''}}).then(function(){
-    toast('✓ Empresa '+nombre+' creada');render();
+  api('/api/group-users').then(function(users){
+    var userChecks=users.map(function(u){
+      return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:3px 0"><input type="checkbox" class="neUserCheck" value="'+u.id+'" checked>'+h(u.name)+' ('+u.username+')</label>';
+    }).join('');
+    var modal=document.createElement('div');
+    modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;overflow-y:auto';
+    modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
+      '<h3 style="margin:0 0 16px">\ud83c\udfe2 Nueva empresa</h3>'+
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre de la empresa *</label><input id="neNombre" class="inp" style="width:100%" placeholder="Ej: Mi Empresa S.L."></div>'+
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">CIF</label><input id="neCif" class="inp" style="width:100%" placeholder="Ej: B12345678"></div>'+
+      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Direcci\u00f3n</label><input id="neDir" class="inp" style="width:100%" placeholder="Ej: C/ Mayor 1, Valencia"></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+
+      '<div><label style="font-size:11px;color:var(--txM)">Tel\u00e9fono</label><input id="neTel" class="inp" style="width:100%" placeholder="963 000 000"></div>'+
+      '<div><label style="font-size:11px;color:var(--txM)">Email</label><input id="neEmail" class="inp" style="width:100%" placeholder="info@empresa.es"></div>'+
+      '</div>'+
+      '<div style="margin-bottom:12px;padding:10px;background:var(--priLt);border-radius:6px">'+
+      '<label style="font-size:11px;font-weight:600;color:var(--pri)">\ud83d\udcd1 Plan contable</label>'+
+      '<div style="margin-top:4px"><label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nePGC" checked>Cargar Plan General Contable Pymes (219 cuentas)</label></div>'+
+      '</div>'+
+      '<div style="margin-bottom:16px;padding:10px;background:#F8F9FB;border-radius:6px">'+
+      '<label style="font-size:11px;font-weight:600">\ud83d\udc65 Usuarios con acceso</label>'+
+      '<div style="margin-top:4px">'+userChecks+'</div>'+
+      '</div>'+
+      '<div id="neError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+      '<button class="btn btn-d" onclick="this.closest(\'div[style]\').remove()">Cancelar</button>'+
+      '<button class="btn btn-p" onclick="doNewEmpresaGrupo()">Crear empresa</button>'+
+      '</div></div>';
+    document.body.appendChild(modal);
+    document.getElementById('neNombre').focus();
   }).catch(function(e){toast('Error: '+e.message,'error');});
+}
+function doNewEmpresaGrupo(){
+  var nombre=document.getElementById('neNombre').value.trim();
+  var cif=(document.getElementById('neCif')||{}).value||'';
+  var dir=(document.getElementById('neDir')||{}).value||'';
+  var tel=(document.getElementById('neTel')||{}).value||'';
+  var email=(document.getElementById('neEmail')||{}).value||'';
+  var loadPGC=document.getElementById('nePGC')?document.getElementById('nePGC').checked:true;
+  var err=document.getElementById('neError');
+  if(!nombre){err.textContent='El nombre es obligatorio';return;}
+  var id=nombre.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
+  var config=JSON.stringify({tel:tel.trim(),email:email.trim(),dir:dir.trim()});
+  var selectedUsers=[];
+  document.querySelectorAll('.neUserCheck').forEach(function(cb){if(cb.checked)selectedUsers.push(cb.value);});
+  api('/api/companies',{method:'POST',body:{id:id,name:nombre,cif:cif.trim(),address:dir.trim(),config:config}}).then(function(){
+    var promises=selectedUsers.map(function(uid){return api('/api/user-companies',{method:'POST',body:{userId:uid,companyId:id}});});
+    return Promise.all(promises);
+  }).then(function(){
+    document.querySelector('div[style*="position:fixed"]').remove();
+    toast('\u2713 Empresa '+nombre+' creada con Plan Contable Pymes');
+    api('/api/companies').then(function(emps){state.serverEmpresas=emps;render();});
+  }).catch(function(e){if(err)err.textContent='Error: '+e.message;});
 }
 
 function newUsuarioGrupo(){
-  var username=prompt('Nombre de usuario (login):');
-  if(!username)return;
-  var nombre=prompt('Nombre completo:');
-  if(!nombre)return;
-  var rol=prompt('Rol (user / group_admin):','user');
-  if(rol!=='user'&&rol!=='group_admin')rol='user';
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
+    '<h3 style="margin:0 0 16px">👤 Nuevo usuario</h3>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Usuario (para iniciar sesión)</label><input id="nuUser" class="inp" style="width:100%" placeholder="Ej: juan"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre completo</label><input id="nuNombre" class="inp" style="width:100%" placeholder="Ej: Juan García"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Contraseña inicial</label><input id="nuPass" class="inp" style="width:100%" value="1234" placeholder="Contraseña"></div>'+
+    '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">Rol</label><select id="nuRol" class="sel" style="width:100%"><option value="user">Usuario</option><option value="group_admin">Administrador del grupo</option></select></div>'+
+    '<div id="nuError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+    '<button class="btn btn-d" onclick="this.closest(\'div[style]\').remove()">Cancelar</button>'+
+    '<button class="btn btn-p" onclick="doNewUsuarioGrupo()">Crear usuario</button>'+
+    '</div></div>';
+  document.body.appendChild(modal);
+  document.getElementById('nuUser').focus();
+}
+function doNewUsuarioGrupo(){
+  var username=document.getElementById('nuUser').value.trim();
+  var nombre=document.getElementById('nuNombre').value.trim();
+  var pass=document.getElementById('nuPass').value;
+  var rol=document.getElementById('nuRol').value;
+  var err=document.getElementById('nuError');
+  if(!username){err.textContent='El usuario es obligatorio';return;}
+  if(!nombre){err.textContent='El nombre es obligatorio';return;}
+  if(!pass||pass.length<4){err.textContent='Contraseña mínimo 4 caracteres';return;}
   var id='u_'+Date.now();
-  api('/api/group-users',{method:'POST',body:{id:id,username:username,name:nombre,role:rol}}).then(function(){
-    toast('✓ Usuario '+nombre+' creado (contraseña: 1234)');render();
-  }).catch(function(e){toast('Error: '+e.message,'error');});
+  api('/api/group-users',{method:'POST',body:{id:id,username:username,name:nombre,password:pass,role:rol}}).then(function(){
+    document.querySelector('div[style*="position:fixed"]').remove();
+    toast('✓ Usuario '+nombre+' creado');render();
+  }).catch(function(e){err.textContent='Error: '+e.message;});
+}
+
+function editEmpresaGrupo(id,nombre,cif){
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
+    '<h3 style="margin:0 0 16px">✏️ Editar empresa</h3>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre</label><input id="eeNombre" class="inp" style="width:100%" value="'+h(nombre)+'"></div>'+
+    '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">CIF</label><input id="eeCif" class="inp" style="width:100%" value="'+h(cif)+'"></div>'+
+    '<div id="eeError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+    '<button class="btn btn-d" onclick="this.closest(\'div[style]\').remove()">Cancelar</button>'+
+    '<button class="btn btn-p" onclick="doEditEmpresaGrupo(\''+h(id)+'\')">Guardar</button>'+
+    '</div></div>';
+  document.body.appendChild(modal);
+}
+function doEditEmpresaGrupo(id){
+  var nombre=document.getElementById('eeNombre').value.trim();
+  var cif=document.getElementById('eeCif').value.trim();
+  if(!nombre){document.getElementById('eeError').textContent='El nombre es obligatorio';return;}
+  api('/api/companies',{method:'POST',body:{id:id,name:nombre,cif:cif}}).then(function(){
+    document.querySelector('div[style*="position:fixed"]').remove();
+    toast('✓ Empresa actualizada');
+    api('/api/companies').then(function(emps){state.serverEmpresas=emps;render();});
+  }).catch(function(e){document.getElementById('eeError').textContent='Error: '+e.message;});
+}
+
+function editUsuarioGrupo(id,username,nombre,rol){
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
+    '<h3 style="margin:0 0 16px">✏️ Editar usuario</h3>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Usuario</label><input id="euUser" class="inp" style="width:100%" value="'+h(username)+'"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre completo</label><input id="euNombre" class="inp" style="width:100%" value="'+h(nombre)+'"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nueva contraseña (dejar vacío para no cambiar)</label><input id="euPass" type="password" class="inp" style="width:100%" placeholder="Sin cambios"></div>'+
+    '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">Rol</label><select id="euRol" class="sel" style="width:100%"><option value="user"'+(rol==='user'?' selected':'')+'>Usuario</option><option value="group_admin"'+(rol==='group_admin'?' selected':'')+'>Administrador del grupo</option></select></div>'+
+    '<div id="euError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+    '<button class="btn btn-d" onclick="this.closest(\'div[style]\').remove()">Cancelar</button>'+
+    '<button class="btn btn-p" onclick="doEditUsuarioGrupo(\''+h(id)+'\')">Guardar</button>'+
+    '</div></div>';
+  document.body.appendChild(modal);
+}
+function doEditUsuarioGrupo(id){
+  var username=document.getElementById('euUser').value.trim();
+  var nombre=document.getElementById('euNombre').value.trim();
+  var pass=document.getElementById('euPass').value;
+  var rol=document.getElementById('euRol').value;
+  var err=document.getElementById('euError');
+  if(!username){err.textContent='El usuario es obligatorio';return;}
+  if(!nombre){err.textContent='El nombre es obligatorio';return;}
+  if(pass&&pass.length<4){err.textContent='Contraseña mínimo 4 caracteres';return;}
+  var body={id:id,username:username,name:nombre,role:rol};
+  if(pass)body.password=pass;
+  api('/api/group-users',{method:'POST',body:body}).then(function(){
+    document.querySelector('div[style*="position:fixed"]').remove();
+    toast('✓ Usuario actualizado');render();
+  }).catch(function(e){err.textContent='Error: '+e.message;});
 }
 
 function deleteUsuarioGrupo(userId,nombre){
@@ -3048,40 +3174,40 @@ function deleteUsuarioGrupo(userId,nombre){
   }).catch(function(e){toast('Error: '+e.message,'error');});
 }
 
-function renderAdmin(c){
-  if(!state.user||state.user.role!=='superadmin'){c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">⛔ Acceso restringido a superadministradores</div></div>';return;}
-  var empresas=getEmpresas();var users=getUsers();
-  c.innerHTML='<div class="card"><div class="card-h"><span>👤 Panel de administración</span><button class="btn btn-p" style="font-size:10px" onclick="runTestCuadre()">🧪 Test de cuadre fiscal</button></div><div class="card-b">'+
+async function renderAdmin(c){
+  if(!state.user||state.user.role!=='superadmin'){c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">\u26d4 Acceso restringido a superadministradores</div></div>';return;}
+  c.innerHTML='<div style="text-align:center;padding:40px;color:var(--txM)">Cargando...</div>';
+  try{
+  var serverEmps=await api('/api/companies');
+  var serverUsers=await api('/api/group-users');
+  var groups=await api('/api/groups');
+  var groupMap={};groups.forEach(function(g){groupMap[g.id]=g.name;});
+  var groupOpts=groups.map(function(g){return '<option value="'+g.id+'">'+h(g.name)+'</option>';}).join('');
+  c.innerHTML='<div class="card"><div class="card-h"><span>\ud83d\udc64 Panel de administraci\u00f3n (Superadmin)</span><button class="btn btn-p" style="font-size:10px" onclick="runTestCuadre()">\ud83e\uddea Test de cuadre fiscal</button></div><div class="card-b">'+
   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
-  '<div class="card"><div class="card-h">👥 Usuarios — '+users.length+'<button class="btn btn-p" style="margin-left:auto;font-size:10px" onclick="newUsuario()">+ Nuevo</button></div><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Empresas</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
-  users.map(function(u,i){
-    var empNames=u.empresas&&u.empresas.length?u.empresas.join(', '):'<span style="color:var(--ok)">Todas</span>';
-    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(u.user)+'</td><td>'+h(u.name)+'</td><td><span class="badge '+(u.role==='admin'?'badge-r':'badge-b')+'">'+(u.role==='admin'?'Admin':'Usuario')+'</span></td><td style="font-size:10px">'+empNames+'</td><td style="white-space:nowrap"><button class="abtn" onclick="editUsuario('+i+')">✏️</button> '+(u.user!=='admin'?'<button class="abtn" style="color:var(--rd)" onclick="deleteUsuario('+i+')">🗑</button>':'')+'<button class="abtn" title="Reset contraseña" onclick="resetPassUsuario('+i+')">🔑</button>'+'</td></tr>';
-  }).join('')+
+  '<div class="card"><div class="card-h">\ud83c\udfe2 Grupos \u2014 '+groups.length+'<button class="btn btn-p" style="margin-left:auto;font-size:10px" onclick="newGrupoAdmin()">+ Nuevo grupo</button></div><table><thead><tr><th>Grupo</th><th>Empresas</th><th>Usuarios</th></tr></thead><tbody>'+
+  groups.map(function(g,i){var ne=serverEmps.filter(function(e){return e.group_id===g.id;}).length;var nu=serverUsers.filter(function(u){return u.group_id===g.id;}).length;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(g.name)+'</td><td>'+ne+'</td><td>'+nu+'</td></tr>';}).join('')+
   '</tbody></table></div>'+
-  '<div class="card"><div class="card-h">🏢 Empresas — '+empresas.length+'<button class="btn btn-p" style="margin-left:auto;font-size:10px" onclick="newEmpresa()">+ Nueva</button></div><table><thead><tr><th>Empresa</th><th>CIF</th><th>Estado</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
-  empresas.map(function(em,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(em.name)+'</td><td style="font-size:10px">'+h(em.cif||'—')+'</td><td><span class="badge '+(em.activa?'badge-g':'badge-a')+'">'+(em.activa?'Activa':'Inactiva')+'</span></td><td style="white-space:nowrap"><button class="abtn" onclick="editEmpresa('+i+')">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteEmpresa('+i+')">🗑</button></td></tr>';}).join('')+
+  '<div class="card"><div class="card-h">\ud83d\udc65 Usuarios \u2014 '+serverUsers.length+'</div><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Grupo</th></tr></thead><tbody>'+
+  serverUsers.map(function(u,i){var rl=u.role==='superadmin'?'Superadmin':u.role==='group_admin'?'Admin Grupo':'Usuario';var rc=u.role==='superadmin'?'badge-r':u.role==='group_admin'?'badge-b':'badge-g';return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(u.username)+'</td><td>'+h(u.name)+'</td><td><span class="badge '+rc+'">'+rl+'</span></td><td>'+h(groupMap[u.group_id]||'\u2014')+'</td></tr>';}).join('')+
   '</tbody></table></div>'+
   '</div>'+
-  '<div class="card" style="margin-top:8px"><div class="card-h">📊 Estadísticas del sistema</div><div class="card-b"><div class="row">'+
-  '<div class="stat"><div class="stat-v" style="color:var(--bl)">'+state.entries.length+'</div><div class="stat-l">Asientos</div></div>'+
-  '<div class="stat"><div class="stat-v" style="color:var(--ok)">'+state.accounts.length+'</div><div class="stat-l">Cuentas</div></div>'+
-  '<div class="stat"><div class="stat-v" style="color:var(--am)">'+state.rules.length+'</div><div class="stat-l">Reglas</div></div>'+
-  '<div class="stat"><div class="stat-v" style="color:var(--vi)">'+(function(){loadMasters();return masters.client.length+masters.supplier.length+masters.bank.length;})()+'</div><div class="stat-l">Maestros</div></div>'+
-  '<div class="stat"><div class="stat-v" style="color:var(--rd)">'+(function(){loadArticulos();return articulos.length;})()+'</div><div class="stat-l">Artículos</div></div>'+
-  '</div></div></div>'+
-  '<div class="card" style="margin-top:8px"><div class="card-h" style="color:var(--rd)">⚠️ Zona peligrosa</div><div class="card-b">'+
+  '<div class="card" style="margin-top:8px"><div class="card-h">\ud83c\udfe2 Todas las empresas \u2014 '+serverEmps.length+'</div><table><thead><tr><th>Empresa</th><th>CIF</th><th>Grupo</th><th style="width:120px">Mover a grupo</th></tr></thead><tbody>'+
+  serverEmps.map(function(em,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(em.name)+'</td><td style="font-size:10px">'+h(em.cif||'\u2014')+'</td><td><span class="badge badge-b">'+h(groupMap[em.group_id]||'Sin grupo')+'</span></td><td><select class="sel" style="font-size:10px;padding:2px 4px" onchange="moveEmpresaGrupo(\''+em.id+'\',this.value)"><option value="">\u2014</option>'+groupOpts+'</select></td></tr>';}).join('')+
+  '</tbody></table></div>'+
+  '<div class="card" style="margin-top:8px"><div class="card-h" style="color:var(--rd)">\u26a0\ufe0f Zona peligrosa</div><div class="card-b">'+
   '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-  '<button class="btn btn-a" onclick="softDeleteAsientos(\'empresa\')">🗑 Marcar asientos empresa actual como eliminados</button>'+
-  '<button class="btn btn-r" onclick="softDeleteAsientos(\'todas\')">🗑 Marcar asientos TODAS las empresas como eliminados</button>'+
-  '<button class="btn btn-p" onclick="recuperarAsientos()">♻️ Recuperar asientos eliminados</button>'+
-  '<button class="btn" style="background:#B71C1C;color:#fff" onclick="borrarDatosEmpresa()">💀 Borrar TODOS los datos de esta empresa</button>'+
-  '<button class="btn btn-d" onclick="exportarTodoCSV()">📊 Exportar todo CSV</button>'+
+  '<button class="btn btn-a" onclick="softDeleteAsientos(\'empresa\')">\ud83d\uddd1 Marcar asientos empresa actual como eliminados</button>'+
+  '<button class="btn btn-r" onclick="softDeleteAsientos(\'todas\')">\ud83d\uddd1 Marcar asientos TODAS las empresas como eliminados</button>'+
+  '<button class="btn btn-p" onclick="recuperarAsientos()">\u267b\ufe0f Recuperar asientos eliminados</button>'+
+  '<button class="btn" style="background:#B71C1C;color:#fff" onclick="borrarDatosEmpresa()">\ud83d\udc80 Borrar TODOS los datos de esta empresa</button>'+
+  '<button class="btn btn-d" onclick="exportarTodoCSV()">\ud83d\udcca Exportar todo CSV</button>'+
   '</div>'+
-  '<div style="margin-top:8px;font-size:10px;color:var(--txM)">ℹ️ Los asientos marcados como eliminados no se muestran pero se pueden recuperar (como en Sage). Para borrado definitivo, usa la Papelera o "Borrar TODOS los datos".</div>'+
+  '<div style="margin-top:8px;font-size:10px;color:var(--txM)">\u2139\ufe0f Los asientos marcados como eliminados no se muestran pero se pueden recuperar (como en Sage).</div>'+
   '</div></div>'+
   '<div id="testResults"></div>'+
   '</div></div>';
+  }catch(e){c.innerHTML='<div class="card"><div class="card-b" style="color:var(--rd);padding:20px">Error: '+e.message+'</div></div>';}
 }
 function getEmpresas(){try{return JSON.parse(localStorage.getItem('cf_empresas')||'[]');}catch(e){return [];}}
 function saveEmpresas(arr){try{localStorage.setItem('cf_empresas',JSON.stringify(arr));}catch(e){}}
@@ -3293,6 +3419,22 @@ function exportarTodoCSV(){
 // ═══ INCIDENCIAS CONTABLES ═══
 
 // ═══ TEST DE CUADRE FISCAL ═══
+function moveEmpresaGrupo(empresaId,grupoId){
+  if(!grupoId)return;
+  if(!confirm('¿Mover esta empresa al grupo seleccionado?'))return;
+  api('/api/move-company-group',{method:'POST',body:{companyId:empresaId,groupId:grupoId}}).then(function(){
+    toast('✓ Empresa movida de grupo');render();
+  }).catch(function(e){toast('Error: '+e.message,'error');});
+}
+function newGrupoAdmin(){
+  var nombre=prompt('Nombre del nuevo grupo:');
+  if(!nombre)return;
+  var id='g_'+nombre.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
+  api('/api/groups',{method:'POST',body:{id:id,name:nombre}}).then(function(){
+    toast('✓ Grupo '+nombre+' creado');render();
+  }).catch(function(e){toast('Error: '+e.message,'error');});
+}
+
 function runTestCuadre(){
   var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
   var am={};state.accounts.forEach(function(a){am[a.code]=a;});

@@ -142,13 +142,17 @@ if (groupCount === 0) {
 try {
   db.prepare("UPDATE users SET role = 'superadmin' WHERE username IN ('admin', 'javier') AND role = 'admin'").run();
   db.prepare("UPDATE users SET role = 'group_admin' WHERE username = 'santi' AND role IN ('user', 'admin')").run();
+  // Remove Santi from Cimafondos companies (he should only see his own group)
+  db.prepare("DELETE FROM user_companies WHERE user_id = (SELECT id FROM users WHERE username = 'santi') AND company_id IN (SELECT id FROM companies WHERE group_id = 'g_cimafondos')").run();
+  // Rename Cimafondos S.L. to Javier
+  db.prepare("UPDATE companies SET name = 'Javier' WHERE id = 'c1' AND name = 'Cimafondos S.L.'").run();
 } catch(e) {}
 
 // ── Seed default data if empty ──
 const companyCount = db.prepare('SELECT COUNT(*) as c FROM companies').get().c;
 if (companyCount === 0) {
-  db.prepare('INSERT INTO companies VALUES (?, ?, ?, ?, ?)').run(
-    'c1', 'Cimafondos S.L.', 'B98000001', 'Valencia', '{}'
+  db.prepare('INSERT INTO companies VALUES (?, ?, ?, ?, ?, ?)').run(
+    'c1', 'Javier', 'B98000001', 'Valencia', '{}', 'g_cimafondos'
   );
   
   const users = [
@@ -426,7 +430,12 @@ app.post('/api/login', rateLimitLogin, (req, res) => {
   const valid = user.password.startsWith('$2') ? bcrypt.compareSync(password, user.password) : password === user.password;
   if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
   const token = jwt.sign({ id: user.id, username: user.username, name: user.name, role: user.role, company_id: user.company_id, group_id: user.group_id }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
-  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(user.company_id);
+  // Get company: first try user's assigned company, then first company in their group
+  let company = db.prepare('SELECT * FROM companies WHERE id = ?').get(user.company_id);
+  if (!company && user.group_id) {
+    company = db.prepare('SELECT * FROM companies WHERE group_id = ? LIMIT 1').get(user.group_id);
+  }
+  if (!company) company = { id: 'none', name: 'Sin empresa', cif: '', address: '', config: '{}' };
   if (loginAttempts[req.ip]) delete loginAttempts[req.ip];
   auditLog(req, 'login', username);
   res.json({ user: { id: user.id, username: user.username, name: user.name, role: user.role }, company, token });
@@ -860,6 +869,15 @@ app.delete('/api/user-companies/:userId/:companyId', authRequired, adminRequired
 app.post('/api/load-pgc/:companyId', authRequired, adminRequired, (req, res) => {
   const added = loadPGCForCompany(req.params.companyId);
   res.json({ ok: true, added });
+});
+
+// ── MOVE COMPANY BETWEEN GROUPS ──
+app.post('/api/move-company-group', authRequired, superadminRequired, (req, res) => {
+  const { companyId, groupId } = req.body;
+  if (!companyId || !groupId) return res.status(400).json({ error: 'Faltan campos' });
+  db.prepare('UPDATE companies SET group_id = ? WHERE id = ?').run(groupId, companyId);
+  auditLog(req, 'move-company-group', `${companyId} -> ${groupId}`);
+  res.json({ ok: true });
 });
 
 // ── SPA fallback ──
