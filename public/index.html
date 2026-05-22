@@ -1700,10 +1700,9 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     facturas.push(fact);
   }
 
-  // ═══ ANTI-DUPLICADOS TRIPLE CAPA ═══
+  // ═══ ANTI-DUPLICADOS ═══
   // Capa 1: Verificar contra TODOS los asientos del servidor (incluidos borrados)
   var existingNums={};
-  var existingHashes={}; // CIF + importe + fecha para detección por contenido
   try{
     var allEntries=await api('/api/entries/'+state.company.id+'?deleted=1');
     if(allEntries&&allEntries.length){
@@ -1711,10 +1710,6 @@ async function processFacturasRows(rows,tipo,resumenIVA){
         if(e.concept){
           var m=e.concept.match(/\[([^\]]+)\]/);
           if(m){existingNums[m[1]]=true;existingNums[m[1].toUpperCase()]=true;}
-          // Hash by content: CIF from concept + total debe
-          var totalD=0;if(e.lines)e.lines.forEach(function(l){totalD+=l.d||0;});
-          var contentHash=(e.date||'')+'_'+Math.round(totalD*100);
-          existingHashes[contentHash]=true;
         }
       });
     }
@@ -1724,26 +1719,20 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     });
   }
 
-  // Capa 2: Deduplicar dentro del propio lote de importación
+  // Capa 2: Deduplicar dentro del propio lote de importación (por nº factura)
   var seenInBatch={};
-  var seenHashInBatch={};
   
   var nuevas=[],duplicadas=[];
   facturas.forEach(function(f){
     var numUpper=(f.numFact||'').toUpperCase();
     var key=numUpper+'_'+f.cif;
-    // Capa 3: Hash por contenido (fecha + CIF + importe) para detectar mismo documento con nº diferente
-    var contentHash=(f.fecha||'')+'_'+Math.round(Math.abs(f.total)*100);
     
     var isDup=false;
     var reason='';
-    // Check Capa 1: servidor
-    if(existingNums[f.numFact]||existingNums[numUpper]||existingNums[key]){isDup=true;reason='ya contabilizada';}
-    // Check Capa 2: mismo lote
-    if(!isDup&&(seenInBatch[f.numFact]||seenInBatch[numUpper]||seenInBatch[key])){isDup=true;reason='duplicada en lote';}
-    // Check Capa 3: mismo contenido (fecha+importe)
-    if(!isDup&&existingHashes[contentHash]){isDup=true;reason='mismo importe y fecha ya existe';}
-    if(!isDup&&seenHashInBatch[contentHash]){isDup=true;reason='mismo importe y fecha en lote';}
+    // Check Capa 1: servidor (nº factura exacto)
+    if(existingNums[f.numFact]||existingNums[numUpper]){isDup=true;reason='ya contabilizada';}
+    // Check Capa 2: mismo lote (nº factura exacto)
+    if(!isDup&&(seenInBatch[f.numFact]||seenInBatch[numUpper])){isDup=true;reason='duplicada en lote';}
     
     if(isDup){
       f._dupReason=reason;
@@ -1752,8 +1741,6 @@ async function processFacturasRows(rows,tipo,resumenIVA){
       nuevas.push(f);
       seenInBatch[f.numFact]=true;
       seenInBatch[numUpper]=true;
-      seenInBatch[key]=true;
-      seenHashInBatch[contentHash]=true;
     }
   });
 
