@@ -335,6 +335,21 @@ function groupAdminRequired(req, res, next) {
 
 // ── Server-side audit log ──
 db.exec('CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT DEFAULT (datetime(\'now\')), username TEXT, action TEXT, detail TEXT, ip TEXT)');
+
+// ── Feedback table ──
+db.exec(`CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp TEXT DEFAULT (datetime('now')),
+  username TEXT,
+  type TEXT,
+  message TEXT,
+  screenshot TEXT,
+  page TEXT,
+  company TEXT,
+  user_agent TEXT,
+  status TEXT DEFAULT 'nuevo'
+)`);
+
 function auditLog(req, action, detail) {
   try { db.prepare('INSERT INTO audit_log (username, action, detail, ip) VALUES (?, ?, ?, ?)').run(req.user ? req.user.username : 'anon', action, (detail||'').slice(0,500), req.ip||''); } catch(e) {}
 }
@@ -880,6 +895,30 @@ app.post('/api/load-pgc/:companyId', authRequired, adminRequired, (req, res) => 
   const added = loadPGCForCompany(req.params.companyId);
   auditLog(req, 'load-pgc', `${req.params.companyId}: added=${added}, cleaned=${invalid.changes}`);
   res.json({ ok: true, added, cleaned: invalid.changes });
+});
+
+// ── FEEDBACK ──
+app.post('/api/feedback', authRequired, (req, res) => {
+  const { type, message, screenshot, page, company, user, timestamp, userAgent } = req.body;
+  if (!message) return res.status(400).json({ error: 'Mensaje requerido' });
+  try {
+    db.prepare('INSERT INTO feedback (username, type, message, screenshot, page, company, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      req.user.username, type || 'error', message, screenshot || '', page || '', company || '', userAgent || ''
+    );
+    auditLog(req, 'feedback', type + ': ' + message.slice(0, 100));
+    res.json({ ok: true });
+  } catch(err) { res.status(400).json({ error: err.message }); }
+});
+
+app.get('/api/feedback', authRequired, adminRequired, (req, res) => {
+  const rows = db.prepare('SELECT * FROM feedback ORDER BY timestamp DESC LIMIT 100').all();
+  res.json(rows);
+});
+
+app.post('/api/feedback/:id/status', authRequired, adminRequired, (req, res) => {
+  const { status } = req.body;
+  db.prepare('UPDATE feedback SET status = ? WHERE id = ?').run(status || 'resuelto', req.params.id);
+  res.json({ ok: true });
 });
 
 // ── MOVE COMPANY BETWEEN GROUPS ──
