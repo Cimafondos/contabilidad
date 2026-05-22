@@ -126,13 +126,16 @@ try { db.exec('ALTER TABLE users ADD COLUMN group_id TEXT REFERENCES groups(id)'
 
 // ── Reset already completed in v7.3.0, no more resets ──
 
-// ── Seed default data if empty ──
-const companyCount = db.prepare('SELECT COUNT(*) as c FROM companies').get().c;
-if (companyCount === 0) {
+// ── Clean up any leftover reset flags ──
+try { db.prepare("DELETE FROM companies WHERE id = '__reset__'").run(); } catch(e) {}
+
+// ── Seed default data if no users exist ──
+const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+if (userCount === 0) {
   // Create default group
-  db.prepare("INSERT INTO groups VALUES ('g_default', 'Principal', datetime('now'))").run();
+  try { db.prepare("INSERT OR IGNORE INTO groups VALUES ('g_default', 'Principal', datetime('now'))").run(); } catch(e) {}
   
-  // Only admin and javier — no other users
+  // Only admin and javier
   const users = [
     ['u1', 'admin', 'admin', 'Administrador', 'superadmin', null],
     ['u2', 'javier', '1234', 'Javier', 'superadmin', null],
