@@ -144,9 +144,8 @@ if (!RESET_FLAG) {
   db.exec('DELETE FROM accounts');
   try { db.exec('DELETE FROM audit_log'); } catch(e) {}
     db.exec('PRAGMA foreign_keys = ON');
-      // Mark reset as done
+      // Mark reset as done — DO NOT DELETE this flag
   db.prepare("INSERT INTO companies VALUES ('__reset__', '__RESET_V7_DONE__', '', '', '{}', NULL)").run();
-  db.prepare("DELETE FROM companies WHERE id = '__reset__'").run();
   console.log('✓ FULL RESET complete');
 }
 
@@ -752,7 +751,7 @@ app.delete('/api/users/:companyId/:id', authRequired, adminRequired, (req, res) 
 
 // ── COMPANIES MANAGEMENT (filtered by user group) ──
 app.get('/api/companies', authRequired, (req, res) => {
-  const hidePGC = " AND c.id != '_pgc_template_'";
+  const hidePGC = " AND c.id NOT IN ('_pgc_template_', '__reset__')";
   if (req.user.role === 'superadmin') {
     const rows = db.prepare('SELECT c.*, g.name as group_name FROM companies c LEFT JOIN groups g ON c.group_id = g.id WHERE 1=1' + hidePGC).all();
     res.json(rows);
