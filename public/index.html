@@ -3310,9 +3310,13 @@ function doEditEmpresaGrupo(id){
 }
 
 function editUsuarioGrupo(id,username,nombre,rol){
-  // Load companies and user's current assignments
+  // Superadmin sees ALL companies, others see only their group
+  var companiesPromise = (state.user.role==='superadmin') 
+    ? api('/api/companies') 
+    : api('/api/companies');
+  
   Promise.all([
-    api('/api/companies'),
+    companiesPromise,
     api('/api/user-companies/'+id).catch(function(){return [];})
   ]).then(function(results){
     var companies=results[0]||[];
@@ -3321,8 +3325,9 @@ function editUsuarioGrupo(id,username,nombre,rol){
     
     var empChecks=companies.map(function(em){
       var checked=assignedIds[em.id]?'checked':'';
-      return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:3px 0"><input type="checkbox" class="euEmpCheck" value="'+em.id+'" '+checked+'>'+h(em.name)+'</label>';
-    }).join('')||'<span style="font-size:11px;color:var(--txM)">Sin empresas en el grupo</span>';
+      var groupLabel=em.group_name?' <span style="font-size:9px;color:var(--txM)">('+em.group_name+')</span>':'';
+      return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:3px 0"><input type="checkbox" class="euEmpCheck" value="'+em.id+'" '+checked+'>'+h(em.name)+groupLabel+'</label>';
+    }).join('')||'<span style="font-size:11px;color:var(--txM)">Sin empresas disponibles</span>';
     
     var modal=document.createElement('div');
     modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;overflow-y:auto';modal.onclick=function(e){if(e.target===modal)modal.remove();};

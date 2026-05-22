@@ -391,10 +391,11 @@ app.post('/api/login', rateLimitLogin, (req, res) => {
   const valid = user.password.startsWith('$2') ? bcrypt.compareSync(password, user.password) : password === user.password;
   if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
   const token = jwt.sign({ id: user.id, username: user.username, name: user.name, role: user.role, company_id: user.company_id, group_id: user.group_id }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
-  // Get company: first try user's assigned company, then first company in their group, then any accessible
+  // Get company: user's assigned company → first in group → first individually assigned → none
   let company = null;
-  if (user.company_id) company = db.prepare("SELECT * FROM companies WHERE id = ? AND id != '_pgc_template_'").get(user.company_id);
-  if (!company && user.group_id) company = db.prepare("SELECT * FROM companies WHERE group_id = ? AND id != '_pgc_template_' LIMIT 1").get(user.group_id);
+  if (user.company_id) company = db.prepare("SELECT * FROM companies WHERE id = ? AND id NOT IN ('_pgc_template_','__reset__')").get(user.company_id);
+  if (!company && user.group_id) company = db.prepare("SELECT * FROM companies WHERE group_id = ? AND id NOT IN ('_pgc_template_','__reset__') LIMIT 1").get(user.group_id);
+  if (!company) company = db.prepare("SELECT c.* FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ? AND c.id NOT IN ('_pgc_template_','__reset__') LIMIT 1").get(user.id);
   if (!company) company = { id: '_none_', name: 'Sin empresa', cif: '', address: '', config: '{}' };
   if (loginAttempts[req.ip]) delete loginAttempts[req.ip];
   auditLog(req, 'login', username);
@@ -729,17 +730,19 @@ app.delete('/api/users/:companyId/:id', authRequired, adminRequired, (req, res) 
   res.json({ ok: true });
 });
 
-// ── COMPANIES MANAGEMENT (filtered by user group) ──
+// ── COMPANIES MANAGEMENT (filtered by user group + individual assignments) ──
 app.get('/api/companies', authRequired, (req, res) => {
   const hidePGC = " AND c.id NOT IN ('_pgc_template_', '__reset__')";
   if (req.user.role === 'superadmin') {
     const rows = db.prepare('SELECT c.*, g.name as group_name FROM companies c LEFT JOIN groups g ON c.group_id = g.id WHERE 1=1' + hidePGC).all();
     res.json(rows);
-  } else if (req.user.group_id) {
-    const rows = db.prepare('SELECT c.*, g.name as group_name FROM companies c LEFT JOIN groups g ON c.group_id = g.id WHERE c.group_id = ?' + hidePGC).all(req.user.group_id);
-    res.json(rows);
   } else {
-    const rows = db.prepare('SELECT c.* FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ?' + hidePGC).all(req.user.id);
+    // Companies from user's group + individually assigned companies
+    const rows = db.prepare(`
+      SELECT DISTINCT c.*, g.name as group_name FROM companies c 
+      LEFT JOIN groups g ON c.group_id = g.id 
+      WHERE (c.group_id = ? OR c.id IN (SELECT company_id FROM user_companies WHERE user_id = ?))
+    ` + hidePGC).all(req.user.group_id || '', req.user.id);
     res.json(rows);
   }
 });
