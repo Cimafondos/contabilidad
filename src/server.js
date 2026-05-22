@@ -380,6 +380,7 @@ function migratePasswords() {
     { username: 'admin', password: 'admin' },
     { username: 'javier', password: '1234' },
     { username: 'Santi', password: '1234' },
+    { username: 'santi', password: '1234' },
   ];
   knownUsers.forEach(ku => {
     const user = db.prepare('SELECT id, password FROM users WHERE username = ?').get(ku.username);
@@ -406,7 +407,7 @@ function scheduleDailyBackup() {
 // ── AUTH ──
 app.post('/api/login', rateLimitLogin, (req, res) => {
   const { username, password } = req.body;
-  const user = db.prepare('SELECT id, username, password, name, role, company_id, group_id FROM users WHERE username = ?').get(username);
+  const user = db.prepare('SELECT id, username, password, name, role, company_id, group_id FROM users WHERE username = ? OR LOWER(username) = LOWER(?)').get(username, username);
   if (!user) return res.status(401).json({ error: 'Credenciales incorrectas' });
   const valid = user.password.startsWith('$2') ? bcrypt.compareSync(password, user.password) : password === user.password;
   if (!valid) return res.status(401).json({ error: 'Credenciales incorrectas' });
