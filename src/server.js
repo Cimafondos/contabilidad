@@ -785,6 +785,27 @@ app.post('/api/companies', authRequired, groupAdminRequired, (req, res) => {
   }
 });
 
+// ── DELETE COMPANY ──
+app.delete('/api/companies/:companyId', authRequired, groupAdminRequired, (req, res) => {
+  const cid = req.params.companyId;
+  if (cid === '_pgc_template_') return res.status(400).json({ error: 'No se puede eliminar el template' });
+  autoBackup('pre-delete-company');
+  try {
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ?)').run(cid);
+    db.prepare('DELETE FROM entries WHERE company_id = ?').run(cid);
+    db.prepare('DELETE FROM accounts WHERE company_id = ?').run(cid);
+    db.prepare('DELETE FROM rules WHERE company_id = ?').run(cid);
+    db.prepare('DELETE FROM masters WHERE company_id = ?').run(cid);
+    db.prepare('DELETE FROM transactions WHERE company_id = ?').run(cid);
+    db.prepare('DELETE FROM user_companies WHERE company_id = ?').run(cid);
+    db.prepare('DELETE FROM companies WHERE id = ?').run(cid);
+    db.exec('PRAGMA foreign_keys = ON');
+    auditLog(req, 'delete-company', cid);
+    res.json({ ok: true });
+  } catch(err) { res.status(400).json({ error: err.message }); }
+});
+
 // ── GROUPS MANAGEMENT ──
 app.get('/api/groups', authRequired, (req, res) => {
   if (req.user.role === 'superadmin') {
