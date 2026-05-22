@@ -518,10 +518,16 @@ function openFeedback(){
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Tipo</label><select id="fbType" class="sel" style="width:100%"><option value="error">\ud83d\udc1b Error / Problema</option><option value="mejora">\ud83d\udca1 Sugerencia / Mejora</option><option value="duda">\u2753 Duda</option></select></div>'+
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Describe el problema o sugerencia</label><textarea id="fbMsg" class="inp" style="width:100%;height:100px;resize:vertical" placeholder="Explica qu\u00e9 ha pasado o qu\u00e9 te gustar\u00eda mejorar..."></textarea></div>'+
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Captura de pantalla (opcional)</label>'+
-    '<div style="margin-top:4px;padding:12px;border:2px dashed #ccc;border-radius:8px;text-align:center;min-height:60px;cursor:pointer" id="fbDropZone" tabindex="0" onclick="startScreenshotCapture()">'+
-    '<div id="fbDropContent"><div style="font-size:24px">\ud83d\udcf8</div><div style="font-size:11px;color:var(--txM);margin-top:4px">Haz clic para capturar o pega una imagen (Ctrl+V)</div>'+
-    '<div style="font-size:10px;color:var(--txM);margin-top:2px">Windows: Win+Shift+S \u2192 luego Ctrl+V aqu\u00ed</div></div>'+
-    '<img id="fbScreenshotImg" style="max-width:100%;border-radius:4px;display:none">'+
+    '<div style="margin-top:4px;padding:12px;border:2px dashed #ccc;border-radius:8px;text-align:center;min-height:60px" id="fbDropZone" tabindex="0">'+
+    '<div id="fbDropContent"><div style="font-size:24px">\ud83d\udcf8</div>'+
+    '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px">'+
+    '<button class="btn btn-d" onclick="document.getElementById(\'fbFileInput\').click()">📁 Seleccionar imagen</button>'+
+    '<button class="btn btn-d" onclick="document.getElementById(\'fbDropZone\').focus();toast(\'Pega con Ctrl+V\')">📋 Pegar (Ctrl+V)</button>'+
+    '</div>'+
+    '<input type="file" id="fbFileInput" accept="image/*" style="display:none" onchange="handleFeedbackFile(this)">'+
+    '</div>'+
+    '<img id="fbScreenshotImg" style="max-width:100%;border-radius:4px;display:none;margin-top:8px">'+
+    '<div id="fbRemoveImg" style="display:none;margin-top:4px;text-align:right"><button class="btn btn-d" style="font-size:10px" onclick="removeFeedbackImage()">✕ Quitar imagen</button></div>'+
     '</div></div>'+
     '<div style="margin-bottom:8px;padding:6px 10px;background:#F8F9FB;border-radius:6px;font-size:10px;color:var(--txM)">\ud83d\udccd Pantalla: '+state.tab+'/'+state.view+' | Empresa: '+(state.company?state.company.name:'\u2014')+'</div>'+
     '<div id="fbError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
@@ -534,23 +540,29 @@ function openFeedback(){
   // Listen for paste on the whole modal
   modal.addEventListener('paste',function(e){handleScreenshotPaste(e);});
 }
-function startScreenshotCapture(){
-  var overlay=document.getElementById('modalOverlay');
-  if(overlay)overlay.style.display='none';
-  var instr=document.createElement('div');
-  instr.id='screenshotInstruction';
-  instr.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#333;color:#fff;padding:20px 30px;border-radius:12px;z-index:99999;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.4)';
-  instr.innerHTML='<div style="font-size:20px;margin-bottom:8px">\ud83d\udcf8</div><div style="font-size:14px;font-weight:600">Haz la captura de pantalla ahora</div><div style="font-size:12px;margin-top:6px;opacity:0.8">Windows: Win+Shift+S | Mac: Cmd+Shift+4</div><div style="margin-top:12px"><button style="background:#4CAF50;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:12px" onclick="finishScreenshotCapture()">Ya la hice \u2192 Pegar</button></div><div style="margin-top:8px"><button style="background:transparent;color:#aaa;border:none;cursor:pointer;font-size:11px" onclick="cancelScreenshotCapture()">Cancelar</button></div>';
-  document.body.appendChild(instr);
+function handleFeedbackFile(input){
+  if(!input.files||!input.files[0])return;
+  var file=input.files[0];
+  if(!file.type.startsWith('image/')){toast('Solo imágenes','error');return;}
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    _feedbackScreenshot=ev.target.result;
+    var img=document.getElementById('fbScreenshotImg');
+    if(img){img.src=ev.target.result;img.style.display='block';}
+    var content=document.getElementById('fbDropContent');
+    if(content)content.style.display='none';
+    var rm=document.getElementById('fbRemoveImg');
+    if(rm)rm.style.display='block';
+    toast('✓ Imagen adjuntada');
+  };
+  reader.readAsDataURL(file);
 }
-function finishScreenshotCapture(){
-  var instr=document.getElementById('screenshotInstruction');if(instr)instr.remove();
-  var overlay=document.getElementById('modalOverlay');if(overlay)overlay.style.display='flex';
-  setTimeout(function(){var dz=document.getElementById('fbDropZone');if(dz)dz.focus();toast('Pega la captura con Ctrl+V');},200);
-}
-function cancelScreenshotCapture(){
-  var instr=document.getElementById('screenshotInstruction');if(instr)instr.remove();
-  var overlay=document.getElementById('modalOverlay');if(overlay)overlay.style.display='flex';
+function removeFeedbackImage(){
+  _feedbackScreenshot=null;
+  var img=document.getElementById('fbScreenshotImg');if(img){img.style.display='none';img.src='';}
+  var content=document.getElementById('fbDropContent');if(content)content.style.display='block';
+  var rm=document.getElementById('fbRemoveImg');if(rm)rm.style.display='none';
+  var fi=document.getElementById('fbFileInput');if(fi)fi.value='';
 }
 function handleScreenshotPaste(e){
   var items=(e.clipboardData||e.originalEvent&&e.originalEvent.clipboardData||{}).items;
@@ -566,6 +578,8 @@ function handleScreenshotPaste(e){
         if(img){img.src=ev.target.result;img.style.display='block';}
         var content=document.getElementById('fbDropContent');
         if(content)content.style.display='none';
+        var rm=document.getElementById('fbRemoveImg');
+        if(rm)rm.style.display='block';
         toast('\u2713 Captura adjuntada');
       };
       reader.readAsDataURL(file);
