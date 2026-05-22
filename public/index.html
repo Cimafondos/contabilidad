@@ -512,16 +512,18 @@ function openFeedback(){
   modal.id='modalOverlay';
   modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
   modal.onclick=function(e){if(e.target===modal)modal.remove();};
-  modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:440px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
-    '<h3 style="margin:0 0 4px">💬 Reportar problema o sugerencia</h3>'+
+  modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
+    '<h3 style="margin:0 0 4px">\ud83d\udcac Reportar problema o sugerencia</h3>'+
     '<div style="font-size:11px;color:var(--txM);margin-bottom:16px">Tu feedback nos ayuda a mejorar el programa</div>'+
-    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Tipo</label><select id="fbType" class="sel" style="width:100%"><option value="error">🐛 Error / Problema</option><option value="mejora">💡 Sugerencia / Mejora</option><option value="duda">❓ Duda</option></select></div>'+
-    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Describe el problema o sugerencia</label><textarea id="fbMsg" class="inp" style="width:100%;height:100px;resize:vertical" placeholder="Explica qué ha pasado o qué te gustaría mejorar..."></textarea></div>'+
-    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Captura de pantalla (opcional)</label><div style="display:flex;gap:8px;align-items:center">'+
-    '<button class="btn btn-d" onclick="takeFeedbackScreenshot()">📸 Capturar pantalla</button>'+
-    '<span id="fbScreenshotStatus" style="font-size:11px;color:var(--txM)">Sin captura</span>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Tipo</label><select id="fbType" class="sel" style="width:100%"><option value="error">\ud83d\udc1b Error / Problema</option><option value="mejora">\ud83d\udca1 Sugerencia / Mejora</option><option value="duda">\u2753 Duda</option></select></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Describe el problema o sugerencia</label><textarea id="fbMsg" class="inp" style="width:100%;height:100px;resize:vertical" placeholder="Explica qu\u00e9 ha pasado o qu\u00e9 te gustar\u00eda mejorar..."></textarea></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Captura de pantalla (opcional)</label>'+
+    '<div style="margin-top:4px;padding:12px;border:2px dashed #ccc;border-radius:8px;text-align:center;min-height:60px;cursor:pointer" id="fbDropZone" tabindex="0" onclick="startScreenshotCapture()">'+
+    '<div id="fbDropContent"><div style="font-size:24px">\ud83d\udcf8</div><div style="font-size:11px;color:var(--txM);margin-top:4px">Haz clic para capturar o pega una imagen (Ctrl+V)</div>'+
+    '<div style="font-size:10px;color:var(--txM);margin-top:2px">Windows: Win+Shift+S \u2192 luego Ctrl+V aqu\u00ed</div></div>'+
+    '<img id="fbScreenshotImg" style="max-width:100%;border-radius:4px;display:none">'+
     '</div></div>'+
-    '<div id="fbScreenshotPreview" style="margin-bottom:12px;display:none"><img id="fbScreenshotImg" style="width:100%;border-radius:6px;border:1px solid #E8E8E8"></div>'+
+    '<div style="margin-bottom:8px;padding:6px 10px;background:#F8F9FB;border-radius:6px;font-size:10px;color:var(--txM)">\ud83d\udccd Pantalla: '+state.tab+'/'+state.view+' | Empresa: '+(state.company?state.company.name:'\u2014')+'</div>'+
     '<div id="fbError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end">'+
     '<button class="btn btn-d" onclick="closeModal()">Cancelar</button>'+
@@ -529,56 +531,60 @@ function openFeedback(){
     '</div></div>';
   document.body.appendChild(modal);
   document.getElementById('fbMsg').focus();
+  // Listen for paste on the whole modal
+  modal.addEventListener('paste',function(e){handleScreenshotPaste(e);});
 }
-
-function takeFeedbackScreenshot(){
-  // Hide the modal, take screenshot, show modal again
+function startScreenshotCapture(){
   var overlay=document.getElementById('modalOverlay');
   if(overlay)overlay.style.display='none';
-  
-  setTimeout(function(){
-    // Use html2canvas-like approach: capture the page as an image
-    try{
-      // Simple approach: capture visible area info
-      var info='Pantalla: '+state.tab+'/'+state.view+' | Empresa: '+(state.company?state.company.name:'ninguna')+' | Usuario: '+(state.user?state.user.name:'?')+' | '+new Date().toLocaleString('es-ES');
-      _feedbackScreenshot=info;
-      if(overlay)overlay.style.display='flex';
-      document.getElementById('fbScreenshotStatus').textContent='✅ Información de pantalla capturada';
-      document.getElementById('fbScreenshotPreview').style.display='block';
-      document.getElementById('fbScreenshotImg').style.display='none';
-      document.getElementById('fbScreenshotPreview').innerHTML='<div style="padding:8px;background:#F8F9FB;border-radius:6px;font-size:10px;color:var(--txM)">'+h(info)+'</div>';
-    }catch(e){
-      if(overlay)overlay.style.display='flex';
-      document.getElementById('fbScreenshotStatus').textContent='❌ Error al capturar';
-    }
-  },300);
+  var instr=document.createElement('div');
+  instr.id='screenshotInstruction';
+  instr.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#333;color:#fff;padding:20px 30px;border-radius:12px;z-index:99999;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.4)';
+  instr.innerHTML='<div style="font-size:20px;margin-bottom:8px">\ud83d\udcf8</div><div style="font-size:14px;font-weight:600">Haz la captura de pantalla ahora</div><div style="font-size:12px;margin-top:6px;opacity:0.8">Windows: Win+Shift+S | Mac: Cmd+Shift+4</div><div style="margin-top:12px"><button style="background:#4CAF50;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:12px" onclick="finishScreenshotCapture()">Ya la hice \u2192 Pegar</button></div><div style="margin-top:8px"><button style="background:transparent;color:#aaa;border:none;cursor:pointer;font-size:11px" onclick="cancelScreenshotCapture()">Cancelar</button></div>';
+  document.body.appendChild(instr);
 }
-
+function finishScreenshotCapture(){
+  var instr=document.getElementById('screenshotInstruction');if(instr)instr.remove();
+  var overlay=document.getElementById('modalOverlay');if(overlay)overlay.style.display='flex';
+  setTimeout(function(){var dz=document.getElementById('fbDropZone');if(dz)dz.focus();toast('Pega la captura con Ctrl+V');},200);
+}
+function cancelScreenshotCapture(){
+  var instr=document.getElementById('screenshotInstruction');if(instr)instr.remove();
+  var overlay=document.getElementById('modalOverlay');if(overlay)overlay.style.display='flex';
+}
+function handleScreenshotPaste(e){
+  var items=(e.clipboardData||e.originalEvent&&e.originalEvent.clipboardData||{}).items;
+  if(!items)return;
+  for(var i=0;i<items.length;i++){
+    if(items[i].type.indexOf('image')>=0){
+      e.preventDefault();e.stopPropagation();
+      var file=items[i].getAsFile();
+      var reader=new FileReader();
+      reader.onload=function(ev){
+        _feedbackScreenshot=ev.target.result;
+        var img=document.getElementById('fbScreenshotImg');
+        if(img){img.src=ev.target.result;img.style.display='block';}
+        var content=document.getElementById('fbDropContent');
+        if(content)content.style.display='none';
+        toast('\u2713 Captura adjuntada');
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+  }
+}
 async function sendFeedback(){
   var tipo=document.getElementById('fbType').value;
   var msg=document.getElementById('fbMsg').value.trim();
   var err=document.getElementById('fbError');
   if(!msg){err.textContent='Escribe un mensaje';return;}
-  
   showProgress('Enviando feedback','Guardando tu reporte...');
   try{
-    var body={
-      type:tipo,
-      message:msg,
-      screenshot:_feedbackScreenshot||'',
-      page:state.tab+'/'+state.view,
-      company:state.company?state.company.name:'',
-      user:state.user?state.user.name:'',
-      timestamp:new Date().toISOString(),
-      userAgent:navigator.userAgent
-    };
+    var body={type:tipo,message:msg,screenshot:_feedbackScreenshot||'',page:state.tab+'/'+state.view,company:state.company?state.company.name:'',user:state.user?state.user.name:'',timestamp:new Date().toISOString(),userAgent:navigator.userAgent};
     await api('/api/feedback',{method:'POST',body:body});
     closeModal();
-    hideProgress('✅','Feedback enviado. ¡Gracias!');
-  }catch(e){
-    hideProgress('❌','Error');
-    err.textContent='Error al enviar: '+e.message;
-  }
+    hideProgress('\u2705','Feedback enviado. \u00a1Gracias!');
+  }catch(e){hideProgress('\u274c','Error');err.textContent='Error al enviar: '+e.message;}
 }
 
 // ═══ SISTEMA DE PROGRESO CENTRALIZADO ═══
