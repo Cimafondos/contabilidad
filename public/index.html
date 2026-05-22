@@ -1847,13 +1847,15 @@ async function contabilizarFacturas(){
   if(!facturas||!facturas.length){toast('No hay facturas','error');return;}
 
   // DIAGNOSTIC: verify IVA totals before contabilizing
-  var diagIva=0,diagNoIva=[];
+  var diagIva=0,diagNoIva=[],diagDetails=[];
   facturas.forEach(function(f){
     var iva=f.iva21+f.iva10+f.iva4;
     diagIva+=iva;
-    if(Math.abs(iva)<0.01&&Math.abs(f.total)>1)diagNoIva.push(f.numFact+' (total='+f.total+')');
+    diagDetails.push(f.numFact+': iva21='+f.iva21+' iva10='+f.iva10+' iva4='+f.iva4+' total_iva='+iva.toFixed(2));
+    if(Math.abs(iva)<0.01&&Math.abs(f.total)>1)diagNoIva.push(f.numFact+' (total='+f.total+', iva21='+f.iva21+', iva10='+f.iva10+')');
   });
   console.log('PRE-CONTABILIZACIÓN: '+facturas.length+' facturas, IVA total='+diagIva.toFixed(2)+', sin IVA: '+diagNoIva.join(', '));
+  console.log('DETALLE IVA POR FACTURA:', diagDetails);
   if(diagNoIva.length>5){
     console.warn('ALERTA: '+diagNoIva.length+' facturas sin IVA detectadas');
   }
