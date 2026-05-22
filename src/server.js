@@ -766,16 +766,23 @@ app.get('/api/companies', authRequired, (req, res) => {
 
 app.post('/api/companies', authRequired, groupAdminRequired, (req, res) => {
   const { id, name, cif, address, config } = req.body;
-  // Group admins can only create companies in their own group
-  const groupId = req.user.role === 'superadmin' ? (req.body.group_id || req.user.group_id) : req.user.group_id;
+  if (!id || !name) return res.status(400).json({ error: 'Nombre de empresa requerido' });
+  const groupId = req.user.role === 'superadmin' ? (req.body.group_id || req.user.group_id || 'g_default') : (req.user.group_id || 'g_default');
+  // Ensure group exists
+  try { db.prepare("INSERT OR IGNORE INTO groups VALUES (?, ?, datetime('now'))").run(groupId, groupId.replace('g_','')); } catch(e) {}
   try {
-    db.prepare('INSERT OR REPLACE INTO companies VALUES (?, ?, ?, ?, ?, ?)').run(id, name, cif || '', address || '', config || '{}', groupId);
+    const existing = db.prepare('SELECT id FROM companies WHERE id = ?').get(id);
+    if (existing) {
+      db.prepare('UPDATE companies SET name=?, cif=?, address=?, config=?, group_id=? WHERE id=?').run(name, cif||'', address||'', config||'{}', groupId, id);
+    } else {
+      db.prepare('INSERT INTO companies VALUES (?, ?, ?, ?, ?, ?)').run(id, name, cif||'', address||'', config||'{}', groupId);
+    }
     loadPGCForCompany(id);
-    // Auto-assign the creator to this company
     db.prepare('INSERT OR IGNORE INTO user_companies VALUES (?, ?)').run(req.user.id, id);
     auditLog(req, 'create-company', name);
     res.json({ ok: true });
   } catch (err) {
+    console.error('Create company error:', err.message);
     res.status(400).json({ error: err.message });
   }
 });
