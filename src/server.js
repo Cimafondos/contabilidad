@@ -373,14 +373,26 @@ function autoBackup(label) {
   } catch(e) { console.error('Auto-backup error:', e.message); }
 }
 
-// ── Migrate plain-text passwords to bcrypt on startup ──
+// ── Ensure passwords are correct (force reset if needed) ──
 function migratePasswords() {
+  // Always force known passwords for admin and javier
+  const knownUsers = [
+    { username: 'admin', password: 'admin' },
+    { username: 'javier', password: '1234' },
+  ];
+  knownUsers.forEach(ku => {
+    const user = db.prepare('SELECT id, password FROM users WHERE username = ?').get(ku.username);
+    if (user) {
+      const hashed = bcrypt.hashSync(ku.password, BCRYPT_ROUNDS);
+      db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, user.id);
+    }
+  });
+  // Hash any remaining plain-text passwords
   const users = db.prepare('SELECT id, password FROM users').all();
-  const upd = db.prepare('UPDATE users SET password = ? WHERE id = ?');
+  const update = db.prepare('UPDATE users SET password = ? WHERE id = ?');
   users.forEach(u => {
     if (!u.password.startsWith('$2')) {
-      upd.run(bcrypt.hashSync(u.password, BCRYPT_ROUNDS), u.id);
-      console.log('✓ Password hashed for user', u.id);
+      update.run(bcrypt.hashSync(u.password, BCRYPT_ROUNDS), u.id);
     }
   });
 }
