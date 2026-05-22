@@ -124,30 +124,7 @@ db.exec(`
 try { db.exec('ALTER TABLE companies ADD COLUMN group_id TEXT REFERENCES groups(id)'); } catch(e) {}
 try { db.exec('ALTER TABLE users ADD COLUMN group_id TEXT REFERENCES groups(id)'); } catch(e) {}
 
-// ═══ FULL RESET: Clean slate — only PGC survives ═══
-const RESET_FLAG = db.prepare("SELECT COUNT(*) as c FROM companies WHERE name = '__RESET_V7_DONE__'").get().c;
-if (!RESET_FLAG) {
-  console.log('🔄 FULL RESET: Cleaning all data...');
-  // Backup first
-  try { autoBackup('pre-reset'); } catch(e) {}
-  // Delete everything
-    db.exec('PRAGMA foreign_keys = OFF');
-  db.exec('DELETE FROM entry_lines');
-  db.exec('DELETE FROM entries');
-  db.exec('DELETE FROM transactions');
-  db.exec('DELETE FROM rules');
-  db.exec('DELETE FROM masters');
-  db.exec('DELETE FROM user_companies');
-  db.exec('DELETE FROM users');
-  db.exec('DELETE FROM companies');
-  db.exec('DELETE FROM groups');
-  db.exec('DELETE FROM accounts');
-  try { db.exec('DELETE FROM audit_log'); } catch(e) {}
-    db.exec('PRAGMA foreign_keys = ON');
-      // Mark reset as done — DO NOT DELETE this flag
-  db.prepare("INSERT INTO companies VALUES ('__reset__', '__RESET_V7_DONE__', '', '', '{}', NULL)").run();
-  console.log('✓ FULL RESET complete');
-}
+// ── Reset already completed in v7.3.0, no more resets ──
 
 // ── Seed default data if empty ──
 const companyCount = db.prepare('SELECT COUNT(*) as c FROM companies').get().c;
