@@ -379,6 +379,7 @@ function migratePasswords() {
   const knownUsers = [
     { username: 'admin', password: 'admin' },
     { username: 'javier', password: '1234' },
+    { username: 'Santi', password: '1234' },
   ];
   knownUsers.forEach(ku => {
     const user = db.prepare('SELECT id, password FROM users WHERE username = ?').get(ku.username);
