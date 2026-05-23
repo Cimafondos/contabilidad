@@ -1343,14 +1343,24 @@ function renderJournal(c){
   '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total haber</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(th)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Cuadre</div><div style="font-size:22px;font-weight:700;color:'+(Math.abs(td-th)<1?'var(--ok)':'var(--rd)')+'">'+(Math.abs(td-th)<1?'✓ OK':'✗ '+fmt(Math.abs(td-th))+'€')+'</div></div></div>'+
   '<div class="card"><div class="card-h"><span>Libro diario</span><div style="display:flex;gap:6px">'+
+  '<div style="position:relative;display:inline-block"><button class="btn btn-d" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">⋮</button><div style="display:none;position:absolute;right:0;top:100%;background:#fff;border:1px solid var(--bd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:20;min-width:200px;padding:4px 0"><div style="padding:8px 14px;font-size:11px;cursor:pointer;color:var(--tx)" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'#fff\'" onclick="setView(\'import\');this.parentElement.style.display=\'none\'">Importar asientos</div><div style="padding:8px 14px;font-size:11px;cursor:pointer" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'#fff\'" onclick="setView(\'accounts\');this.parentElement.style.display=\'none\'">Plan de cuentas</div><div style="padding:8px 14px;font-size:11px;cursor:pointer" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'#fff\'" onclick="setView(\'rules\');this.parentElement.style.display=\'none\'">Reglas contabilización</div><div style="border-top:1px solid #F3F4F6;padding:8px 14px;font-size:11px;cursor:pointer" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'#fff\'" onclick="setView(\'incidencias\');this.parentElement.style.display=\'none\'">Comprobar integridad</div></div></div>'+
   '<button class="btn btn-d" onclick="exportJournalExcel()">↓ Excel</button>'+
   '<button class="btn btn-d" onclick="exportJournalPDF()">↓ PDF</button>'+
   '<button class="btn btn-p" onclick="showEntryModal()">Nuevo asiento <span style="background:rgba(255,255,255,0.25);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:3px">M</span></button></div></div>'+
-  '<div style="padding:6px 16px;background:#FAFBFC;border-bottom:1px solid #F3F4F6;display:flex;gap:8px;align-items:center">'+
-  '<input class="inp" style="max-width:150px;font-size:11px" placeholder="Buscar fecha..." oninput="colFilters.date=this.value.toLowerCase();applyColumnFilters();">'+
+  '<div style="padding:6px 16px;background:#FAFBFC;border-bottom:1px solid #F3F4F6;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+  '<select class="sel" style="font-size:11px;padding:4px 8px" onchange="window._jrnPuntFilter=this.value;renderView()"><option value="all"'+(window._jrnPuntFilter==='all'||!window._jrnPuntFilter?' selected':'')+'>Todos</option><option value="punteado"'+(window._jrnPuntFilter==='punteado'?' selected':'')+'>Punteado</option><option value="no_punteado"'+(window._jrnPuntFilter==='no_punteado'?' selected':'')+'>No punteado</option></select>'+
+  '<select class="sel" style="font-size:11px;padding:4px 8px" onchange="window._jrnTypeFilter=this.value;renderView()"><option value=""'+(window._jrnTypeFilter===''||!window._jrnTypeFilter?' selected':'')+'>Todos tipos</option><option value="manual"'+(window._jrnTypeFilter==='manual'?' selected':'')+'>Manual</option><option value="fra_emitida"'+(window._jrnTypeFilter==='fra_emitida'?' selected':'')+'>Fra. emitida</option><option value="fra_recibida"'+(window._jrnTypeFilter==='fra_recibida'?' selected':'')+'>Fra. recibida</option><option value="gasto"'+(window._jrnTypeFilter==='gasto'?' selected':'')+'>Gasto</option><option value="nomina"'+(window._jrnTypeFilter==='nomina'?' selected':'')+'>Nómina</option></select>'+
   '<input class="inp" style="max-width:120px;font-size:11px" placeholder="Cuenta..." oninput="colFilters.cuenta=this.value.toLowerCase();applyColumnFilters();">'+
-  '<input class="inp" style="max-width:200px;font-size:11px" placeholder="Concepto..." oninput="colFilters.concept=this.value.toLowerCase();applyColumnFilters();">'+
+  '<input class="inp" style="max-width:180px;font-size:11px" placeholder="Concepto..." oninput="colFilters.concept=this.value.toLowerCase();applyColumnFilters();">'+
   '</div>'+
+  (function(){
+  // Apply punteado and type filters
+  var pf=window._jrnPuntFilter||'all';
+  var tf=window._jrnTypeFilter||'';
+  if(pf!=='all')all=all.filter(function(e){return pf==='punteado'?e.punteado:!e.punteado;});
+  if(tf)all=all.filter(function(e){return e.type===tf;});
+  return '';
+  })()+
   (all.length?'<div class="scr"><table><thead><tr><th style="width:30px">✓</th><th style="width:35px">Nº</th><th style="width:80px">Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right;width:100px">Debe</th><th style="text-align:right;width:100px">Haber</th><th style="width:70px">Acc.</th></tr></thead><tbody>'+
   all.map(function(e,i){
     var entryTotal=e.lines.reduce(function(s,l){return s+l.d;},0);
@@ -1983,6 +1993,11 @@ function renderPnL(c){
   function varPct(act,ant){if(!ant||ant===0)return '';var p=Math.round((act-ant)/Math.abs(ant)*100);return '<div style="font-size:10px;margin-top:2px;color:'+(p>=0?'var(--ok)':'var(--rd)')+'">'+(p>=0?'↑':'↓')+' '+Math.abs(p)+'% vs '+prevYear+'</div>';}
 
   c.innerHTML=dateFilterHTML()+
+  '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">'+
+  '<select class="sel" style="font-size:11px;padding:4px 8px" onchange="window._pnlPeriod=this.value;renderView()"><option value="anual"'+(window._pnlPeriod==='anual'||!window._pnlPeriod?' selected':'')+'>Anual</option><option value="mensual"'+(window._pnlPeriod==='mensual'?' selected':'')+'>Mensual</option><option value="comparativo"'+(window._pnlPeriod==='comparativo'?' selected':'')+'>Comparación año anterior</option></select>'+
+  '<select class="sel" style="font-size:11px;padding:4px 8px" onchange="window._pnlLevel=this.value;renderView()"><option value="resultados"'+(window._pnlLevel==='resultados'||!window._pnlLevel?' selected':'')+'>Resultados</option><option value="titulos"'+(window._pnlLevel==='titulos'?' selected':'')+'>Títulos</option><option value="grupos"'+(window._pnlLevel==='grupos'?' selected':'')+'>Grupos</option><option value="cuentas"'+(window._pnlLevel==='cuentas'?' selected':'')+'>Cuentas</option></select>'+
+  '<input class="inp" style="max-width:180px;font-size:11px" placeholder="Filtrar por tag...">'+
+  '</div>'+
   '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Cifra de negocios</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(cifNegocios)+'€</div>'+varPct(cifNegocios,cifNegPrev)+'</div>'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total gastos</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(aprovision+gtosPersonal+otrosGtosExpl)+'€</div></div>'+
@@ -5224,8 +5239,14 @@ function renderInformeVentas(c){
   var clientList=Object.values(byClient).sort(function(a,b){return b.total-a.total;});
   var accountList=Object.entries(byAccount).sort(function(a,b){return b[1].total-a[1].total;});
   var curMonth=new Date().getMonth();
+  var chartType=window._ventasChart||'bar';
   
   c.innerHTML=dateFilterHTML()+
+  '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">'+
+  '<select class="sel" style="font-size:11px;padding:4px 8px" onchange="window._ventasSubTipo=this.value;renderView()">'+
+  '<option value="general">Ventas</option><option value="cliente"'+(window._ventasSubTipo==='cliente'?' selected':'')+'>Por cliente</option><option value="cuenta"'+(window._ventasSubTipo==='cuenta'?' selected':'')+'>Por cuenta</option></select>'+
+  '<input class="inp" style="max-width:160px;font-size:11px" placeholder="Filtrar por tag...">'+
+  '<div style="margin-left:auto;display:flex;gap:4px"><button class="btn btn-d" style="font-size:10px;padding:4px 8px;'+(chartType==='bar'?'background:var(--priLt);color:var(--pri)':'')+'" onclick="window._ventasChart=\'bar\';renderView()">▐</button><button class="btn btn-d" style="font-size:10px;padding:4px 8px;'+(chartType==='line'?'background:var(--priLt);color:var(--pri)':'')+'" onclick="window._ventasChart=\'line\';renderView()">∕</button></div></div>'+
   '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total ventas</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(totalVentas)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Venta media mensual</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+fmt(totalVentas/12)+'€</div></div>'+
@@ -5252,7 +5273,7 @@ function renderInformeVentas(c){
   
   setTimeout(function(){
     var ctx=$('chartVentas');if(!ctx)return;
-    new Chart(ctx,{type:'bar',data:{labels:MONTHS,datasets:[{label:'Ventas',data:monthData,backgroundColor:'rgba(16,185,129,0.7)',borderRadius:4},{label:'IVA',data:monthIva,backgroundColor:'rgba(245,158,11,0.5)',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},usePointStyle:true,pointStyle:'circle'}},tooltip:{callbacks:{label:function(c2){return c2.dataset.label+': '+fmt(c2.parsed.y)+'€';}}}},scales:{y:{ticks:{callback:function(v){return fmt(v);},font:{size:10}},grid:{color:'#F3F4F6'}},x:{grid:{display:false}}}}});
+    new Chart(ctx,{type:chartType,data:{labels:MONTHS,datasets:[{label:'Ventas',data:monthData,backgroundColor:'rgba(16,185,129,0.7)',borderColor:'#10B981',borderRadius:chartType==='bar'?4:0,fill:chartType==='line',tension:0.3,pointRadius:3},{label:'IVA',data:monthIva,backgroundColor:'rgba(245,158,11,0.5)',borderColor:'#F59E0B',borderRadius:chartType==='bar'?4:0,fill:chartType==='line',tension:0.3,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},usePointStyle:true,pointStyle:'circle'}},tooltip:{callbacks:{label:function(c2){return c2.dataset.label+': '+fmt(c2.parsed.y)+'€';}}}},scales:{y:{ticks:{callback:function(v){return fmt(v);},font:{size:10}},grid:{color:'#F3F4F6'}},x:{grid:{display:false}}}}});
   },100);
 }
 function exportInformeVentasExcel(){
