@@ -1509,7 +1509,7 @@ function renderTrial(c){
   }
   var t=bals.reduce(function(a,b){return {sd:a.sd+b.sd,sh:a.sh+b.sh,sdr:a.sdr+b.sdr,scr:a.scr+b.scr};},{sd:0,sh:0,sdr:0,scr:0});
   var nivelTxt={1:'Grupos',2:'Subgrupos',3:'Cuentas',4:'Subcuentas',8:'Detalle'}[dig]||'';
-  c.innerHTML=dateFilterHTML()+trialAcctFilterHTML()+'<div class="card"><div class="card-h"><span>⚖️ Sumas y saldos — '+bals.length+' '+nivelTxt.toLowerCase()+'</span><div style="display:flex;gap:8px;align-items:center"><span class="badge '+(Math.abs(t.sdr-t.scr)<1?'badge-g':'badge-r')+'">'+(Math.abs(t.sdr-t.scr)<1?'✓ Cuadrado':'✗ Descuadre')+'</span><button class="btn btn-d" style="font-size:10px" onclick="exportTrialExcel()">📊</button></div></div>'+
+  c.innerHTML=dateFilterHTML()+trialAcctFilterHTML()+'<div class="card"><div class="card-h"><span>Sumas y saldos — '+bals.length+' '+nivelTxt.toLowerCase()+'</span><div style="display:flex;gap:8px;align-items:center"><span class="badge '+(Math.abs(t.sdr-t.scr)<1?'badge-g':'badge-r')+'">'+(Math.abs(t.sdr-t.scr)<1?'✓ Cuadrado':'✗ Descuadre')+'</span><button class="btn btn-d" onclick="exportTrialExcel()">↓ Excel</button></div></div>'+
   (bals.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody><tr class="total"><td colspan="2">TOTALES ('+bals.length+' '+nivelTxt.toLowerCase()+')</td><td style="text-align:right">'+fmt(t.sd)+'</td><td style="text-align:right">'+fmt(t.sh)+'</td><td style="text-align:right">'+fmt(t.sdr)+'</td><td style="text-align:right">'+fmt(t.scr)+'</td></tr></tbody></table><div class="scr"><table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody>'+
   bals.map(function(b,i){return '<tr class="'+(i%2?'alt':'')+'"><td class="acct">'+b.code+'</td><td>'+h(b.name)+'</td><td style="text-align:right">'+fmt(b.sd)+'</td><td style="text-align:right">'+fmt(b.sh)+'</td><td style="text-align:right;font-weight:600">'+(b.sdr>0?fmt(b.sdr):'—')+'</td><td style="text-align:right;font-weight:600">'+(b.scr>0?fmt(b.scr):'—')+'</td></tr>';}).join('')+
   '</tbody></table></div>':'<div class="empty">Sin datos</div>')+'</div>';
@@ -1567,9 +1567,11 @@ function renderPnL(c){
   }
 
   c.innerHTML=dateFilterHTML()+
-  '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(cifNegocios)+'€</div><div class="stat-l">Cifra negocios</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(aprovision+gtosPersonal+otrosGtosExpl)+'€</div><div class="stat-l">Total gastos</div></div><div class="stat"><div class="stat-v" style="color:'+(resEjercicio>=0?'var(--ok)':'var(--rd)')+'">'+fmt(resEjercicio)+'€</div><div class="stat-l">Resultado</div></div></div>'+
-  '<div style="text-align:right;margin-bottom:8px"><button class="btn btn-d" style="font-size:10px" onclick="exportPnLExcel()">📊 Excel</button></div>'+
-  '<div class="card"><div class="card-h"><span>📈 Cuenta de Pérdidas y Ganancias — PGC 2008</span></div><div class="scr"><table><thead><tr><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Importe €</th></tr></thead><tbody>'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Cifra de negocios</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(cifNegocios)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total gastos</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(aprovision+gtosPersonal+otrosGtosExpl)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Resultado del ejercicio</div><div style="font-size:22px;font-weight:700;color:'+(resEjercicio>=0?'var(--ok)':'var(--rd)')+'">'+fmt(resEjercicio)+'€</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>Pérdidas y Ganancias — PGC 2008</span><button class="btn btn-d" onclick="exportPnLExcel()">↓ Excel</button></div><div class="scr"><table><thead><tr><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Importe €</th></tr></thead><tbody>'+
   '<tr><td colspan="3" style="font-weight:700;background:#E8F8ED;color:var(--ok)">1. Importe neto cifra de negocios</td></tr>'+
   sectHTML('',detPfx(['700','701','702','703','704','705','706','708','709'],true),'var(--ok)')+
   lineHTML('Total cifra negocios',cifNegocios,false,'var(--ok)')+
@@ -1662,8 +1664,11 @@ function renderBalance(c){
   function subT(l,v){return '<tr style="background:#F0F4FF"><td colspan="2"><em>'+l+'</em></td><td style="text-align:right;font-weight:600">'+fmt(v)+'€</td></tr>';}
   function masaH(l,col){return '<tr><td colspan="3" style="font-weight:700;background:'+(col==='b'?'#EBF5FF':'#F3EEFF')+';color:'+(col==='b'?'var(--bl)':'var(--vi)')+'">'+l+'</td></tr>';}
   c.innerHTML=dateFilterHTML()+
-  '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="badge '+(cuadre?'badge-g':'badge-r')+'">'+(cuadre?'✓ Balance cuadrado':'✗ Descuadre: '+fmt(Math.abs(tActivo-tPasivo))+'€')+'</span></div>'+
-  '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--bl)">ACTIVO</div><table><tbody>'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
+  '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total Activo</div><div style="font-size:20px;font-weight:700;color:var(--bl)">'+fmt(tActivo)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total Pasivo</div><div style="font-size:20px;font-weight:700;color:var(--vi)">'+fmt(tPasivo)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Estado</div><div style="font-size:20px;font-weight:700;color:'+(cuadre?'var(--ok)':'var(--rd)')+'">'+(cuadre?'Cuadrado':'Descuadre '+fmt(Math.abs(tActivo-tPasivo))+'€')+'</div></div></div>'+
+  '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--bl)">Activo</div><table><tbody>'+
   masaH('A) Activo no corriente','b')+
   (aInmIntang.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">I. Inmovilizado intangible</td></tr>'+sectB(aInmIntang,true):'')+
   (aInmMat.length||aAmort.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">II. Inmovilizado material</td></tr>'+sectB(aInmMat,true)+sectB(aAmort,true):'')+
