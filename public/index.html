@@ -514,7 +514,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.5</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.6</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -706,13 +706,11 @@ async function autoSyncGestor(){
     var blob=await response.blob();
     if(blob.size<100){console.log('[Gestor] Sin datos nuevos');return;}
     
-    var file=new File([blob],'gestor_auto_sync.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    
-    // Process with auto-detect tipo
-    importFacturasExcel(file,'auto');
-    
     localStorage.setItem('cf_gestor_lastsync_'+(state.company?state.company.id:''),today);
-    toast('⟳ Gestor documental sincronizado');
+    
+    // Don't process automatically — just save the blob and notify
+    window._gestorPendingBlob=blob;
+    toast('⟳ Gestor sincronizado — ve a Importar para contabilizar');
   }catch(e){
     console.log('[Gestor] Error auto-sync:', e.message);
   }
@@ -2605,6 +2603,12 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     var concepto=String(r[colMap.concepto]||'').trim();
     var tipoDoc=String(r[colMap.tipoDoc]||'').trim();
     var empresaOrigen=String(r[colMap.empresa]||'').trim();
+    
+    // For emitidas: "Empresa Factura" is the CLIENT, "Proveedor" is US
+    var isEmitida=tipoDoc.indexOf('EMITIDA')>=0||tipoDoc.indexOf('VENTA')>=0;
+    if(isEmitida&&empresaOrigen){
+      terceroName=empresaOrigen;
+    }
 
     // Parse amounts - handle string numbers with comma/dot
     function parseAmt(v){
@@ -2622,17 +2626,22 @@ async function processFacturasRows(rows,tipo,resumenIVA){
       numFact:numFact, fecha:fecha, tercero:terceroName, cif:cif,
       concepto:concepto, tipoDoc:tipoDoc, empresa:empresaOrigen,
       vencimiento:colMap.vencimiento!==undefined?parseDate(r[colMap.vencimiento]):'',
-      base21:parseAmt(r[colMap.base21]), iva21:parseAmt(r[colMap.iva21]),
-      base10:parseAmt(r[colMap.base10]), iva10:parseAmt(r[colMap.iva10]),
-      base4:parseAmt(r[colMap.base4]), iva4:parseAmt(r[colMap.iva4]),
-      base0:parseAmt(r[colMap.base0]),
-      iva0:parseAmt(r[colMap.iva0]),
+      base21:Math.abs(parseAmt(r[colMap.base21])), iva21:Math.abs(parseAmt(r[colMap.iva21])),
+      base10:Math.abs(parseAmt(r[colMap.base10])), iva10:Math.abs(parseAmt(r[colMap.iva10])),
+      base4:Math.abs(parseAmt(r[colMap.base4])), iva4:Math.abs(parseAmt(r[colMap.iva4])),
+      base0:Math.abs(parseAmt(r[colMap.base0])),
+      iva0:Math.abs(parseAmt(r[colMap.iva0])),
       retencion:parseAmt(r[colMap.retencion]),
       recargo:parseAmt(r[colMap.recargo]),
       total:parseAmt(r[colMap.total]),
-      tipo:tipo==='auto'?(tipoDoc.indexOf('EMITIDA')>=0||tipoDoc.indexOf('VENTA')>=0?'emitida':'recibida'):tipo,
+      tipo:tipo==='auto'?(isEmitida?'emitida':'recibida'):tipo,
       isAbono:tipoDoc.indexOf('ABONO')>=0
     };
+    // Calculate total if missing
+    if(!fact.total||fact.total===0){
+      fact.total=fact.base21+fact.iva21+fact.base10+fact.iva10+fact.base4+fact.iva4+fact.base0-Math.abs(fact.retencion||0);
+    }
+    fact.total=Math.abs(fact.total);
     facturas.push(fact);
   }
 
