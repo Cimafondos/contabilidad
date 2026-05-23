@@ -514,7 +514,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.4</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.5</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2563,10 +2563,10 @@ async function processFacturasRows(rows,tipo,resumenIVA){
   var colMap={};
   header.forEach(function(h,i){
     var hl=h.toLowerCase();
-    if(hl.indexOf('nº factura')>=0||hl.indexOf('n factura')>=0||hl==='nº factura')colMap.numFact=i;
-    if(hl.indexOf('fecha contable')>=0)colMap.fecha=i;
+    if(hl.indexOf('nº factura')>=0||hl.indexOf('n factura')>=0||hl==='nº factura'||hl.indexOf('numero factura')>=0||hl.indexOf('núm')>=0)colMap.numFact=i;
+    if(hl.indexOf('fecha contable')>=0||hl.indexOf('fecha factura')>=0||(hl==='fecha'&&!colMap.fecha))colMap.fecha=i;
     if(hl.indexOf('fecha vencimiento')>=0)colMap.vencimiento=i;
-    if(hl.indexOf('proveedor')>=0)colMap.tercero=i;
+    if(hl.indexOf('proveedor')>=0||hl.indexOf('cliente')>=0||hl.indexOf('emisor')>=0||hl.indexOf('receptor')>=0)colMap.tercero=i;
     if(hl==='cif')colMap.cif=i;
     if(hl.indexOf('concepto')>=0)colMap.concepto=i;
     if(hl.indexOf('tipo documento')>=0)colMap.tipoDoc=i;
@@ -2589,9 +2589,12 @@ async function processFacturasRows(rows,tipo,resumenIVA){
   var facturas=[];
   for(var i=1;i<rows.length;i++){
     var r=rows[i];
-    if(!r||!r[colMap.numFact])continue;
-    var numFact=String(r[colMap.numFact]||'').trim();
+    if(!r)continue;
+    var numFact=colMap.numFact!==undefined?String(r[colMap.numFact]||'').trim():'AUTO_'+i;
     if(!numFact||numFact==='TOTALES:'||numFact.indexOf('TOTAL')>=0)continue;
+    // Skip empty rows
+    var hasData=false;for(var ci=0;ci<r.length;ci++){if(r[ci]!==null&&r[ci]!==undefined&&r[ci]!==''){hasData=true;break;}}
+    if(!hasData)continue;
 
     var fechaRaw=String(r[colMap.fecha]||'');
     var fecha=fechaRaw.slice(0,10); // ISO format from gestor
