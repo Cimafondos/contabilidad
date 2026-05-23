@@ -514,7 +514,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.1</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.2</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2382,7 +2382,19 @@ function exportMasterExcel(type,title){
 
 // ═══ IMPORT — fixed to show results immediately ═══
 function renderImport(c){
-  c.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
+  var savedKey=localStorage.getItem('cf_gestor_apikey_'+(state.company?state.company.id:''))||'';
+  c.innerHTML=
+  '<div class="card" style="margin-bottom:16px;border-color:var(--pri);border-width:2px"><div class="card-h" style="background:#F0FDF4"><span style="color:var(--pri);font-weight:700">Sincronizar con Gestor Documental</span></div><div class="card-b">'+
+  '<div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px">'+
+  '<div style="flex:1;min-width:250px"><div class="lbl">API Key del Gestor Documental</div><input class="inp" id="gestorApiKey" type="password" value="'+h(savedKey)+'" placeholder="muvail_..." style="font-family:monospace;font-size:11px"></div>'+
+  '<div style="width:100px"><div class="lbl">Año</div><select class="sel" id="gestorYear" style="width:100%"><option value="2024">2024</option><option value="2025">2025</option><option value="2026" selected>2026</option></select></div>'+
+  '<div style="width:120px"><div class="lbl">Trimestre</div><select class="sel" id="gestorQ" style="width:100%"><option value="">Todo el año</option><option value="1">1T</option><option value="2">2T</option><option value="3">3T</option><option value="4">4T</option></select></div>'+
+  '<div style="width:130px"><div class="lbl">Tipo</div><select class="sel" id="gestorTipo" style="width:100%"><option value="todas">Todas</option><option value="recibidas">Recibidas</option><option value="emitidas">Emitidas</option></select></div>'+
+  '<button class="btn btn-p" style="padding:8px 20px;font-size:13px" onclick="syncGestorDocumental()">⟳ Sincronizar</button>'+
+  '</div>'+
+  '<div id="gestorSyncStatus" style="font-size:11px;color:var(--txM)">Conecta tu Gestor Documental para importar facturas automáticamente</div>'+
+  '</div></div>'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
   '<div class="card"><div class="card-h">Extracto bancario</div><div class="card-b">'+
   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
   '<div style="border:2px dashed var(--bd);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.15s" onclick="$(\'impFile\').click()" onmouseover="this.style.borderColor=\'var(--pri)\'" onmouseout="this.style.borderColor=\'var(--bd)\'" ondragover="event.preventDefault();this.style.borderColor=\'var(--pri)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';processImportFile(event.dataTransfer.files[0])"><div style="font-size:32px;margin-bottom:8px">☁</div><div style="font-weight:600;font-size:13px">Norma 43 / Excel</div><div style="font-size:11px;color:var(--txM);margin-top:4px">.n43 · .xlsx · .xls · .csv</div><input id="impFile" type="file" accept=".n43,.xlsx,.xls,.csv" style="display:none" onchange="processImportFile(this.files[0])"></div>'+
@@ -6185,6 +6197,52 @@ function exportIncidenciasExcel(){
   });
   var headers=[];table.querySelectorAll('thead th').forEach(function(th){headers.push(th.textContent.trim());});
   exportExcel(rows,headers,'incidencias');
+}
+
+// ═══ SYNC GESTOR DOCUMENTAL ═══
+async function syncGestorDocumental(){
+  var apiKey=$('gestorApiKey')?$('gestorApiKey').value.trim():'';
+  if(!apiKey){toast('Introduce la API Key del gestor documental','error');return;}
+  
+  // Save key for next time
+  localStorage.setItem('cf_gestor_apikey_'+(state.company?state.company.id:''),apiKey);
+  
+  var year=$('gestorYear')?$('gestorYear').value:'2026';
+  var q=$('gestorQ')?$('gestorQ').value:'';
+  var tipo=$('gestorTipo')?$('gestorTipo').value:'todas';
+  
+  var statusEl=$('gestorSyncStatus');
+  if(statusEl)statusEl.innerHTML='<span style="color:var(--pri);font-weight:600">⟳ Conectando con gestor documental...</span>';
+  
+  try{
+    var response=await fetch(API+'/api/gestor-sync',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+sessionStorage.getItem('cf_token')},
+      body:JSON.stringify({apiKey:apiKey,año:year,trimestre:q||undefined,tipo:tipo})
+    });
+    
+    if(!response.ok){
+      var err=await response.json().catch(function(){return {error:'Error desconocido'};});
+      throw new Error(err.error||'Error '+response.status);
+    }
+    
+    if(statusEl)statusEl.innerHTML='<span style="color:var(--pri);font-weight:600">⟳ Descargando Excel...</span>';
+    
+    var blob=await response.blob();
+    if(statusEl)statusEl.innerHTML='<span style="color:var(--pri);font-weight:600">⟳ Procesando facturas...</span>';
+    
+    // Convert blob to File and process
+    var file=new File([blob],'gestor_sync.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    
+    // Use the existing importFacturasExcel function
+    importFacturasExcel(file,'recibida');
+    
+    if(statusEl)statusEl.innerHTML='<span style="color:var(--ok);font-weight:600">✓ Sincronización completada — procesando facturas...</span>';
+    toast('✓ Excel descargado del gestor documental');
+  }catch(e){
+    if(statusEl)statusEl.innerHTML='<span style="color:var(--rd);font-weight:600">✗ Error: '+h(e.message)+'</span>';
+    toast('Error al sincronizar: '+e.message,'error');
+  }
 }
 
 // ═══ CIERRE DE EJERCICIO ═══

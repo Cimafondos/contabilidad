@@ -1049,6 +1049,48 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
+// ── Gestor Documental API Proxy ──
+app.post('/api/gestor-sync', authRequired, async (req, res) => {
+  try {
+    const { apiKey, año, trimestre, tipo } = req.body;
+    if (!apiKey) return res.status(400).json({ error: 'API Key requerida' });
+    
+    const gestorUrl = 'https://gestor.muvail.com/api/v1/export/excel';
+    const body = {};
+    if (año) body.año = parseInt(año);
+    if (trimestre) body.trimestre = parseInt(trimestre);
+    if (tipo) body.tipo = tipo;
+    
+    console.log(`[Gestor Sync] Requesting ${gestorUrl} with filters:`, body);
+    
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(gestorUrl, {
+      method: 'POST',
+      headers: {
+        'X-Api-Key': apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      console.log(`[Gestor Sync] Error ${response.status}:`, errText);
+      return res.status(response.status).json({ error: `Gestor documental respondió ${response.status}: ${errText.slice(0, 200)}` });
+    }
+    
+    const buffer = await response.buffer();
+    console.log(`[Gestor Sync] Received ${buffer.length} bytes`);
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=gestor_sync.xlsx');
+    res.send(buffer);
+  } catch (e) {
+    console.error('[Gestor Sync] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Start ──
 migratePasswords();
 scheduleDailyBackup();

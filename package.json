@@ -12,6 +12,7 @@
     "better-sqlite3": "^11.0.0",
     "cors": "^2.8.5",
     "jsonwebtoken": "^9.0.2",
-    "bcryptjs": "^2.4.3"
+    "bcryptjs": "^2.4.3",
+    "node-fetch": "^2.7.0"
   }
 }
