@@ -1010,7 +1010,7 @@ function renderDash(c){
     // IVA a pagar
     if(tiva>0){var now=new Date();var daysToQuarter=[0,0,0,20,20,20,20,20,20,20,20,20][now.getMonth()];alerts.push({type:'warning',msg:'📤 IVA a pagar este trimestre: <strong>'+fmt(tiva)+'€</strong>'});}
     // Tesorería baja
-    if(tb<0)alerts.push({type:'danger',msg:'🏦 Tesorería negativa: <strong>'+fmt(tb)+'€</strong>. Revisa cobros pendientes.'});
+    if(tb<0)alerts.push({type:'danger',msg:'Tesorería negativa: <strong>'+fmt(tb)+'€</strong>. Revisa cobros pendientes.'});
     else if(tb<1000)alerts.push({type:'warning',msg:'🏦 Tesorería baja: <strong>'+fmt(tb)+'€</strong>. Vigila la liquidez.'});
     // Gastos > Ingresos
     if(tg>ti&&ti>0)alerts.push({type:'danger',msg:'⚠️ Los gastos ('+fmt(tg)+'€) superan los ingresos ('+fmt(ti)+'€) en <strong>'+fmt(tg-ti)+'€</strong>'});
@@ -1421,8 +1421,8 @@ function renderLedger(c){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var ldg={};all.forEach(function(e){e.lines.forEach(function(l){if(!ldg[l.a])ldg[l.a]=[];ldg[l.a].push({date:e.date,concept:e.concept,d:l.d,h:l.h});});});
   var used=Object.keys(ldg).sort();
-  c.innerHTML=dateFilterHTML()+'<div class="card"><div class="card-h"><span>📖 Mayor</span><div style="display:flex;gap:8px;align-items:center">'+acSearchHTML('ldgSearch','','onLedgerSelect')+'<button class="btn btn-d" style="font-size:10px" onclick="exportLedgerExcel()">📊</button></div></div>'+
-  '<div style="padding:6px 14px;background:#F8F9FB;border-bottom:1px solid #EDF0F4;font-size:11px;color:var(--txM)">Cuentas con movimientos: '+used.length+'</div>'+
+  c.innerHTML=dateFilterHTML()+'<div class="card"><div class="card-h"><span>Libro mayor</span><div style="display:flex;gap:8px;align-items:center">'+acSearchHTML('ldgSearch','','onLedgerSelect')+'<button class="btn btn-d" onclick="exportLedgerExcel()">↓ Excel</button></div></div>'+
+  '<div style="padding:8px 16px;background:#FAFBFC;border-bottom:1px solid #F3F4F6;font-size:11px;color:var(--txS)">Cuentas con movimientos: '+used.length+'</div>'+
   '<div id="ldgDetail"><div class="empty">Busca una cuenta arriba o selecciona del listado</div></div></div>';
   window._ldg=ldg;window._am=am;
 }
@@ -1708,9 +1708,17 @@ function exportPartnersExcel(){
 // ═══ ACCOUNTS with edit/delete ═══
 function renderAccounts(c){
   var grouped={};state.accounts.forEach(function(a){if(!grouped[a.g])grouped[a.g]=[];grouped[a.g].push(a);});
-  c.innerHTML='<div class="card"><div class="card-h"><span>📑 Plan cuentas — '+state.accounts.length+'</span><div style="display:flex;gap:6px"><button class="btn btn-d" style="font-size:10px" onclick="reloadPGC()">🔄 Recargar PGC</button><button class="btn btn-d" style="font-size:10px" onclick="exportAccountsExcel()">📊 Excel</button></div></div>'+
-  '<div style="padding:8px 14px;border-bottom:1px solid #EDF0F4;display:flex;gap:6px;align-items:end;flex-wrap:wrap"><div><div class="lbl">Código ('+getAccountLevels().join(',')+' díg)</div><input class="inp" style="width:95px" id="acCode" maxlength="8" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')" placeholder="43000001"></div><div style="flex:1;min-width:100px"><div class="lbl">Nombre</div><input class="inp" id="acName"></div><div><div class="lbl">Tipo</div><select class="sel" id="acType"><option value="A">A</option><option value="P">P</option><option value="G">G</option><option value="I">I</option></select></div><button class="btn btn-p" onclick="addAccount()">+ Añadir</button></div></div>'+
-  Object.entries(grouped).sort(function(a,b){return a[0]-b[0];}).map(function(x){var g=x[0],accs=x[1];return '<div class="card"><div class="card-h"><span>G'+g+' '+(GROUPS[g]||'')+'</span><span class="badge badge-g">'+accs.length+'</span></div><table><tbody>'+accs.map(function(a,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:700;color:var(--pri);width:85px;font-family:monospace">'+a.code+'</td><td>'+h(a.name)+'</td><td style="width:40px"><span class="badge '+(a.t==='A'?'badge-b':a.t==='P'?'badge-a':a.t==='G'?'badge-r':'badge-g')+'">'+a.t+'</span></td><td style="width:60px;white-space:nowrap"><button class="abtn" onclick="editAccount(\''+a.code+'\',\''+h(a.name)+'\',\''+a.t+'\')" title="Editar">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteAccount(\''+a.code+'\')" title="Borrar">🗑</button></td></tr>';}).join('')+'</tbody></table></div>';}).join('');
+  c.innerHTML='<div class="card"><div class="card-h"><span>Plan de cuentas — '+state.accounts.length+'</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="reloadPGC()">Recargar PGC</button><button class="btn btn-d" onclick="exportAccountsExcel()">↓ Excel</button><button class="btn btn-p" onclick="toggleAddAccount()">Nueva cuenta <span style="background:rgba(255,255,255,0.25);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:3px">N</span></button></div></div>'+
+  '<div style="padding:10px 16px;border-bottom:1px solid #F3F4F6;display:flex;gap:8px;align-items:center"><input class="inp" style="max-width:280px;font-size:12px" id="acSearch" placeholder="Buscar cuenta..." oninput="filterAccounts(this.value)"></div>'+
+  '<div id="addAccountForm" style="display:none;padding:12px 16px;border-bottom:1px solid #F3F4F6;background:#FAFBFC;display:flex;gap:8px;align-items:end;flex-wrap:wrap"><div><div class="lbl">Código</div><input class="inp" style="width:100px;font-family:monospace" id="acCode" maxlength="8" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')" placeholder="43000001"></div><div style="flex:1;min-width:120px"><div class="lbl">Nombre</div><input class="inp" id="acName"></div><div><div class="lbl">Tipo</div><select class="sel" id="acType"><option value="A">Activo</option><option value="P">Pasivo</option><option value="G">Gasto</option><option value="I">Ingreso</option></select></div><button class="btn btn-p" onclick="addAccount()">Añadir</button><button class="btn btn-d" onclick="toggleAddAccount()">Cancelar</button></div></div>'+
+  '<div id="accountsList">'+Object.entries(grouped).sort(function(a,b){return a[0]-b[0];}).map(function(x){var g=x[0],accs=x[1];return '<div class="card" style="margin:0;border:none;border-bottom:1px solid #F3F4F6;border-radius:0;box-shadow:none"><div class="card-h" style="background:#FAFBFC;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'"><span>G'+g+' '+(GROUPS[g]||'')+'</span><span class="badge badge-b">'+accs.length+'</span></div><div><table><tbody>'+accs.map(function(a,i){return '<tr class="acct-row '+(i%2?'alt':'')+'" data-search="'+a.code+' '+a.name.toLowerCase()+'"><td style="font-weight:600;color:var(--pri);width:90px;font-family:monospace;font-size:12px">'+a.code+'</td><td style="font-size:12px">'+h(a.name)+'</td><td style="width:50px"><span class="badge '+(a.t==='A'?'badge-b':a.t==='P'?'badge-a':a.t==='G'?'badge-r':'badge-g')+'">'+a.t+'</span></td><td style="width:50px;white-space:nowrap"><button class="abtn" onclick="editAccount(\''+a.code+'\',\''+h(a.name)+'\',\''+a.t+'\')" title="Editar">✏️</button><button class="abtn" style="color:var(--rd)" onclick="deleteAccount(\''+a.code+'\')" title="Borrar">✕</button></td></tr>';}).join('')+'</tbody></table></div></div>';}).join('')+'</div>';
+}
+function toggleAddAccount(){var el=document.getElementById('addAccountForm');if(el)el.style.display=el.style.display==='none'?'flex':'none';}
+function filterAccounts(q){
+  q=q.toLowerCase();
+  document.querySelectorAll('.acct-row').forEach(function(r){
+    r.style.display=!q||r.getAttribute('data-search').indexOf(q)>=0?'':'none';
+  });
 }
 function getAccountLevels(){
   try{var empresas=getEmpresas();var emp=empresas.find(function(e){return e.name===(state.company?state.company.name:'');});
@@ -3101,8 +3109,8 @@ function renderModelo303(c){
   var totalRates={21:{baseR:0,cuotaR:0,baseS:0,cuotaS:0},10:{baseR:0,cuotaR:0,baseS:0,cuotaS:0},4:{baseR:0,cuotaR:0,baseS:0,cuotaS:0}};
   datos.forEach(function(d){[21,10,4].forEach(function(r){totalRates[r].baseR+=d.rates[r].baseR;totalRates[r].cuotaR+=d.rates[r].cuotaR;totalRates[r].baseS+=d.rates[r].baseS;totalRates[r].cuotaS+=d.rates[r].cuotaS;});});
   var verificacion='';
-  if(totalBaseRep>0&&totalRep===0)verificacion+='<div style="padding:8px 14px;background:#FDF0F0;border-bottom:1px solid var(--rd);font-size:11px;color:var(--rd)">⚠️ Ventas '+fmt(totalBaseRep)+'€ sin IVA repercutido (cuenta 477). Revisa los asientos de venta.</div>';
-  if(totalBaseSop>0&&totalSop===0)verificacion+='<div style="padding:8px 14px;background:#FDF0F0;border-bottom:1px solid var(--rd);font-size:11px;color:var(--rd)">⚠️ Compras '+fmt(totalBaseSop)+'€ sin IVA soportado (cuenta 472). Revisa los asientos de compra.</div>';
+  if(totalBaseRep>0&&totalRep===0)verificacion+='<div style="padding:10px 16px;background:#FEF2F2;border-bottom:1px solid #FECACA;font-size:11px;color:#991B1B">Ventas '+fmt(totalBaseRep)+'€ sin IVA repercutido (cuenta 477). Revisa los asientos de venta.</div>';
+  if(totalBaseSop>0&&totalSop===0)verificacion+='<div style="padding:10px 16px;background:#FEF2F2;border-bottom:1px solid #FECACA;font-size:11px;color:#991B1B">Compras '+fmt(totalBaseSop)+'€ sin IVA soportado (cuenta 472). Revisa los asientos de compra.</div>';
   // Rate breakdown rows
   var rateDetail='';
   [21,10,4].forEach(function(r){
@@ -3111,8 +3119,12 @@ function renderModelo303(c){
       rateDetail+='<tr style="background:#F8F9FB;font-size:11px"><td style="padding-left:20px;color:var(--txM)">↳ IVA '+r+'%</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(Math.abs(d.cuotaR-d.cuotaS))+'€</td><td></td></tr>';
     }
   });
-  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 303 — IVA Trimestral '+state.ejercicio+'</span></div>'+
-  '<div style="padding:8px 14px;display:flex;gap:20px;font-size:12px;border-bottom:1px solid #EDF0F4"><div>IVA Repercutido: <strong style="color:var(--rd)">'+fmt(totalRep)+'€</strong></div><div>IVA Soportado: <strong style="color:var(--ok)">'+fmt(totalSop)+'€</strong></div><div>Resultado: <strong style="color:'+(totalRep-totalSop>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(totalRep-totalSop))+'€ '+(totalRep-totalSop>=0?'a pagar':'a devolver')+'</strong></div></div>'+verificacion+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 303 — IVA Trimestral '+state.ejercicio+'</span></div>'+
+  '<div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;border-bottom:1px solid #F3F4F6">'+
+  '<div style="background:#FEF2F2;border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:#991B1B;margin-bottom:4px">IVA Repercutido</div><div style="font-size:20px;font-weight:700;color:#DC2626">'+fmt(totalRep)+'€</div></div>'+
+  '<div style="background:#F0FDF4;border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:#166534;margin-bottom:4px">IVA Soportado</div><div style="font-size:20px;font-weight:700;color:#16A34A">'+fmt(totalSop)+'€</div></div>'+
+  '<div style="background:'+(totalRep-totalSop>=0?'#FEF2F2':'#F0FDF4')+';border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:'+(totalRep-totalSop>=0?'#991B1B':'#166534')+';margin-bottom:4px">Resultado — '+(totalRep-totalSop>=0?'a pagar':'a devolver')+'</div><div style="font-size:20px;font-weight:700;color:'+(totalRep-totalSop>=0?'#DC2626':'#16A34A')+'">'+fmt(Math.abs(totalRep-totalSop))+'€</div></div>'+
+  '</div>'+verificacion+
   '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Base ventas</th><th style="text-align:right">IVA repercutido</th><th style="text-align:right">Base compras</th><th style="text-align:right">IVA soportado</th><th style="text-align:right">Resultado</th><th>Acción</th></tr></thead><tbody>'+
   datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+fmt(d.baseRep)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.rep)+'€</td><td style="text-align:right">'+fmt(d.baseSop)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(d.sop)+'€</td><td style="text-align:right;font-weight:700;color:'+(d.resultado>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(d.resultado))+'€</td><td>'+(d.resultado>=0?'<span class="badge badge-r">A pagar</span>':'<span class="badge badge-g">A devolver</span>')+'</td></tr>';}).join('')+
   '<tr class="total"><td>ANUAL</td><td style="text-align:right">'+fmt(totalBaseRep)+'€</td><td style="text-align:right">'+fmt(totalRep)+'€</td><td style="text-align:right">'+fmt(totalBaseSop)+'€</td><td style="text-align:right">'+fmt(totalSop)+'€</td><td style="text-align:right;font-size:14px">'+fmt(Math.abs(totalRep-totalSop))+'€</td><td></td></tr>'+rateDetail+'</tbody></table></div>';
