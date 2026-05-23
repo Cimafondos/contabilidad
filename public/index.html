@@ -1764,12 +1764,13 @@ function exportAccountsExcel(){exportExcel(state.accounts.map(function(a){return
 
 // ═══ RULES with edit ═══
 function renderRules(c){
-  c.innerHTML='<div class="card"><div class="card-h"><span>⚙️ Reglas de matching — '+state.rules.length+'</span></div>'+
-  '<div style="padding:8px 14px;border-bottom:1px solid #EDF0F4;display:flex;gap:5px;align-items:end;flex-wrap:wrap"><div style="flex:2;min-width:100px"><div class="lbl">Patrón (regex)</div><input class="inp" id="rPat" placeholder="ALQUILER|ARRENDAMIENTO"></div><div style="flex:2;min-width:120px"><div class="lbl">Cuenta</div>'+acSearchHTML('rAcctSearch','','')+'</div><div style="min-width:70px"><div class="lbl">IVA</div><select class="sel" id="rIva">'+IVA.map(function(r){return '<option value="'+r.id+'">'+r.l+'</option>';}).join('')+'</select></div><div style="flex:1;min-width:70px"><div class="lbl">Descripción</div><input class="inp" id="rDesc"></div><button class="btn btn-p" onclick="addRule()">+ Añadir</button></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Reglas de contabilización — '+state.rules.length+'</span><button class="btn btn-p" onclick="toggleRuleForm()">Nueva regla <span style="background:rgba(255,255,255,0.25);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:3px">R</span></button></div>'+
+  '<div id="ruleForm" style="display:none;padding:12px 16px;border-bottom:1px solid #F3F4F6;background:#FAFBFC;display:flex;gap:6px;align-items:end;flex-wrap:wrap"><div style="flex:2;min-width:100px"><div class="lbl">Patrón (regex)</div><input class="inp" id="rPat" placeholder="ALQUILER|ARRENDAMIENTO"></div><div style="flex:2;min-width:120px"><div class="lbl">Cuenta</div>'+acSearchHTML('rAcctSearch','','')+'</div><div style="min-width:70px"><div class="lbl">IVA</div><select class="sel" id="rIva">'+IVA.map(function(r){return '<option value="'+r.id+'">'+r.l+'</option>';}).join('')+'</select></div><div style="flex:1;min-width:70px"><div class="lbl">Descripción</div><input class="inp" id="rDesc"></div><button class="btn btn-p" onclick="addRule()">Añadir</button><button class="btn btn-d" onclick="toggleRuleForm()">Cancelar</button></div>'+
   '<div class="scr"><table><thead><tr><th>Patrón</th><th>Cuenta</th><th>IVA</th><th>Descripción</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
-  state.rules.map(function(r,i){var iv=IVA.find(function(x){return x.id===r.iv;});return '<tr class="'+(i%2?'alt':'')+'"><td style="font-family:monospace;font-size:10px;color:var(--am)">'+h(r.p)+'</td><td class="acct">'+r.a+'</td><td><span class="badge badge-b">'+(iv?iv.l:'N/A')+'</span></td><td>'+h(r.d)+'</td><td style="white-space:nowrap"><button class="abtn" onclick="editRule(\''+r.id+'\')" title="Editar">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteRule(\''+r.id+'\')" title="Borrar">✕</button></td></tr>';}).join('')+
+  state.rules.map(function(r,i){var iv=IVA.find(function(x){return x.id===r.iv;});return '<tr class="'+(i%2?'alt':'')+'"><td style="font-family:monospace;font-size:11px;color:var(--am)">'+h(r.p)+'</td><td class="acct">'+r.a+'</td><td><span class="badge badge-b">'+(iv?iv.l:'N/A')+'</span></td><td>'+h(r.d)+'</td><td style="white-space:nowrap"><button class="abtn" onclick="editRule(\''+r.id+'\')" title="Editar">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteRule(\''+r.id+'\')" title="Borrar">✕</button></td></tr>';}).join('')+
   '</tbody></table></div></div>';
 }
+function toggleRuleForm(){var el=document.getElementById('ruleForm');if(el)el.style.display=el.style.display==='none'?'flex':'none';}
 async function addRule(){
   var p=$('rPat').value,a=acGetCode('rAcctSearch'),iv=$('rIva').value,d=$('rDesc').value;
   if(!p||!a){toast('Patrón y cuenta obligatorios','error');return;}
@@ -2858,21 +2859,24 @@ function renderPosicion(c){
   var cliList=Object.values(clientes).filter(function(p){return Math.abs(p.saldo)>0.01;}).sort(function(a,b){return b.saldo-a.saldo;});
 
   c.innerHTML=dateFilterHTML()+
-  '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(totalSaldo)+'€</div><div class="stat-l">🏦 Saldo total disponible</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(pendCobro>0?pendCobro:0)+'€</div><div class="stat-l">📥 Pendiente de cobro</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(pendPago>0?pendPago:0)+'€</div><div class="stat-l">📤 Pendiente de pago</div></div><div class="stat"><div class="stat-v" style="color:'+(totalSaldo+pendCobro-pendPago>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalSaldo+pendCobro-pendPago)+'€</div><div class="stat-l">📊 Posición neta prevista</div></div></div>'+
+  '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px">'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Saldo disponible</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+fmt(totalSaldo)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Pendiente de cobro</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(pendCobro>0?pendCobro:0)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Pendiente de pago</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(pendPago>0?pendPago:0)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Posición neta</div><div style="font-size:22px;font-weight:700;color:'+(totalSaldo+pendCobro-pendPago>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalSaldo+pendCobro-pendPago)+'€</div></div></div>'+
   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
-  // Bancos y caja
-  '<div class="card"><div class="card-h"><span>🏦 Saldos bancarios y caja</span></div>'+
+  '<div class="card"><div class="card-h"><span>Saldos bancarios y caja</span></div>'+
   (items.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Entradas</th><th style="text-align:right">Salidas</th><th style="text-align:right">Saldo</th></tr></thead><tbody>'+
   items.map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td class="acct">'+x.code+'</td><td>'+h(x.name)+'</td><td style="text-align:right;color:var(--ok)">'+fmt(x.debe)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(x.haber)+'€</td><td style="text-align:right;font-weight:700" class="'+(x.saldo>=0?'amt-pos':'amt-neg')+'">'+fmt(x.saldo)+'€</td></tr>';}).join('')+
   '<tr class="total"><td colspan="4">TOTAL</td><td style="text-align:right;font-size:14px">'+fmt(totalSaldo)+'€</td></tr></tbody></table>':'<div class="empty" style="padding:20px">Sin movimientos bancarios</div>')+'</div>'+
   // Pendiente de pago
-  '<div class="card"><div class="card-h" style="color:var(--rd)"><span>📤 Pendiente de pago — '+fmt(pendPago)+'€</span></div>'+
+  '<div class="card"><div class="card-h"><span>Pendiente de pago — '+fmt(pendPago)+'€</span></div>'+
   (provList.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Cuenta</th><th>Proveedor</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
   provList.map(function(p,i){return '<tr class="'+(i%2?'alt':'')+'"><td class="acct">'+p.code+'</td><td>'+h(p.name)+'</td><td style="text-align:right;font-weight:600;color:var(--rd)">'+fmt(p.saldo)+'€</td></tr>';}).join('')+
   '</tbody></table></div>':'<div class="empty" style="padding:20px">Sin deudas pendientes</div>')+'</div>'+
   '</div>'+
   // Pendiente de cobro
-  (cliList.length?'<div class="card" style="margin-top:14px"><div class="card-h" style="color:var(--ok)"><span>📥 Pendiente de cobro — '+fmt(pendCobro)+'€</span></div>'+
+  (cliList.length?'<div class="card" style="margin-top:14px"><div class="card-h"><span>Pendiente de cobro — '+fmt(pendCobro)+'€</span></div>'+
   '<div class="scr" style="max-height:300px"><table><thead><tr><th>Cuenta</th><th>Cliente</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
   cliList.map(function(p,i){return '<tr class="'+(i%2?'alt':'')+'"><td class="acct">'+p.code+'</td><td>'+h(p.name)+'</td><td style="text-align:right;font-weight:600;color:var(--ok)">'+fmt(p.saldo)+'€</td></tr>';}).join('')+
   '</tbody></table></div></div>':'');
@@ -3163,15 +3167,18 @@ function renderPendientesCobro(c){
   var totalCobro=pendCobro.reduce(function(s,x){return s+x.saldo;},0);
   var totalPago=pendPago.reduce(function(s,x){return s+x.saldo;},0);
 
-  c.innerHTML='<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(totalCobro)+'€</div><div class="stat-l">📥 Pendiente de cobro</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(totalPago)+'€</div><div class="stat-l">📤 Pendiente de pago</div></div><div class="stat"><div class="stat-v" style="color:'+(totalCobro-totalPago>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalCobro-totalPago)+'€</div><div class="stat-l">📊 Posición neta</div></div></div>'+
+  c.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Pendiente de cobro</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(totalCobro)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Pendiente de pago</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(totalPago)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Posición neta</div><div style="font-size:22px;font-weight:700;color:'+(totalCobro-totalPago>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalCobro-totalPago)+'€</div></div></div>'+
   '<div class="grid-2">'+
-  '<div class="card"><div class="card-h" style="color:var(--ok)">📥 Pendiente de cobro — '+pendCobro.length+'</div>'+
+  '<div class="card"><div class="card-h">Pendiente de cobro — '+pendCobro.length+'</div>'+
   (pendCobro.length?'<table><thead><tr><th>Cliente/Concepto</th><th>Fecha</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
   pendCobro.map(function(p,i){
     var hoy=new Date();var fp=new Date(p.date);var dias=Math.floor((hoy-fp)/(1000*60*60*24));
     return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:11px">'+h(p.name)+'</td><td style="font-size:10px">'+fmtD(p.date)+' <span style="color:'+(dias>30?'var(--rd)':'var(--txM)')+';font-size:9px">('+dias+'d)</span></td><td style="text-align:right;font-weight:600;color:var(--ok)">'+fmt(p.saldo)+'€</td></tr>';}).join('')+
   '<tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">'+fmt(totalCobro)+'€</td></tr></tbody></table>':'<div class="empty">Sin pendientes de cobro</div>')+'</div>'+
-  '<div class="card"><div class="card-h" style="color:var(--rd)">📤 Pendiente de pago — '+pendPago.length+'</div>'+
+  '<div class="card"><div class="card-h">Pendiente de pago — '+pendPago.length+'</div>'+
   (pendPago.length?'<table><thead><tr><th>Proveedor/Concepto</th><th>Fecha</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
   pendPago.map(function(p,i){
     var hoy=new Date();var fp=new Date(p.date);var dias=Math.floor((hoy-fp)/(1000*60*60*24));
@@ -3925,21 +3932,20 @@ function deleteUsuarioGrupo(userId,nombre){
 }
 
 async function renderAdmin(c){
-  if(!state.user||state.user.role!=='superadmin'){c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">⛔ Acceso restringido a superadministradores</div></div>';return;}
-  c.innerHTML='<div class="card"><div class="card-h"><span>👤 Panel de administración (Superadmin)</span><button class="btn btn-p" style="font-size:10px" onclick="runTestCuadre()">🧪 Test de cuadre fiscal</button></div><div class="card-b">'+
-  '<div class="card" style="margin-bottom:8px"><div class="card-h">📊 Estadísticas del sistema</div><div class="card-b"><div class="row">'+
-  '<div class="stat"><div class="stat-v" style="color:var(--bl)">'+state.entries.length+'</div><div class="stat-l">Asientos</div></div>'+
-  '<div class="stat"><div class="stat-v" style="color:var(--ok)">'+state.accounts.length+'</div><div class="stat-l">Cuentas</div></div>'+
-  '<div class="stat"><div class="stat-v" style="color:var(--am)">'+state.rules.length+'</div><div class="stat-l">Reglas</div></div>'+
-  '</div></div></div>'+
-  '<div class="card" style="margin-top:8px"><div class="card-h" style="color:var(--rd)">⚠️ Zona peligrosa</div><div class="card-b">'+
+  if(!state.user||state.user.role!=='superadmin'){c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">Acceso restringido a superadministradores</div></div>';return;}
+  c.innerHTML='<div class="card"><div class="card-h"><span>Panel de administración</span><button class="btn btn-p" onclick="runTestCuadre()">Test de cuadre fiscal</button></div><div class="card-b">'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
+  '<div style="background:#F0F9FF;border-radius:8px;padding:14px 16px"><div style="font-size:11px;color:var(--txS);margin-bottom:4px">Asientos</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+state.entries.length+'</div></div>'+
+  '<div style="background:#F0FDF4;border-radius:8px;padding:14px 16px"><div style="font-size:11px;color:var(--txS);margin-bottom:4px">Cuentas</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+state.accounts.length+'</div></div>'+
+  '<div style="background:#FFFBEB;border-radius:8px;padding:14px 16px"><div style="font-size:11px;color:var(--txS);margin-bottom:4px">Reglas</div><div style="font-size:22px;font-weight:700;color:var(--am)">'+state.rules.length+'</div></div></div>'+
+  '<div class="card" style="margin-top:8px;border-color:#FECACA"><div class="card-h" style="color:#991B1B">Zona peligrosa</div><div class="card-b">'+
   '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-  '<button class="btn btn-a" onclick="softDeleteAsientos(\'empresa\')">🗑 Marcar asientos empresa actual como eliminados</button>'+
-  '<button class="btn btn-r" onclick="softDeleteAsientos(\'todas\')">🗑 Marcar asientos TODAS las empresas como eliminados</button>'+
-  '<button class="btn btn-p" onclick="recuperarAsientos()">♻️ Recuperar asientos eliminados</button>'+
-  '<button class="btn btn-d" onclick="exportarTodoCSV()">📊 Exportar todo CSV</button>'+
+  '<button class="btn btn-a" onclick="softDeleteAsientos(\'empresa\')">Marcar asientos empresa como eliminados</button>'+
+  '<button class="btn btn-r" onclick="softDeleteAsientos(\'todas\')">Marcar TODOS como eliminados</button>'+
+  '<button class="btn btn-p" onclick="recuperarAsientos()">Recuperar eliminados</button>'+
+  '<button class="btn btn-d" onclick="exportarTodoCSV()">↓ Exportar CSV</button>'+
   '</div>'+
-  '<div style="margin-top:8px;font-size:10px;color:var(--txM)">ℹ️ Los asientos marcados como eliminados no se muestran pero se pueden recuperar (como en Sage). Para borrado definitivo usa la Papelera.</div>'+
+  '<div style="margin-top:8px;font-size:11px;color:var(--txM)">Los asientos eliminados se pueden recuperar. Para borrado definitivo usa la Papelera.</div>'+
   '</div></div>'+
   '<div id="testResults"></div>'+
   '</div></div>';
