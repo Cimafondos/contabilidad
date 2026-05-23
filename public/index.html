@@ -350,6 +350,7 @@ function render(){
   var menuItems=[
     {section:'',items:[
       {id:'dash',icon:'📊',label:'Dashboard'},
+      {id:'soportePanel',icon:'💬',label:'Soporte',badge:isAdmin?state.unreadTickets:state.hasUnreadFeedback?1:0},
     ]},
     {section:'Contabilidad',items:[
       {id:'journal',icon:'📖',label:'Diario'},
@@ -385,21 +386,42 @@ function render(){
       {id:'admin',icon:'👤',label:'Admin',show:isAdmin},
     ]},
     {section:'',items:[
-      {id:'soportePanel',icon:'💬',label:'Soporte',badge:isAdmin?state.unreadTickets:state.hasUnreadFeedback?1:0},
     ]},
   ];
   
+  // Track which sections are open
+  if(!window._sideOpen)window._sideOpen={Contabilidad:true};
+  
   var sidebarHtml='<div class="sidebar'+(collapsed?' collapsed':'')+'" id="sidebar">'+
-    '<div class="side-header"><div class="side-header-logo">CF</div><div class="side-header-text">Cimafondos</div></div>'+
+    '<div class="side-header"><div class="side-header-logo">CF</div><div class="side-header-text">Cimafondos</div>'+
+    '<span class="side-edit-btn" onclick="toggleSidebarEdit()" style="cursor:pointer;font-size:14px;margin-left:auto;opacity:0.5;'+(window._sidebarEditMode?'opacity:1;':'')+'">🔧</span></div>'+
     '<div class="side-nav">';
   
   menuItems.forEach(function(sec){
-    if(sec.section)sidebarHtml+='<div class="side-section-label">'+sec.section+'</div>';
+    if(sec.section){
+      var isOpen=window._sideOpen[sec.section]||false;
+      var hasActive=sec.items.some(function(it){return state.view===it.id||(it.id==='soportePanel'&&state.view==='soporte');});
+      if(hasActive)isOpen=true;
+      sidebarHtml+='<div class="side-section-label" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding-right:16px" onclick="window._sideOpen[\''+sec.section+'\']=!window._sideOpen[\''+sec.section+'\'];render();">'+sec.section+'<span style="font-size:8px">'+(isOpen?'▼':'▶')+'</span></div>';
+      if(!isOpen){return;}
+      // Apply custom order if saved
+      var orderKey='cf_sideOrder_'+sec.section;
+      var customOrder=window._sidebarCustomOrder[sec.section];
+      if(!customOrder)try{customOrder=JSON.parse(localStorage.getItem(orderKey));}catch(ex){}
+      if(customOrder&&customOrder.length){
+        var ordered=[];
+        customOrder.forEach(function(id){var found=sec.items.find(function(it){return it.id===id;});if(found)ordered.push(found);});
+        sec.items.forEach(function(it){if(!ordered.find(function(o){return o.id===it.id;}))ordered.push(it);});
+        sec.items=ordered;
+      }
+    }
     sec.items.forEach(function(it){
       if(it.show===false)return;
       var active=state.view===it.id||(it.id==='soportePanel'&&state.view==='soporte');
       var badge=it.badge&&it.badge>0?'<span class="side-badge blink">'+it.badge+'</span>':'';
-      sidebarHtml+='<div class="side-item'+(active?' active':'')+'" onclick="setView(\''+it.id+'\')"><span class="side-icon">'+it.icon+'</span><span class="side-label">'+it.label+'</span>'+badge+'</div>';
+      var editAttrs=window._sidebarEditMode?'draggable="true" ondragstart="sidebarDragStart(event,\''+it.id+'\')" ondragover="event.preventDefault();this.style.borderTop=\'2px solid var(--ok)\'" ondragleave="this.style.borderTop=\'\'" ondrop="sidebarDrop(event,\''+it.id+'\',\''+(sec.section||'main')+'\')"':'';
+      var editStyle=window._sidebarEditMode?'cursor:grab;border:1px dashed rgba(255,255,255,0.3);margin:2px 8px;border-radius:4px;padding:6px 8px;':'';
+      sidebarHtml+='<div class="side-item'+(active?' active':'')+'" '+editAttrs+' onclick="'+(window._sidebarEditMode?'':'setView(\''+it.id+'\')')+'" style="'+editStyle+'"><span class="side-icon">'+it.icon+'</span><span class="side-label">'+it.label+'</span>'+badge+'</div>';
     });
   });
   
@@ -662,6 +684,52 @@ function ribbonDrop(e,targetId){
     window._ribbonOrder[tabId]=order;
     // Save and re-render to show new order
     localStorage.setItem('cf_btnOrder_'+tabId,JSON.stringify(order));
+    render();
+  }
+}
+
+// ═══ SIDEBAR DRAG & DROP ═══
+window._sidebarEditMode=false;
+window._sidebarDragId=null;
+window._sidebarCustomOrder={};
+function toggleSidebarEdit(){
+  window._sidebarEditMode=!window._sidebarEditMode;
+  if(!window._sidebarEditMode){
+    toast('✓ Orden guardado');
+  }else{
+    toast('Arrastra los items para reordenar. Pulsa 🔧 para guardar.');
+  }
+  render();
+}
+function sidebarDragStart(e,id){
+  window._sidebarDragId=id;
+  e.dataTransfer.effectAllowed='move';
+  e.target.style.opacity='0.4';
+}
+function sidebarDrop(e,targetId,section){
+  e.preventDefault();
+  e.target.style.borderTop='';
+  var sourceId=window._sidebarDragId;
+  if(!sourceId||sourceId===targetId)return;
+  // Load or init custom order for this section
+  var key='cf_sideOrder_'+section;
+  var order=[];
+  try{order=JSON.parse(localStorage.getItem(key))||[];}catch(ex){}
+  if(!order.length){
+    // Build from current DOM
+    document.querySelectorAll('.side-item').forEach(function(el){
+      var onclick=el.getAttribute('onclick')||'';
+      var m=onclick.match(/setView\('([^']+)'\)/);
+      if(m)order.push(m[1]);
+    });
+  }
+  var srcIdx=order.indexOf(sourceId);
+  var tgtIdx=order.indexOf(targetId);
+  if(srcIdx>=0&&tgtIdx>=0){
+    order.splice(srcIdx,1);
+    order.splice(tgtIdx,0,sourceId);
+    localStorage.setItem(key,JSON.stringify(order));
+    window._sidebarCustomOrder[section]=order;
     render();
   }
 }
