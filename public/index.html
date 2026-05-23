@@ -84,6 +84,18 @@ tr.total{background:var(--priLt);font-weight:600}
 .dark th{background:#1F2937}
 @media(max-width:768px){.grid-2{grid-template-columns:1fr!important}.row{flex-direction:column}.stat{min-width:auto}.modal{margin:8px;max-width:calc(100vw - 16px)!important}.sidebar{width:var(--sideCollW)}.sidebar .side-label,.sidebar .side-section-label,.sidebar .side-bottom-info,.sidebar .side-header-text{display:none}.sidebar .side-item{justify-content:center;padding:10px 0}.content-area{margin-left:var(--sideCollW)!important}}
 .scr{max-height:500px;overflow-y:auto}
+.abtn{background:none;border:none;cursor:pointer;padding:3px 5px;border-radius:4px;font-size:13px;transition:background 0.15s}
+.abtn:hover{background:#F3F4F6}
+.acct{font-family:monospace;font-size:11px;color:var(--pri);font-weight:600}
+.amt-pos{color:var(--ok)}.amt-neg{color:var(--rd)}
+/* Smooth transitions */
+.card{transition:box-shadow 0.15s}
+.card:hover{box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.side-item{transition:all 0.12s ease}
+.btn{transition:all 0.12s ease}
+/* Progress bar animation */
+@keyframes progressPulse{0%{opacity:0.6}50%{opacity:1}100%{opacity:0.6}}
+.progress-bar{animation:progressPulse 1.5s ease-in-out infinite}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;backdrop-filter:blur(2px)}
 .modal{background:var(--wh);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.12);width:100%;max-width:760px;max-height:88vh;overflow:auto}
 .amt-pos{font-weight:600;color:var(--ok);font-variant-numeric:tabular-nums}
@@ -482,8 +494,9 @@ function render(){
   sidebarHtml+
   '<div class="content-area" id="contentArea">'+
   '<div class="content-topbar">'+
-  '<div class="content-topbar-title">'+h(viewTitle)+'</div>'+
+  '<div style="display:flex;align-items:center;gap:12px"><div class="content-topbar-title">'+h(viewTitle)+'</div></div>'+
   '<div class="content-topbar-right">'+
+  '<span style="font-size:11px;color:var(--txM);padding:4px 10px;background:#F3F4F6;border-radius:6px">'+h(companyName)+'</span>'+
   '<select class="sel" style="font-size:11px;padding:3px 8px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+
   intBadge+
   '<input class="inp" style="font-size:11px;padding:4px 10px;width:180px" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)">'+
@@ -1096,17 +1109,41 @@ function renderJournal(c){
   var all=filteredEntries().sort(function(a,b){return a.date.localeCompare(b.date);});
   var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var td=0,th=0;all.forEach(function(e){e.lines.forEach(function(l){td+=l.d;th+=l.h;});});
-  c.innerHTML=dateFilterHTML()+'<div class="card"><div class="card-h"><span>Diario — '+all.length+' asientos</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="exportJournalExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportJournalPDF()">↓ PDF</button><button class="btn btn-p" onclick="showEntryModal()">Nuevo asiento <span style="background:rgba(255,255,255,0.25);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:4px">M</span></button></div></div>'+
-  (all.length?'<table><thead><tr><th>Nº</th><th>'+colSortBtn('date','Fecha')+'</th><th>Cuenta</th><th>'+colSortBtn('concept','Concepto')+'</th><th style="text-align:right">'+colSortBtn('debe','Debe')+'</th><th style="text-align:right">'+colSortBtn('haber','Haber')+'</th><th style="width:90px">Acc.</th></tr><tr style="background:#f8f9fa"><td></td><td>'+colFilterInput('date','Fecha...')+'</td><td>'+colFilterInput('cuenta','Cuenta...')+'</td><td>'+colFilterInput('concept','Concepto...')+'</td><td></td><td></td><td></td></tr></thead><tbody><tr class="total"><td colspan="4">TOTALES ('+all.length+' asientos)</td><td style="text-align:right">'+fmt(td)+'</td><td style="text-align:right">'+fmt(th)+'</td><td><span class="badge '+(Math.abs(td-th)<1?'badge-g':'badge-r')+'">'+(Math.abs(td-th)<1?'✓':'✗')+'</span></td></tr></tbody></table><div class="scr"><table><thead><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Debe</th><th style="text-align:right">Haber</th><th style="width:90px">Acc.</th></tr></thead><tbody>'+
-  all.map(function(e,i){return e.lines.map(function(l,li){var filterData='date:'+e.date.toLowerCase()+'|cuenta:'+(l.a||'').toLowerCase()+'|concept:'+(e.concept||'').toLowerCase()+'|';return '<tr data-filter="'+filterData+'" class="'+(i%2?'alt':'')+'" style="'+(li===0?'border-top:2px solid var(--bd)':'')+'">'+
-  (li===0?'<td style="font-weight:600;color:var(--txM)" rowspan="'+e.lines.length+'">'+(i+1)+'</td><td style="font-size:10px" rowspan="'+e.lines.length+'">'+fmtD(e.date)+'</td>':'')+
-  '<td><span class="acct">'+l.a+'</span> <span style="color:var(--txM);font-size:10px">'+(am[l.a]?am[l.a].name:'')+'</span></td>'+
-  '<td style="font-size:11px;color:var(--txS)">'+(li===0?h(e.concept)+(e.tags?' <span style="display:inline-flex;gap:3px;margin-left:4px">'+e.tags.split(',').map(function(t){t=t.trim();return t?'<span style="background:#EFF6FF;color:#2563EB;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:500">'+h(t)+'</span>':'';}).join('')+'</span>':''):'')+'</td>'+
-  '<td style="text-align:right" class="amt-pos">'+(l.d>0?fmt(l.d):'')+'</td>'+
-  '<td style="text-align:right" class="amt-neg">'+(l.h>0?fmt(l.h):'')+'</td>'+
-  (li===0?'<td rowspan="'+e.lines.length+'" style="white-space:nowrap"><button class="abtn" onclick="editEntry(\''+e.id+'\')" title="Editar">✏️</button> <button class="abtn" onclick="dupEntry(\''+e.id+'\')" title="Duplicar">📋</button> <button class="abtn" style="color:var(--rd)" onclick="deleteEntry(\''+e.id+'\')" title="Borrar">🗑</button></td>':'')+
-  '</tr>';}).join('');}).join('')+
-  '</tbody></table></div>':'<div class="empty">Sin asientos en este periodo</div>')+'</div>';
+  
+  // Type colors for visual identification
+  var typeColors={fra_recibida:'#3B82F6',fra_emitida:'#10B981',gasto:'#F59E0B',nomina:'#8B5CF6',cobro:'#06B6D4',pago:'#EF4444',manual:'#6B7280'};
+  
+  c.innerHTML=dateFilterHTML()+
+  '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
+  '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Asientos</div><div style="font-size:22px;font-weight:700;color:var(--tx)">'+all.length+'</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total debe</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(td)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Cuadre</div><div style="font-size:22px;font-weight:700;color:'+(Math.abs(td-th)<1?'var(--ok)':'var(--rd)')+'">'+(Math.abs(td-th)<1?'✓ OK':'✗ '+fmt(Math.abs(td-th))+'€')+'</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>Libro diario</span><div style="display:flex;gap:6px">'+
+  '<button class="btn btn-d" onclick="exportJournalExcel()">↓ Excel</button>'+
+  '<button class="btn btn-d" onclick="exportJournalPDF()">↓ PDF</button>'+
+  '<button class="btn btn-p" onclick="showEntryModal()">Nuevo asiento <span style="background:rgba(255,255,255,0.25);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:3px">M</span></button></div></div>'+
+  '<div style="padding:6px 16px;background:#FAFBFC;border-bottom:1px solid #F3F4F6;display:flex;gap:8px;align-items:center">'+
+  '<input class="inp" style="max-width:150px;font-size:11px" placeholder="Buscar fecha..." oninput="colFilters.date=this.value.toLowerCase();applyColumnFilters();">'+
+  '<input class="inp" style="max-width:120px;font-size:11px" placeholder="Cuenta..." oninput="colFilters.cuenta=this.value.toLowerCase();applyColumnFilters();">'+
+  '<input class="inp" style="max-width:200px;font-size:11px" placeholder="Concepto..." oninput="colFilters.concept=this.value.toLowerCase();applyColumnFilters();">'+
+  '</div>'+
+  (all.length?'<div class="scr"><table><thead><tr><th style="width:35px">Nº</th><th style="width:80px">Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right;width:100px">Debe</th><th style="text-align:right;width:100px">Haber</th><th style="width:70px">Acc.</th></tr></thead><tbody>'+
+  all.map(function(e,i){
+    var entryTotal=e.lines.reduce(function(s,l){return s+l.d;},0);
+    var typeColor=typeColors[e.type]||typeColors.manual;
+    return e.lines.map(function(l,li){
+      var filterData='date:'+e.date.toLowerCase()+'|cuenta:'+(l.a||'').toLowerCase()+'|concept:'+(e.concept||'').toLowerCase()+'|';
+      return '<tr data-filter="'+filterData+'" style="'+(li===0?'border-top:1px solid var(--bd)':'')+'">'+
+      (li===0?'<td style="font-weight:600;color:var(--txM);font-size:11px" rowspan="'+e.lines.length+'"><span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:'+typeColor+';margin-right:4px"></span>'+(i+1)+'</td><td style="font-size:11px" rowspan="'+e.lines.length+'">'+fmtD(e.date)+'</td>':'')+
+      '<td><span style="font-family:monospace;font-size:11px;color:var(--pri);font-weight:600">'+l.a+'</span> <span style="color:var(--txM);font-size:10px">'+(am[l.a]?am[l.a].name:'')+'</span></td>'+
+      '<td style="font-size:11px;color:var(--txS)">'+(li===0?h(e.concept)+(e.tags?' <span style="display:inline-flex;gap:3px;margin-left:4px">'+e.tags.split(',').map(function(t){t=t.trim();return t?'<span style="background:#EFF6FF;color:#2563EB;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:500">'+h(t)+'</span>':'';}).join('')+'</span>':''):'')+'</td>'+
+      '<td style="text-align:right;font-size:12px">'+(l.d>0?'<span style="color:var(--ok)">'+fmt(l.d)+'</span>':'')+'</td>'+
+      '<td style="text-align:right;font-size:12px">'+(l.h>0?'<span style="color:var(--rd)">'+fmt(l.h)+'</span>':'')+'</td>'+
+      (li===0?'<td rowspan="'+e.lines.length+'" style="white-space:nowrap"><button class="abtn" onclick="editEntry(\''+e.id+'\')" title="Editar" style="font-size:12px">✏</button> <button class="abtn" onclick="dupEntry(\''+e.id+'\')" title="Duplicar" style="font-size:12px">⧉</button> <button class="abtn" style="color:var(--rd);font-size:12px" onclick="deleteEntry(\''+e.id+'\')" title="Eliminar">✕</button></td>':'')+
+      '</tr>';
+    }).join('');
+  }).join('')+
+  '</tbody></table></div>':'<div class="empty"><div style="font-size:32px;margin-bottom:12px">📖</div><div style="font-weight:600;margin-bottom:6px">Sin asientos en este periodo</div><div style="font-size:12px;color:var(--txM);margin-bottom:12px">Importa facturas o crea un asiento manual para empezar</div><div style="display:flex;gap:8px;justify-content:center"><button class="btn btn-p" onclick="showEntryModal()">Nuevo asiento</button><button class="btn btn-d" onclick="setView(\\\"import\\\")">Importar</button></div></div>')+'</div>';
 }
 function exportJournalExcel(){
   var all=filteredEntries().sort(function(a,b){return a.date.localeCompare(b.date);});var am={};state.accounts.forEach(function(a){am[a.code]=a;});
@@ -1126,19 +1163,88 @@ function dupEntry(id){var e=state.entries.find(function(x){return x.id===id;});i
 var entryLines=[];var editingEntry=null;var entryMode='new';
 function showEntryModal(entry,mode){
   editingEntry=entry||null;entryMode=mode||'new';
-  entryLines=entry?entry.lines.map(function(l){var a=state.accounts.find(function(x){return x.code===l.a;});return {a:l.a,aLabel:l.a+(a?' '+a.name:''),d:String(l.d||''),h:String(l.h||'')};}):[{a:'',aLabel:'',d:'',h:''},{a:'',aLabel:'',d:'',h:''}];
-  var title=mode==='edit'?'✏️ Editar asiento':mode==='dup'?'📋 Duplicar asiento':'➕ Nuevo asiento manual';
+  entryLines=entry?entry.lines.map(function(l){var a=state.accounts.find(function(x){return x.code===l.a;});return {a:l.a,aLabel:l.a+(a?' '+a.name:''),d:String(l.d||''),h:String(l.h||''),desc:'',doc:''};}):[{a:'',aLabel:'',d:'',h:'',desc:'',doc:''},{a:'',aLabel:'',d:'',h:'',desc:'',doc:''}];
   var dateVal=mode==='dup'?today():(entry?entry.date:today());
   var conceptVal=mode==='dup'?(entry?entry.concept:'')+' (copia)':(entry?entry.concept:'');
+  var tagsVal=entry&&entry.tags?entry.tags:'';
+  
+  // Entry types like Holded
+  var entryTypes=[
+    {id:'apunte',label:'Apunte'},
+    {id:'fra_emitida',label:'Factura emitida'},
+    {id:'fra_recibida',label:'Factura recibida'},
+    {id:'gasto',label:'Gasto'},
+    {id:'cobro',label:'Cobro'},
+    {id:'pago',label:'Pago'},
+    {id:'nomina',label:'Nómina'},
+    {id:'amortizacion',label:'Amortización'},
+    {id:'apertura',label:'Asiento apertura'},
+    {id:'cierre',label:'Asiento cierre'},
+    {id:'regularizacion',label:'Regularización'}
+  ];
+  var typeOpts=entryTypes.map(function(t){return '<option value="'+t.id+'">'+t.label+'</option>';}).join('');
+  
+  // Predefined entry templates
+  var predefined=[
+    {id:'',label:'— Sin plantilla —'},
+    {id:'venta21',label:'Factura venta 21%',lines:[{a:'43000000',d:'1',h:'',desc:'Cliente'},{a:'70000000',d:'',h:'0.8264',desc:'Ventas'},{a:'47700000',d:'',h:'0.1736',desc:'IVA repercutido'}]},
+    {id:'venta10',label:'Factura venta 10%',lines:[{a:'43000000',d:'1',h:'',desc:'Cliente'},{a:'70000000',d:'',h:'0.9091',desc:'Ventas'},{a:'47700000',d:'',h:'0.0909',desc:'IVA repercutido'}]},
+    {id:'compra21',label:'Compra 21%',lines:[{a:'60000000',d:'0.8264',h:'',desc:'Compras'},{a:'47200000',d:'0.1736',h:'',desc:'IVA soportado'},{a:'40000000',d:'',h:'1',desc:'Proveedor'}]},
+    {id:'compra10',label:'Compra 10%',lines:[{a:'60000000',d:'0.9091',h:'',desc:'Compras'},{a:'47200000',d:'0.0909',h:'',desc:'IVA soportado'},{a:'40000000',d:'',h:'1',desc:'Proveedor'}]},
+    {id:'nomina',label:'Nómina',lines:[{a:'64000000',d:'1',h:'',desc:'Salario bruto'},{a:'47510000',d:'',h:'0.15',desc:'IRPF'},{a:'47600000',d:'',h:'0.0647',desc:'Seg.Social trabajador'},{a:'57200000',d:'',h:'0.7853',desc:'Neto a pagar'}]},
+    {id:'cobro',label:'Cobro cliente',lines:[{a:'57200000',d:'1',h:'',desc:'Banco'},{a:'43000000',d:'',h:'1',desc:'Cliente'}]},
+    {id:'pago',label:'Pago proveedor',lines:[{a:'40000000',d:'1',h:'',desc:'Proveedor'},{a:'57200000',d:'',h:'1',desc:'Banco'}]},
+  ];
+  var predOpts=predefined.map(function(p){return '<option value="'+p.id+'">'+p.label+'</option>';}).join('');
+  
   var bg=document.createElement('div');bg.className='modal-bg';bg.id='entryModal';
-  bg.innerHTML='<div class="modal"><div class="card-h"><span>'+(mode==='edit'?'Editar asiento':mode==='dup'?'Duplicar asiento':'Nuevo asiento manual')+'</span><button class="btn btn-d" onclick="document.getElementById(\'entryModal\').remove()">✕</button></div><div class="card-b"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><div style="width:125px"><div class="lbl">Fecha</div><input type="date" class="inp" id="eDate" value="'+dateVal+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div><div style="flex:1;min-width:180px"><div class="lbl">Concepto</div><input class="inp" id="eConcept" value="'+h(conceptVal)+'"></div><div style="width:180px"><div class="lbl">Etiquetas</div><input class="inp" id="eTags" value="'+h(entry&&entry.tags?entry.tags:'')+'" placeholder="proyecto, departamento..."></div></div><div id="eLines"></div><div style="margin-top:8px"><button class="btn btn-d" onclick="addEntryLine()">+ Línea</button></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span id="eBalance"></span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="saveAsPlantilla()" title="Guardar como plantilla">Plantilla</button><button class="btn btn-p" id="eSave" onclick="saveEntry()">'+(mode==='edit'?'Guardar':'Crear asiento')+'</button></div></div></div></div>';
+  bg.innerHTML='<div class="modal" style="max-width:900px"><div class="card-h"><span>'+(mode==='edit'?'Editar asiento':mode==='dup'?'Duplicar asiento':'Nuevo asiento')+'</span><button class="btn btn-d" onclick="document.getElementById(\'entryModal\').remove()">✕</button></div><div class="card-b">'+
+  '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:end">'+
+  '<div style="width:150px"><div class="lbl">Tipo de asiento</div><select class="sel" id="eType" style="width:100%">'+typeOpts+'</select></div>'+
+  '<div style="width:180px"><div class="lbl">Asiento predefinido</div><select class="sel" id="ePredefined" style="width:100%" onchange="applyPredefinedEntry(this.value)">'+predOpts+'</select></div>'+
+  '<div style="width:125px"><div class="lbl">Fecha</div><input type="date" class="inp" id="eDate" value="'+dateVal+'"></div>'+
+  '<div style="flex:1;min-width:150px"><div class="lbl">Concepto</div><input class="inp" id="eConcept" value="'+h(conceptVal)+'"></div>'+
+  '</div>'+
+  '<div id="eLines"></div>'+
+  '<div style="margin-top:6px;margin-bottom:12px"><button class="btn btn-d" onclick="addEntryLine()" style="font-size:12px">+ Añadir línea</button></div>'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">'+
+  '<div><div class="lbl">Notas</div><textarea class="inp" id="eNotes" rows="2" style="resize:vertical;font-size:11px" placeholder="Notas internas del asiento...">'+(entry&&entry.notes?h(entry.notes):'')+'</textarea></div>'+
+  '<div><div class="lbl">Etiquetas</div><input class="inp" id="eTags" value="'+h(tagsVal)+'" placeholder="ventas, proyecto-x, oficina..." style="margin-bottom:6px"><div style="border:2px dashed var(--bd);border-radius:6px;padding:10px;text-align:center;font-size:11px;color:var(--txM);cursor:pointer;transition:border-color 0.15s" onmouseover="this.style.borderColor=\'var(--pri)\'" onmouseout="this.style.borderColor=\'var(--bd)\'">☁ Subir archivo</div></div>'+
+  '</div>'+
+  '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #F3F4F6;padding-top:12px">'+
+  '<div style="display:flex;gap:6px">'+(mode==='edit'?'<button class="btn btn-r" onclick="if(confirm(\'¿Eliminar asiento?\')){deleteEntry(\''+((entry&&entry.id)||'')+'\');document.getElementById(\'entryModal\').remove();}">Eliminar</button>':'')+'</div>'+
+  '<div style="display:flex;align-items:center;gap:12px"><span id="eBalance" style="font-size:12px"></span>'+
+  '<button class="btn btn-d" onclick="document.getElementById(\'entryModal\').remove()">Cancelar</button>'+
+  (mode==='edit'?'<button class="btn btn-d" onclick="dupEntry(\''+((entry&&entry.id)||'')+'\');document.getElementById(\'entryModal\').remove();">Duplicar</button>':'')+
+  '<button class="btn btn-d" onclick="saveAsPlantilla()">Guardar plantilla</button>'+
+  '<button class="btn btn-p" id="eSave" onclick="saveEntry()" style="padding:8px 20px">'+(mode==='edit'?'Guardar':'Crear asiento')+'</button>'+
+  '</div></div></div></div>';
   document.body.appendChild(bg);renderEntryLines();
+}
+
+function applyPredefinedEntry(id){
+  var predefined=[
+    {id:'venta21',lines:[{a:'43000000',d:'',h:'',desc:'Cliente'},{a:'70000000',d:'',h:'',desc:'Ventas'},{a:'47700000',d:'',h:'',desc:'IVA repercutido 21%'}]},
+    {id:'venta10',lines:[{a:'43000000',d:'',h:'',desc:'Cliente'},{a:'70000000',d:'',h:'',desc:'Ventas'},{a:'47700000',d:'',h:'',desc:'IVA repercutido 10%'}]},
+    {id:'compra21',lines:[{a:'60000000',d:'',h:'',desc:'Compras'},{a:'47200000',d:'',h:'',desc:'IVA soportado 21%'},{a:'40000000',d:'',h:'',desc:'Proveedor'}]},
+    {id:'compra10',lines:[{a:'60000000',d:'',h:'',desc:'Compras'},{a:'47200000',d:'',h:'',desc:'IVA soportado 10%'},{a:'40000000',d:'',h:'',desc:'Proveedor'}]},
+    {id:'nomina',lines:[{a:'64000000',d:'',h:'',desc:'Salario bruto'},{a:'47510000',d:'',h:'',desc:'IRPF'},{a:'47600000',d:'',h:'',desc:'Seg.Social'},{a:'57200000',d:'',h:'',desc:'Neto'}]},
+    {id:'cobro',lines:[{a:'57200000',d:'',h:'',desc:'Banco'},{a:'43000000',d:'',h:'',desc:'Cliente'}]},
+    {id:'pago',lines:[{a:'40000000',d:'',h:'',desc:'Proveedor'},{a:'57200000',d:'',h:'',desc:'Banco'}]},
+  ];
+  var tmpl=predefined.find(function(p){return p.id===id;});
+  if(!tmpl)return;
+  entryLines=tmpl.lines.map(function(l){
+    var a=state.accounts.find(function(x){return x.code===l.a;});
+    return {a:l.a,aLabel:l.a+(a?' '+a.name:''),d:l.d||'',h:l.h||'',desc:l.desc||'',doc:''};
+  });
+  renderEntryLines();
 }
 
 function renderEntryLines(){
   var el=$('eLines');if(!el)return;
-  el.innerHTML='<table><thead><tr><th style="width:50%">Cuenta</th><th style="width:120px">Debe</th><th style="width:120px">Haber</th><th style="width:30px"></th></tr></thead><tbody>'+
-  entryLines.map(function(l,i){return '<tr><td>'+acSearchHTML('eAc'+i,l.aLabel,'onAcSelect')+'</td><td><input class="inp" style="text-align:right" id="eD'+i+'" value="'+(l.d?fmtInput(l.d):'')+'" oninput="fmtAmtField(this);onDebeInput('+i+')" onfocus="selectAll(this)"></td><td><input class="inp" style="text-align:right" id="eH'+i+'" value="'+(l.h?fmtInput(l.h):'')+'" oninput="fmtAmtField(this);onHaberInput('+i+')" onfocus="selectAll(this)"></td><td>'+(entryLines.length>2?'<button class="abtn" onclick="entryLines.splice('+i+',1);renderEntryLines()">✕</button>':'')+'</td></tr>';}).join('')+
+  el.innerHTML='<table style="font-size:12px"><thead><tr><th style="width:35%">Cuenta</th><th style="width:20%">Descripción</th><th style="width:15%">Documento</th><th style="width:12%;text-align:right">Debe</th><th style="width:12%;text-align:right">Haber</th><th style="width:30px"></th></tr></thead><tbody>'+
+  entryLines.map(function(l,i){return '<tr><td>'+acSearchHTML('eAc'+i,l.aLabel,'onAcSelect')+'</td><td><input class="inp" style="font-size:11px" id="eDesc'+i+'" value="'+h(l.desc||'')+'" placeholder="Descripción" oninput="entryLines['+i+'].desc=this.value"></td><td><input class="inp" style="font-size:11px" id="eDoc'+i+'" value="'+h(l.doc||'')+'" placeholder="Nº doc" oninput="entryLines['+i+'].doc=this.value"></td><td><input class="inp" style="text-align:right" id="eD'+i+'" value="'+(l.d?fmtInput(l.d):'')+'" oninput="fmtAmtField(this);onDebeInput('+i+')" onfocus="selectAll(this)"></td><td><input class="inp" style="text-align:right" id="eH'+i+'" value="'+(l.h?fmtInput(l.h):'')+'" oninput="fmtAmtField(this);onHaberInput('+i+')" onfocus="selectAll(this)"></td><td><button class="abtn" style="color:var(--rd);font-size:14px" onclick="entryLines.splice('+i+',1);renderEntryLines()" title="Eliminar línea">✕</button></td></tr>';}).join('')+
   '</tbody></table>';
   updateBalance();
 }
@@ -1168,7 +1274,7 @@ function onHaberInput(idx){
   updateBalance();
 }
 
-function addEntryLine(){entryLines.push({a:'',aLabel:'',d:'',h:''});renderEntryLines();}
+function addEntryLine(){entryLines.push({a:'',aLabel:'',d:'',h:'',desc:'',doc:''});renderEntryLines();}
 function updateBalance(){
   // Read current values from inputs
   for(var i=0;i<entryLines.length;i++){
@@ -1179,7 +1285,7 @@ function updateBalance(){
   var tD=entryLines.reduce(function(s,l){return s+(parseFloat(l.d)||0);},0);
   var tH=entryLines.reduce(function(s,l){return s+(parseFloat(l.h)||0);},0);
   var ok=Math.abs(tD-tH)<0.01&&tD>0;
-  var eb=$('eBalance');if(eb)eb.innerHTML='<span class="badge '+(ok?'badge-g':'badge-r')+'">'+(ok?'✓ Cuadrado':'Descuadre: '+fmt(Math.abs(tD-tH)))+'</span>';
+  var eb=$('eBalance');if(eb)eb.innerHTML='<span style="font-size:11px;color:var(--txS)">Debe: '+fmt(tD)+' | Haber: '+fmt(tH)+'</span> <span class="badge '+(ok?'badge-g':'badge-r')+'" style="margin-left:6px">'+(ok?'✓ Cuadrado':'Descuadre: '+fmt(Math.abs(tD-tH)))+'</span>';
   var es=$('eSave');if(es)es.disabled=!ok;
 }
 // ═══ BORRADORES ═══
@@ -1237,7 +1343,7 @@ function showAssistant(){
   '<div id="aFileInfo"></div>'+
   '<div class="lbl">Describe el gasto (texto o voz)</div><div style="display:flex;gap:6px;margin-bottom:10px"><input class="inp" id="aDesc" placeholder="Ej: comida restaurante 35 euros pagado Pepe" style="flex:1" oninput="extractFromDesc()" onchange="extractFromDesc()" onpaste="setTimeout(extractFromDesc,100)"><button class="btn btn-d" id="aVoiceBtn" onclick="toggleVoice()" title="Hablar">🎤</button></div>'+
   '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><div style="width:100px"><div class="lbl">Importe €</div><input class="inp" id="aAmt" style="text-align:right" placeholder="0"></div><div style="width:90px"><div class="lbl">IVA</div><select class="sel" id="aIva" style="width:100%">'+IVA.map(function(r){return '<option value="'+r.id+'">'+r.l+'</option>';}).join('')+'</select></div><div style="width:120px"><div class="lbl">Fecha</div><input type="date" class="inp" id="aDate" value="'+today()+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div></div>'+
-  '<div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:6px;padding:8px 12px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">👤</span><div style="flex:1"><div style="font-size:11px;font-weight:700;color:#E65100;margin-bottom:3px">¿Quién ha pagado?</div><select class="sel" id="aPaidBy" style="width:100%;font-size:13px;padding:8px 10px;font-weight:600"><option value="">💳 Banco (cuenta empresa)</option>'+SOCIOS.map(function(s){return '<option value="'+s.a+'">👤 '+s.n+'</option>';}).join('')+'</select></div></div></div>'+
+  '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div style="flex:1"><div style="font-size:11px;font-weight:600;color:#92400E;margin-bottom:4px">Forma de pago</div><select class="sel" id="aPaidBy" style="width:100%;font-size:12px;padding:8px 10px"><option value="">Banco (cuenta empresa)</option>'+SOCIOS.map(function(s){return '<option value="'+s.a+'">'+s.n+' (socio)</option>';}).join('')+'</select></div></div></div>'+
   '<button class="btn btn-p" style="width:100%;justify-content:center;padding:10px;font-size:13px" onclick="proposeEntry()">Proponer asiento</button>'+
   '<div id="aProposal"></div></div></div>';
   document.body.appendChild(bg);
@@ -3181,7 +3287,7 @@ function renderModelo303(c){
   '<div style="background:'+(totalRep-totalSop>=0?'#FEF2F2':'#F0FDF4')+';border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:'+(totalRep-totalSop>=0?'#991B1B':'#166534')+';margin-bottom:4px">Resultado — '+(totalRep-totalSop>=0?'a pagar':'a devolver')+'</div><div style="font-size:20px;font-weight:700;color:'+(totalRep-totalSop>=0?'#DC2626':'#16A34A')+'">'+fmt(Math.abs(totalRep-totalSop))+'€</div></div>'+
   '</div>'+verificacion+
   '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Base ventas</th><th style="text-align:right">IVA repercutido</th><th style="text-align:right">Base compras</th><th style="text-align:right">IVA soportado</th><th style="text-align:right">Resultado</th><th>Acción</th></tr></thead><tbody>'+
-  datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+fmt(d.baseRep)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.rep)+'€</td><td style="text-align:right">'+fmt(d.baseSop)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(d.sop)+'€</td><td style="text-align:right;font-weight:700;color:'+(d.resultado>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(d.resultado))+'€</td><td>'+(d.resultado>=0?'<span class="badge badge-r">A pagar</span>':'<span class="badge badge-g">A devolver</span>')+'</td></tr>';}).join('')+
+  datos.map(function(d,i){var currentQ=Math.floor(new Date().getMonth()/3);var isCurrentQ=i===currentQ&&state.ejercicio===new Date().getFullYear();return '<tr style="'+(isCurrentQ?'background:#F0FDF4;border-left:3px solid var(--ok)':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+fmt(d.baseRep)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.rep)+'€</td><td style="text-align:right">'+fmt(d.baseSop)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(d.sop)+'€</td><td style="text-align:right;font-weight:700;color:'+(d.resultado>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(d.resultado))+'€</td><td>'+(d.resultado>=0?'<span class="badge badge-r">A pagar</span>':'<span class="badge badge-g">A devolver</span>')+'</td></tr>';}).join('')+
   '<tr class="total"><td>ANUAL</td><td style="text-align:right">'+fmt(totalBaseRep)+'€</td><td style="text-align:right">'+fmt(totalRep)+'€</td><td style="text-align:right">'+fmt(totalBaseSop)+'€</td><td style="text-align:right">'+fmt(totalSop)+'€</td><td style="text-align:right;font-size:14px">'+fmt(Math.abs(totalRep-totalSop))+'€</td><td></td></tr>'+rateDetail+'</tbody></table></div>';
 }
 
@@ -3743,7 +3849,7 @@ async function sendUserFeedback(){
 
 async function renderMiGrupo(c){
   if(!state.user||(state.user.role!=='superadmin'&&state.user.role!=='admin'&&state.user.role!=='group_admin')){
-    c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">⛔ Acceso restringido</div></div>';return;
+    c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">Acceso restringido</div></div>';return;
   }
   c.innerHTML='<div style="text-align:center;padding:40px;color:var(--txM)">Cargando...</div>';
   try{
@@ -3751,31 +3857,30 @@ async function renderMiGrupo(c){
     var users=await api('/api/group-users');
     var groupName=state.user.group_id?state.user.group_id.replace('g_',''):'Mi Grupo';
     
-    c.innerHTML='<div class="card"><div class="card-h"><span>🏢 Mi Grupo: '+h(groupName)+'</span></div><div class="card-b">'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
+    c.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">'+
+    '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Empresas</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+companies.length+'</div></div>'+
+    '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Usuarios</div><div style="font-size:22px;font-weight:700;color:var(--vi)">'+users.length+'</div></div></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
     
-    // Empresas del grupo
-    '<div class="card"><div class="card-h">🏢 Empresas — '+companies.length+
-    '<button class="btn btn-p" style="margin-left:auto;font-size:10px" onclick="newEmpresaGrupo()">+ Nueva empresa</button></div>'+
-    '<table><thead><tr><th>Empresa</th><th>CIF</th><th>Estado</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
+    '<div class="card"><div class="card-h"><span>Empresas</span>'+
+    '<button class="btn btn-p" onclick="newEmpresaGrupo()">Nueva empresa</button></div>'+
+    (companies.length?'<table><thead><tr><th>Empresa</th><th>CIF</th><th>Estado</th><th style="width:70px">Acc.</th></tr></thead><tbody>'+
     companies.map(function(em,i){
-      return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(em.name)+'</td><td>'+h(em.cif||'—')+'</td><td><span class="badge badge-g">Activa</span></td><td><button class="abtn" onclick="editEmpresaGrupo(\''+h(em.id)+'\',\''+h(em.name)+'\',\''+h(em.cif||'')+'\')">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteEmpresaGrupo(\''+h(em.id)+'\',\''+h(em.name)+'\')">🗑</button></td></tr>';
+      return '<tr><td style="font-weight:600">'+h(em.name)+'</td><td style="font-size:11px;color:var(--txS)">'+h(em.cif||'—')+'</td><td><span class="badge badge-g">Activa</span></td><td><button class="abtn" onclick="editEmpresaGrupo(\''+h(em.id)+'\',\''+h(em.name)+'\',\''+h(em.cif||'')+'\')">✏</button> <button class="abtn" style="color:var(--rd)" onclick="deleteEmpresaGrupo(\''+h(em.id)+'\',\''+h(em.name)+'\')">✕</button></td></tr>';
     }).join('')+
-    '</tbody></table></div>'+
+    '</tbody></table>':'<div class="empty" style="padding:20px">Sin empresas</div>')+'</div>'+
     
-    // Usuarios del grupo
-    '<div class="card"><div class="card-h">👥 Usuarios — '+users.length+
-    '<button class="btn btn-p" style="margin-left:auto;font-size:10px" onclick="newUsuarioGrupo()">+ Nuevo usuario</button></div>'+
-    '<table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
+    '<div class="card"><div class="card-h"><span>Usuarios</span>'+
+    '<button class="btn btn-p" onclick="newUsuarioGrupo()">Nuevo usuario</button></div>'+
+    (users.length?'<table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th style="width:70px">Acc.</th></tr></thead><tbody>'+
     users.map(function(u,i){
       var rolLabel=u.role==='superadmin'?'Superadmin':u.role==='group_admin'?'Admin Grupo':'Usuario';
       var rolClass=u.role==='superadmin'?'badge-r':u.role==='group_admin'?'badge-b':'badge-g';
-      return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(u.username)+'</td><td>'+h(u.name)+'</td><td><span class="badge '+rolClass+'">'+rolLabel+'</span></td>'+
-      '<td>'+(u.role!=='superadmin'?'<button class="abtn" onclick="editUsuarioGrupo(\''+u.id+'\',\''+h(u.username)+'\',\''+h(u.name)+'\',\''+u.role+'\')">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteUsuarioGrupo(\''+u.id+'\',\''+h(u.name)+'\')">🗑</button>':'')+'</td></tr>';
+      return '<tr><td style="font-weight:600">'+h(u.username)+'</td><td>'+h(u.name)+'</td><td><span class="badge '+rolClass+'">'+rolLabel+'</span></td>'+
+      '<td>'+(u.role!=='superadmin'?'<button class="abtn" onclick="editUsuarioGrupo(\''+u.id+'\',\''+h(u.username)+'\',\''+h(u.name)+'\',\''+u.role+'\')">✏</button> <button class="abtn" style="color:var(--rd)" onclick="deleteUsuarioGrupo(\''+u.id+'\',\''+h(u.name)+'\')">✕</button>':'')+'</td></tr>';
     }).join('')+
-    '</tbody></table></div>'+
-    
-    '</div></div></div>';
+    '</tbody></table>':'<div class="empty" style="padding:20px">Sin usuarios</div>')+'</div>'+
+    '</div>';
   }catch(e){
     c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--rd)">Error: '+e.message+'</div></div>';
   }
@@ -3789,7 +3894,7 @@ function newEmpresaGrupo(){
     var modal=document.createElement('div');
     modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;overflow-y:auto';
     modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
-      '<h3 style="margin:0 0 16px">\ud83c\udfe2 Nueva empresa</h3>'+
+      '<h3 style="margin:0 0 16px">Nueva empresa</h3>'+
       '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre de la empresa *</label><input id="neNombre" class="inp" style="width:100%" placeholder="Ej: Mi Empresa S.L."></div>'+
       '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">CIF</label><input id="neCif" class="inp" style="width:100%" placeholder="Ej: B12345678"></div>'+
       '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Direcci\u00f3n</label><input id="neDir" class="inp" style="width:100%" placeholder="Ej: C/ Mayor 1, Valencia"></div>'+
@@ -4055,7 +4160,7 @@ function initEmpresas(){
 }
 function newEmpresa(){
   var bg=document.createElement('div');bg.className='modal-bg';bg.id='empModal';
-  var h2='<div class="modal" style="max-width:500px"><div class="card-h"><span>🏢 Nueva empresa</span><button class="btn btn-d" onclick="$(\'empModal\').remove()">✕</button></div><div class="card-b">';
+  var h2='<div class="modal" style="max-width:500px"><div class="card-h"><span>Nueva empresa</span><button class="btn btn-d" onclick="$(\'empModal\').remove()">✕</button></div><div class="card-b">';
   h2+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
   h2+='<div style="grid-column:span 2"><div class="lbl">Nombre empresa *</div><input class="inp" id="empName"></div>';
   h2+='<div><div class="lbl">CIF/NIF</div><input class="inp" id="empCif"></div>';
