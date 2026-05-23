@@ -138,7 +138,7 @@ var uid=function(){return Date.now()+'_'+Math.random().toString(36).slice(2,7);}
 var GROUPS={1:'Financiación básica',2:'Activo no corriente',3:'Existencias',4:'Acreedores y deudores',5:'Cuentas financieras',6:'Compras y gastos',7:'Ventas e ingresos'};
 var SOCIOS=[{id:'s1',n:'Pepe',a:'55100001',pct:20},{id:'s2',n:'Fernanda',a:'55100002',pct:20},{id:'s3',n:'Sergio',a:'55100003',pct:20},{id:'s4',n:'Santi',a:'55100004',pct:20},{id:'s5',n:'Salva',a:'55100005',pct:20}];
 var IVA=[{id:'general',l:'21%',r:0.21},{id:'reducido',l:'10%',r:0.10},{id:'super',l:'4%',r:0.04},{id:'exento',l:'Exento',r:0},{id:'nodeducible',l:'No deducible',r:0},{id:'na',l:'N/A',r:null}];
-var h=function(s){return(s||'').toString().replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+var h=function(s){var str=(s||'').toString();return str.replace(/[<>]/g,function(c){return c==='<'?'&lt;':'&gt;';});};
 var MONTHS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
 async function api(path,opts){
@@ -174,15 +174,6 @@ function exportExcel(data,headers,filename){
   var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Datos');
   XLSX.writeFile(wb,filename+'.xlsx');toast('Excel exportado');
 }
-function exportPDF(title,headers,data){
-  var w=window.open('','_blank');
-  w.document.write('<!DOCTYPE html><html><head><title>'+title+'</title><style>body{font-family:Arial,sans-serif;font-size:11px;padding:20px}h1{font-size:16px;color:#00854D;margin-bottom:4px}h2{font-size:11px;color:#666;margin-bottom:16px;font-weight:normal}table{width:100%;border-collapse:collapse}th{background:#F0F2F5;padding:6px 8px;border:1px solid #DEE2E8;font-size:9px;text-transform:uppercase;text-align:left}td{padding:5px 8px;border:1px solid #EDF0F4;font-size:10px}.r{text-align:right}.b{font-weight:700}.tot{background:#E8F5EE;font-weight:700}</style></head><body>');
-  w.document.write('<h1>'+title+'</h1><h2>'+state.company.name+' — Ejercicio '+state.ejercicio+' — '+fmtD(state.dateFrom)+' a '+fmtD(state.dateTo)+'</h2>');
-  w.document.write('<table><thead><tr>'+headers.map(function(x){return '<th>'+x+'</th>';}).join('')+'</tr></thead><tbody>');
-  data.forEach(function(r){w.document.write('<tr'+(r._cls?' class="'+r._cls+'"':'')+'>');;r.cells.forEach(function(c){w.document.write('<td'+(c.cls?' class="'+c.cls+'"':'')+'>'+c.v+'</td>');});w.document.write('</tr>');});
-  w.document.write('</tbody></table></body></html>');w.document.close();setTimeout(function(){w.print();},500);
-}
-
 // Account search component
 function acSearchHTML(id,value,onselect){
   return '<div class="ac-wrap"><input class="inp" id="'+id+'" value="'+h(value||'')+'" placeholder="Buscar cuenta..." autocomplete="off" maxlength="50" oninput="limitAccountCode(this);acFilter(\''+id+'\',\''+onselect+'\')" onfocus="acFilter(\''+id+'\',\''+onselect+'\')" onblur="setTimeout(function(){var el=$(\''+id+'_list\');if(el)el.style.display=\'none\';},200)"><div id="'+id+'_list" class="ac-list" style="display:none"></div></div>';
@@ -523,7 +514,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:9px;color:var(--txM)">v7.9.0</span>'+
+  '<span style="font-size:9px;color:var(--txM)">v7.9.1</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -1052,6 +1043,19 @@ function exportExtractoCuenta(code){
   });});
   exportExcel(rows,['Fecha','Concepto','Debe','Haber'],'extracto_'+code);
 }
+function exportPDF(title){
+  var el=$('content');if(!el)return;
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>'+title+'</title><style>body{font-family:sans-serif;font-size:11px;margin:20px}table{width:100%;border-collapse:collapse}th,td{padding:5px 8px;border:1px solid #ddd;text-align:left}th{background:#f5f5f5;font-weight:600}.total{font-weight:700;background:#f0f0f0}h1{font-size:16px;margin-bottom:10px}h2{font-size:13px;margin:15px 0 5px}@media print{button{display:none}}</style></head><body>');
+  w.document.write('<h1>'+title+'</h1>');
+  w.document.write('<p style="color:#666;font-size:10px">Empresa: '+(state.company?state.company.name:'')+ ' | Periodo: '+state.dateFrom+' a '+state.dateTo+' | Generado: '+new Date().toLocaleString('es-ES')+'</p>');
+  var tables=el.querySelectorAll('table');
+  tables.forEach(function(t){w.document.write(t.outerHTML);});
+  var stats=el.querySelectorAll('.stat,.stat-v');
+  if(!tables.length){w.document.write(el.innerHTML);}
+  w.document.write('<scr'+'ipt>setTimeout(function(){window.print();},500)<\/scr'+'ipt></body></html>');
+  w.document.close();
+}
 
 // ═══ SISTEMA DE FEEDBACK ═══
 function checkUnreadFeedback(){
@@ -1399,9 +1403,7 @@ function exportJournalExcel(){
   exportExcel(rows,['Nº','Fecha','Cuenta','Nombre','Concepto','Debe','Haber'],'diario_'+state.ejercicio);
 }
 function exportJournalPDF(){
-  var all=filteredEntries().sort(function(a,b){return a.date.localeCompare(b.date);});var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  var rows=[];all.forEach(function(e,i){e.lines.forEach(function(l,li){rows.push({cells:[{v:li===0?i+1:''},{v:li===0?fmtD(e.date):''},{v:l.a},{v:li===0?h(e.concept):''},{v:l.d>0?fmt(l.d):'',cls:'r'},{v:l.h>0?fmt(l.h):'',cls:'r'}]});});});
-  exportPDF('Libro Diario',['Nº','Fecha','Cuenta','Concepto','Debe','Haber'],rows);
+  exportPDF("Libro Diario");
 }
 async function deleteEntry(id){var entry=state.entries.find(function(e){return e.id===id;});if(entry&&isPeriodClosed(entry.date)){toast('⛔ Periodo cerrado — no se puede borrar','error');return;}if(!confirm('¿Eliminar asiento?'))return;await api('/api/entries/'+state.company.id+'/'+id,{method:'DELETE'});await loadData();checkIntegrity();auditLog('borrar_asiento',entry?entry.concept:'');toast('Asiento eliminado');render();}
 function editEntry(id){var e=state.entries.find(function(x){return x.id===id;});if(e)showEntryModal(e,'edit');}
@@ -1856,7 +1858,7 @@ function renderLedger(c){
     return '<option value="'+code+'"'+(window._ldgCode===code?' selected':'')+'>'+code+' — '+name+' ('+movs+' mov, saldo: '+fmt(saldo)+'€)</option>';
   }).join('');
   
-  c.innerHTML=dateFilterHTML()+'<div class="card"><div class="card-h"><span>Libro mayor — '+used.length+' cuentas</span><button class="btn btn-d" onclick="exportLedgerExcel()">↓ Excel</button></div>'+
+  c.innerHTML=dateFilterHTML()+'<div class="card"><div class="card-h"><span>Libro mayor — '+used.length+' cuentas</span><button class="btn btn-d" onclick="exportLedgerExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Libro Mayor")">↓ PDF</button></div>'+
   '<div style="padding:10px 16px;background:#FAFBFC;border-bottom:1px solid #F3F4F6;display:flex;gap:10px;align-items:center">'+
   '<select class="sel" style="flex:1;font-size:12px;padding:8px 12px" id="ldgAccountSelect" onchange="window._ldgCode=this.value;renderLedgerDetail();">'+
   '<option value="">— Selecciona una cuenta —</option>'+acOptions+'</select>'+
@@ -1958,7 +1960,7 @@ function renderTrial(c){
   }
   var t=bals.reduce(function(a,b){return {sd:a.sd+b.sd,sh:a.sh+b.sh,sdr:a.sdr+b.sdr,scr:a.scr+b.scr};},{sd:0,sh:0,sdr:0,scr:0});
   var nivelTxt={1:'Grupos',2:'Subgrupos',3:'Cuentas',4:'Subcuentas',8:'Detalle'}[dig]||'';
-  c.innerHTML=dateFilterHTML()+trialAcctFilterHTML()+'<div class="card"><div class="card-h"><span>Sumas y saldos — '+bals.length+' '+nivelTxt.toLowerCase()+'</span><div style="display:flex;gap:8px;align-items:center"><span class="badge '+(Math.abs(t.sdr-t.scr)<1?'badge-g':'badge-r')+'">'+(Math.abs(t.sdr-t.scr)<1?'✓ Cuadrado':'✗ Descuadre')+'</span><button class="btn btn-d" onclick="exportTrialExcel()">↓ Excel</button></div></div>'+
+  c.innerHTML=dateFilterHTML()+trialAcctFilterHTML()+'<div class="card"><div class="card-h"><span>Sumas y saldos — '+bals.length+' '+nivelTxt.toLowerCase()+'</span><div style="display:flex;gap:8px;align-items:center"><span class="badge '+(Math.abs(t.sdr-t.scr)<1?'badge-g':'badge-r')+'">'+(Math.abs(t.sdr-t.scr)<1?'✓ Cuadrado':'✗ Descuadre')+'</span><button class="btn btn-d" onclick="exportTrialExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Sumas y Saldos")">↓ PDF</button></div></div>'+
   (bals.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody><tr class="total"><td colspan="2">TOTALES ('+bals.length+' '+nivelTxt.toLowerCase()+')</td><td style="text-align:right">'+fmt(t.sd)+'</td><td style="text-align:right">'+fmt(t.sh)+'</td><td style="text-align:right">'+fmt(t.sdr)+'</td><td style="text-align:right">'+fmt(t.scr)+'</td></tr></tbody></table><div class="scr"><table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Σ Debe</th><th style="text-align:right">Σ Haber</th><th style="text-align:right">Sdo.D</th><th style="text-align:right">Sdo.A</th></tr></thead><tbody>'+
   bals.map(function(b,i){return '<tr class="'+(i%2?'alt':'')+'"><td >'+acctLink(b.code,'')+'</td><td>'+h(b.name)+'</td><td style="text-align:right">'+fmt(b.sd)+'</td><td style="text-align:right">'+fmt(b.sh)+'</td><td style="text-align:right;font-weight:600">'+(b.sdr>0?fmt(b.sdr):'—')+'</td><td style="text-align:right;font-weight:600">'+(b.scr>0?fmt(b.scr):'—')+'</td></tr>';}).join('')+
   '</tbody></table></div>':'<div class="empty">Sin datos</div>')+'</div>';
@@ -2034,7 +2036,7 @@ function renderPnL(c){
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Cifra de negocios</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(cifNegocios)+'€</div>'+varPct(cifNegocios,cifNegPrev)+'</div>'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total gastos</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(aprovision+gtosPersonal+otrosGtosExpl)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Resultado del ejercicio</div><div style="font-size:22px;font-weight:700;color:'+(resEjercicio>=0?'var(--ok)':'var(--rd)')+'">'+fmt(resEjercicio)+'€</div>'+varPct(resEjercicio,resEjPrev)+'</div></div>'+
-  '<div class="card"><div class="card-h"><span>Pérdidas y Ganancias — PGC 2008</span><button class="btn btn-d" onclick="exportPnLExcel()">↓ Excel</button></div><div class="scr"><table><thead><tr><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Importe €</th></tr></thead><tbody>'+
+  '<div class="card"><div class="card-h"><span>Pérdidas y Ganancias — PGC 2008</span><button class="btn btn-d" onclick="exportPnLExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Pérdidas y Ganancias")">↓ PDF</button></div><div class="scr"><table><thead><tr><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Importe €</th></tr></thead><tbody>'+
   '<tr><td colspan="3" style="font-weight:700;background:#E8F8ED;color:var(--ok)">1. Importe neto cifra de negocios</td></tr>'+
   sectHTML('',detPfx(['700','701','702','703','704','705','706','708','709'],true),'var(--ok)')+
   lineHTML('Total cifra negocios',cifNegocios,false,'var(--ok)')+
@@ -2157,7 +2159,7 @@ function renderBalance(c){
   '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total Activo</div><div style="font-size:20px;font-weight:700;color:var(--bl)">'+fmt(tActivo)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total Pasivo</div><div style="font-size:20px;font-weight:700;color:var(--vi)">'+fmt(tPasivo)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Estado</div><div style="font-size:20px;font-weight:700;color:'+(cuadre?'var(--ok)':'var(--rd)')+'">'+(cuadre?'Cuadrado':'Descuadre '+fmt(Math.abs(tActivo-tPasivo))+'€')+'</div></div></div>'+
-  '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--bl)"><span>Activo</span><button class="btn btn-d" style="font-size:10px" onclick="exportBalanceExcel()">↓ Excel</button></div><table><tbody>'+
+  '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--bl)"><span>Activo</span><button class="btn btn-d" style="font-size:10px" onclick="exportBalanceExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Balance de Situación")">↓ PDF</button></div><table><tbody>'+
   masaH('A) Activo no corriente','b')+
   (aInmIntang.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">I. Inmovilizado intangible</td></tr>'+sectB(aInmIntang,true):'')+
   (aInmMat.length||aAmort.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">II. Inmovilizado material</td></tr>'+sectB(aInmMat,true)+sectB(aAmort,true):'')+
@@ -2202,7 +2204,7 @@ function exportPartnersExcel(){
 // ═══ ACCOUNTS with edit/delete ═══
 function renderAccounts(c){
   var grouped={};state.accounts.forEach(function(a){if(!grouped[a.g])grouped[a.g]=[];grouped[a.g].push(a);});
-  c.innerHTML='<div class="card"><div class="card-h"><span>Plan de cuentas — '+state.accounts.length+'</span><div style="display:flex;gap:6px"><div style="position:relative;display:inline-block"><button class="btn btn-d" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">⋮</button><div style="display:none;position:absolute;right:0;top:100%;background:#fff;border:1px solid var(--bd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:20;min-width:180px;padding:4px 0"><div style="padding:8px 14px;font-size:11px;cursor:pointer" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'#fff\'" onclick="setView(\'import\');this.parentElement.style.display=\'none\'">Importar asientos</div><div style="padding:8px 14px;font-size:11px;cursor:pointer" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'#fff\'" onclick="reloadPGC();this.parentElement.style.display=\'none\'">Recargar PGC</div><div style="padding:8px 14px;font-size:11px;cursor:pointer" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'#fff\'" onclick="setView(\'rules\');this.parentElement.style.display=\'none\'">Reglas contabilización</div></div></div><button class="btn btn-d" onclick="exportAccountsExcel()">↓ Excel</button><button class="btn btn-p" onclick="toggleAddAccount()">Nueva cuenta <span style="background:rgba(255,255,255,0.25);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:3px">N</span></button></div></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Plan de cuentas — '+state.accounts.length+'</span><div style="display:flex;gap:6px"><div style="position:relative;display:inline-block"><button class="btn btn-d" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">⋮</button><div style="display:none;position:absolute;right:0;top:100%;background:#fff;border:1px solid var(--bd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:20;min-width:180px;padding:4px 0"><div style="padding:8px 14px;font-size:11px;cursor:pointer" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'#fff\'" onclick="setView(\'import\');this.parentElement.style.display=\'none\'">Importar asientos</div><div style="padding:8px 14px;font-size:11px;cursor:pointer" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'#fff\'" onclick="reloadPGC();this.parentElement.style.display=\'none\'">Recargar PGC</div><div style="padding:8px 14px;font-size:11px;cursor:pointer" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'#fff\'" onclick="setView(\'rules\');this.parentElement.style.display=\'none\'">Reglas contabilización</div></div></div><button class="btn btn-d" onclick="exportAccountsExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Plan de Cuentas")">↓ PDF</button><button class="btn btn-p" onclick="toggleAddAccount()">Nueva cuenta <span style="background:rgba(255,255,255,0.25);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:3px">N</span></button></div></div>'+
   '<div style="padding:10px 16px;border-bottom:1px solid #F3F4F6;display:flex;gap:8px;align-items:center"><input class="inp" style="max-width:280px;font-size:12px" id="acSearch" placeholder="Buscar cuenta..." oninput="filterAccounts(this.value)"></div>'+
   '<div id="addAccountForm" style="display:none;padding:12px 16px;border-bottom:1px solid #F3F4F6;background:#FAFBFC;display:flex;gap:8px;align-items:end;flex-wrap:wrap"><div><div class="lbl">Código</div><input class="inp" style="width:100px;font-family:monospace" id="acCode" maxlength="8" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')" placeholder="43000001"></div><div style="flex:1;min-width:120px"><div class="lbl">Nombre</div><input class="inp" id="acName"></div><div><div class="lbl">Tipo</div><select class="sel" id="acType"><option value="A">Activo</option><option value="P">Pasivo</option><option value="G">Gasto</option><option value="I">Ingreso</option></select></div><button class="btn btn-p" onclick="addAccount()">Añadir</button><button class="btn btn-d" onclick="toggleAddAccount()">Cancelar</button></div></div>'+
   '<div id="accountsList">'+Object.entries(grouped).sort(function(a,b){return a[0]-b[0];}).map(function(x){var g=x[0],accs=x[1];return '<div class="card" style="margin:0;border:none;border-bottom:1px solid #F3F4F6;border-radius:0;box-shadow:none"><div class="card-h" style="background:#FAFBFC;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'"><span>G'+g+' '+(GROUPS[g]||'')+'</span><span class="badge badge-b">'+accs.length+'</span></div><div><table><tbody>'+accs.map(function(a,i){return '<tr class="acct-row '+(i%2?'alt':'')+'" data-search="'+a.code+' '+a.name.toLowerCase()+'"><td style="width:90px">'+acctLink(a.code,'')+'</td><td style="font-size:12px">'+h(a.name)+'</td><td style="width:50px"><span class="badge '+(a.t==='A'?'badge-b':a.t==='P'?'badge-a':a.t==='G'?'badge-r':'badge-g')+'">'+a.t+'</span></td><td style="width:50px;white-space:nowrap"><button class="abtn" onclick="editAccount(\''+a.code+'\',\''+h(a.name)+'\',\''+a.t+'\')" title="Editar">✏️</button><button class="abtn" style="color:var(--rd)" onclick="deleteAccount(\''+a.code+'\')" title="Borrar">✕</button></td></tr>';}).join('')+'</tbody></table></div></div>';}).join('')+'</div>';
@@ -3366,7 +3368,7 @@ function renderPosicion(c){
     var curMonth=new Date().getMonth();
     var cumSaldo=0;
     var mImpuestos=mIVA.map(function(v,i){return v+mIRPF[i]+mSS[i];});
-    return '<div class="card" style="margin-bottom:16px"><div class="card-h"><span>Cashflow mensual</span><button class="btn btn-d" onclick="exportTesoreriaExcel()">↓ Excel</button></div>'+
+    return '<div class="card" style="margin-bottom:16px"><div class="card-h"><span>Cashflow mensual</span><button class="btn btn-d" onclick="exportTesoreriaExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Tesorería")">↓ PDF</button></div>'+
     '<div style="overflow-x:auto"><table><thead><tr><th style="width:140px"></th>'+MONTHS.map(function(m,i){return '<th style="text-align:right;font-size:10px;'+(i===curMonth?'border-bottom:3px solid var(--bl);color:var(--bl);font-weight:700':'')+'">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:700;font-size:10px">Total</th></tr></thead><tbody>'+
     '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px"></span>Entradas</td>'+mEntradas.map(function(v,i){return '<td style="text-align:right;color:var(--ok);font-size:11px;'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700;color:var(--ok)">'+fmt(mEntradas.reduce(function(a,b){return a+b;},0))+'</td></tr>'+
     '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rd);margin-right:6px"></span>Salidas</td>'+mSalidas.map(function(v,i){return '<td style="text-align:right;color:var(--rd);font-size:11px;'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700;color:var(--rd)">'+fmt(mSalidas.reduce(function(a,b){return a+b;},0))+'</td></tr>'+
@@ -3641,7 +3643,7 @@ function renderModelo303(c){
       rateDetail+='<tr style="background:#F8F9FB;font-size:11px"><td style="padding-left:20px;color:var(--txM)">↳ IVA '+r+'%</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(Math.abs(d.cuotaR-d.cuotaS))+'€</td><td></td></tr>';
     }
   });
-  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 303 — IVA Trimestral '+state.ejercicio+'</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="exportModelo303()">↓ Excel</button><button class="btn btn-d" onclick="downloadModelo303TXT()">↓ TXT AEAT</button></div></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 303 — IVA Trimestral '+state.ejercicio+'</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="exportModelo303()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Modelo 303")">↓ PDF</button><button class="btn btn-d" onclick="downloadModelo303TXT()">↓ TXT AEAT</button></div></div>'+
   '<div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;border-bottom:1px solid #F3F4F6">'+
   '<div style="background:#FEF2F2;border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:#991B1B;margin-bottom:4px">IVA Repercutido</div><div style="font-size:20px;font-weight:700;color:#DC2626">'+fmt(totalRep)+'€</div></div>'+
   '<div style="background:#F0FDF4;border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:#166534;margin-bottom:4px">IVA Soportado</div><div style="font-size:20px;font-weight:700;color:#16A34A">'+fmt(totalSop)+'€</div></div>'+
@@ -5400,7 +5402,7 @@ function renderInformeVentas(c){
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Venta media mensual</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+fmt(totalVentas/12)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">IVA repercutido</div><div style="font-size:22px;font-weight:700;color:var(--am)">'+fmt(totalIva)+'€</div></div></div>'+
   
-  '<div class="card" style="margin-bottom:16px"><div class="card-h"><span>Evolución mensual de ventas</span><button class="btn btn-d" onclick="exportInformeVentasExcel()">↓ Excel</button></div>'+
+  '<div class="card" style="margin-bottom:16px"><div class="card-h"><span>Evolución mensual de ventas</span><button class="btn btn-d" onclick="exportInformeVentasExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Informe Ventas")">↓ PDF</button></div>'+
   '<div style="padding:16px"><canvas id="chartVentas" height="200"></canvas></div>'+
   '<div style="overflow-x:auto"><table><thead><tr><th></th>'+MONTHS.map(function(m,i){return '<th style="text-align:right;'+(i===curMonth?'border-bottom:3px solid var(--bl);color:var(--bl)':'')+'">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:700">Total</th></tr></thead><tbody>'+
   '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px"></span>Ventas</td>'+monthData.map(function(v,i){return '<td style="text-align:right;'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalVentas)+'</td></tr>'+
@@ -5410,9 +5412,9 @@ function renderInformeVentas(c){
   
   '<div class="grid-2">'+
   '<div class="card"><div class="card-h">Ventas por cliente</div>'+
-  (clientList.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Cliente</th><th style="text-align:right">Importe</th><th style="text-align:right">%</th></tr></thead><tbody>'+
-  clientList.map(function(cl,i){var pct=totalVentas>0?Math.round(cl.total/totalVentas*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;cursor:pointer;color:var(--pri)" onclick="showExtractoCuenta(\''+Object.keys(byClient).find(function(k){return byClient[k]===cl;})+'\')">'+h(cl.name)+'</td><td style="text-align:right;color:var(--ok)">'+fmt(cl.total)+'€</td><td style="text-align:right;font-size:11px;color:var(--txM)">'+pct+'%</td></tr>';}).join('')+
-  '</tbody></table></div>':'<div class="empty" style="padding:20px">Sin clientes</div>')+'</div>'+
+  (function(){var totalClientes=clientList.reduce(function(s,cl){return s+Math.abs(cl.total);},0);return (clientList.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Cliente</th><th style="text-align:right">Importe</th><th style="text-align:right">%</th></tr></thead><tbody>'+
+  clientList.map(function(cl,i){var pct=totalClientes>0?Math.round(Math.abs(cl.total)/totalClientes*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;cursor:pointer;color:var(--pri)" onclick="showExtractoCuenta(\''+Object.keys(byClient).find(function(k){return byClient[k]===cl;})+'\')">'+h(cl.name)+'</td><td style="text-align:right;color:var(--ok)">'+fmt(Math.abs(cl.total))+'€</td><td style="text-align:right;font-size:11px;color:var(--txM)">'+pct+'%</td></tr>';}).join('')+
+  '</tbody></table></div>':'<div class="empty" style="padding:20px">Sin clientes</div>');})()+'</div>'+
   
   '<div class="card"><div class="card-h">Ventas por cuenta contable</div>'+
   (accountList.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
@@ -5473,7 +5475,7 @@ function renderInformeCompras(c){
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Media mensual</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+fmt(totalCompras/12)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">IVA soportado</div><div style="font-size:22px;font-weight:700;color:var(--am)">'+fmt(totalIva)+'€</div></div></div>'+
   
-  '<div class="card" style="margin-bottom:16px"><div class="card-h"><span>Evolución mensual de compras</span><button class="btn btn-d" onclick="exportInformeComprasExcel()">↓ Excel</button></div>'+
+  '<div class="card" style="margin-bottom:16px"><div class="card-h"><span>Evolución mensual de compras</span><button class="btn btn-d" onclick="exportInformeComprasExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Informe Compras")">↓ PDF</button></div>'+
   '<div style="padding:16px"><canvas id="chartCompras" height="200"></canvas></div>'+
   '<div style="overflow-x:auto"><table><thead><tr><th></th>'+MONTHS.map(function(m,i){return '<th style="text-align:right;'+(i===curMonth?'border-bottom:3px solid var(--bl);color:var(--bl)':'')+'">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:700">Total</th></tr></thead><tbody>'+
   '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rd);margin-right:6px"></span>Compras</td>'+monthData.map(function(v,i){return '<td style="text-align:right;'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalCompras)+'</td></tr>'+
@@ -5550,7 +5552,7 @@ function renderAnalisisProveedores(c){
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Proveedores</div><div style="font-size:22px;font-weight:700;color:var(--tx)">'+lista.length+'</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total facturado</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(totalGasto)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Media por proveedor</div><div style="font-size:22px;font-weight:700;color:var(--am)">'+fmt(lista.length?totalGasto/lista.length:0)+'€</div></div></div>'+
-  '<div class="card"><div class="card-h"><span>Análisis de proveedores</span><button class="btn btn-d" onclick="exportAnalisisExcel()">↓ Excel</button></div>'+
+  '<div class="card"><div class="card-h"><span>Análisis de proveedores</span><button class="btn btn-d" onclick="exportAnalisisExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Análisis Proveedores")">↓ PDF</button></div>'+
   (lista.length?'<div class="scr"><table><thead><tr><th>Proveedor</th><th>Cuenta</th><th style="text-align:right">Total</th><th style="text-align:right">% del total</th><th style="text-align:right">Nº facturas</th><th style="text-align:right">Media/fra</th><th>Última fra</th><th>Tendencia</th></tr></thead><tbody>'+
   lista.map(function(p,i){
     var pct=totalGasto>0?Math.round(p.total/totalGasto*100):0;
@@ -5558,8 +5560,13 @@ function renderAnalisisProveedores(c){
     var meses=Object.keys(p.months).sort();
     var tendencia='—';
     if(meses.length>=2){
-      var primero=p.months[meses[0]];var ultimo=p.months[meses[meses.length-1]];
-      var cambio=primero>0?Math.round((ultimo-primero)/primero*100):0;
+      var half=Math.floor(meses.length/2);
+      var sumFirst=0,sumSecond=0;
+      for(var mi=0;mi<half;mi++)sumFirst+=p.months[meses[mi]]||0;
+      for(var mj=half;mj<meses.length;mj++)sumSecond+=p.months[meses[mj]]||0;
+      var avgFirst=sumFirst/half;var avgSecond=sumSecond/(meses.length-half);
+      var cambio=avgFirst>0?Math.round((avgSecond-avgFirst)/avgFirst*100):0;
+      if(Math.abs(cambio)>999)cambio=cambio>0?999:-999;
       tendencia=cambio>10?'<span style="color:var(--rd)">↑ +'+cambio+'%</span>':cambio<-10?'<span style="color:var(--ok)">↓ '+cambio+'%</span>':'<span style="color:var(--txM)">= estable</span>';
     }
     return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;cursor:pointer;color:var(--pri)" onclick="showExtractoCuenta(\''+h(p.cuenta)+'\')">'+h(p.name)+'</td><td>'+acctLink(p.cuenta,'')+'</td><td style="text-align:right;font-weight:700;color:var(--rd)">'+fmt(p.total)+'€</td><td style="text-align:right"><div style="display:flex;align-items:center;gap:4px;justify-content:flex-end"><div style="width:'+Math.min(pct,100)+'px;height:8px;background:var(--rd);border-radius:4px;opacity:0.3"></div>'+pct+'%</div></td><td style="text-align:right">'+p.count+'</td><td style="text-align:right">'+fmt(media)+'€</td><td style="font-size:10px">'+fmtD(p.lastDate)+'</td><td style="font-size:10px">'+tendencia+'</td></tr>';
@@ -6100,11 +6107,11 @@ function renderLibroIVA(c){
   '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(tCuotaRep)+'€</div><div class="stat-l">IVA Repercutido</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(tCuotaSop)+'€</div><div class="stat-l">IVA Soportado</div></div><div class="stat"><div class="stat-v" style="color:'+(liquidacion>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(liquidacion))+'€</div><div class="stat-l">'+(liquidacion>=0?'A pagar':'A devolver')+'</div></div></div>'+
   (rateRows?'<div class="card" style="margin-bottom:14px"><div class="card-h">📊 Desglose por tipo de IVA</div><table><thead><tr><th>Tipo</th><th style="text-align:right">Base ventas</th><th style="text-align:right">IVA Rep.</th><th style="text-align:right">Base compras</th><th style="text-align:right">IVA Sop.</th><th style="text-align:right">Resultado</th></tr></thead><tbody>'+rateRows+'<tr class="total"><td>TOTAL</td><td style="text-align:right">'+fmt(tBaseRep)+'€</td><td style="text-align:right">'+fmt(tCuotaRep)+'€</td><td style="text-align:right">'+fmt(tBaseSop)+'€</td><td style="text-align:right">'+fmt(tCuotaSop)+'€</td><td style="text-align:right;font-size:14px">'+fmt(Math.abs(liquidacion))+'€</td></tr></tbody></table></div>':'')+
   '<div class="grid-2">'+
-  '<div class="card"><div class="card-h" style="color:var(--rd)">IVA Repercutido (ventas) — '+repercutido.length+' registros <button class="btn btn-d" style="font-size:9px;margin-left:auto" onclick="exportLibroIVA(\'rep\')">📊</button></div>'+
+  '<div class="card"><div class="card-h" style="color:var(--rd)"><span>Repercutido (ventas) — '+repercutido.length+' registros</span><div style="display:flex;gap:4px"><button class="btn btn-d" style="font-size:10px" onclick="exportLibroIVA(\'rep\')">↓ Excel</button><button class="btn btn-d" style="font-size:10px" onclick="exportPDF(\"IVA Repercutido\")">↓ PDF</button></div></div>'+
   (repercutido.length?'<div class="scr"><table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Base</th><th>%</th><th style="text-align:right">Cuota</th><th style="text-align:right">Total</th></tr></thead><tbody>'+
   repercutido.map(function(r,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px">'+fmtD(r.date)+'</td><td>'+h(r.concept)+'</td><td style="text-align:right">'+fmt(r.base)+'</td><td>'+r.tipo+'%</td><td style="text-align:right;color:var(--rd);font-weight:600">'+fmt(r.cuota)+'</td><td style="text-align:right">'+fmt(r.total)+'</td></tr>';}).join('')+
   '<tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">'+fmt(tBaseRep)+'</td><td></td><td style="text-align:right">'+fmt(tCuotaRep)+'</td><td style="text-align:right">'+fmt(tBaseRep+tCuotaRep)+'</td></tr></tbody></table></div>':'<div class="empty">Sin IVA repercutido</div>')+'</div>'+
-  '<div class="card"><div class="card-h" style="color:var(--ok)">IVA Soportado (compras) — '+soportado.length+' registros <button class="btn btn-d" style="font-size:9px;margin-left:auto" onclick="exportLibroIVA(\'sop\')">📊</button></div>'+
+  '<div class="card"><div class="card-h" style="color:var(--ok)"><span>Soportado (compras) — '+soportado.length+' registros</span><div style="display:flex;gap:4px"><button class="btn btn-d" style="font-size:10px" onclick="exportLibroIVA(\'sop\')">↓ Excel</button><button class="btn btn-d" style="font-size:10px" onclick="exportPDF(\"IVA Soportado\")">↓ PDF</button></div></div>'+
   (soportado.length?'<div class="scr"><table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Base</th><th>%</th><th style="text-align:right">Cuota</th><th style="text-align:right">Total</th></tr></thead><tbody>'+
   soportado.map(function(r,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px">'+fmtD(r.date)+'</td><td>'+h(r.concept)+'</td><td style="text-align:right">'+fmt(r.base)+'</td><td>'+r.tipo+'%</td><td style="text-align:right;color:var(--ok);font-weight:600">'+fmt(r.cuota)+'</td><td style="text-align:right">'+fmt(r.total)+'</td></tr>';}).join('')+
   '<tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">'+fmt(tBaseSop)+'</td><td></td><td style="text-align:right">'+fmt(tCuotaSop)+'</td><td style="text-align:right">'+fmt(tBaseSop+tCuotaSop)+'</td></tr></tbody></table></div>':'<div class="empty">Sin IVA soportado</div>')+'</div></div>'+
