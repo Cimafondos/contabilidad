@@ -4355,7 +4355,7 @@ function renderIncidencias(c){
   '<div class="stat"><div class="stat-v" style="color:var(--bl)">'+countInfo+'</div><div class="stat-l">🔵 Informativos</div></div>'+
   '<div class="stat"><div class="stat-v" style="color:var(--ok)">'+state.entries.length+'</div><div class="stat-l">Total asientos</div></div>'+
   '</div>'+
-  '<div class="card"><div class="card-h"><span>⚠️ Incidencias contables — '+errors.length+' encontradas</span><div style="display:flex;gap:6px"><button class="btn btn-d" style="font-size:10px" onclick="checkIntegrity();render();">🔄 Recomprobar</button></div></div>'+
+  '<div class="card"><div class="card-h"><span>Incidencias contables — '+errors.length+' encontradas</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="checkIntegrity();render();">Recomprobar</button></div></div>'+
   (errors.length?'<div class="scr" style="max-height:500px"><table><thead><tr><th style="width:30px"></th><th>Tipo</th><th>Fecha</th><th>Asiento/Concepto</th><th>Detalle</th><th style="width:50px">Acc.</th></tr></thead><tbody>'+
   errors.map(function(e,i){
     var bgColor=e.severity==='error'?'#FDF0F0':e.severity==='warning'?'#FFF8E1':'#EBF5FF';
@@ -4907,7 +4907,7 @@ function saveFacturas(){try{localStorage.setItem('cf_facturas_'+(state.company?s
 
 function renderFacturas(c){
   loadFacturas();
-  c.innerHTML='<div class="card"><div class="card-h"><span>🧾 Facturas emitidas</span><button class="btn btn-p" onclick="newFactura(1)">+ Nueva factura</button></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Facturas emitidas</span><button class="btn btn-p" onclick="newFactura(1)">Nueva factura <span style="background:rgba(255,255,255,0.25);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:3px">F</span></button></div>'+
   (facturas.emitidas.length?'<div class="scr"><table><thead><tr><th>Nº</th><th>Fecha</th><th>Cliente</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Estado</th><th style="width:30px"></th></tr></thead><tbody>'+
   facturas.emitidas.map(function(f,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.num)+'</td><td style="font-size:10px">'+fmtD(f.date)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="text-align:right;font-size:11px">'+fmt(f.base)+'</td><td style="text-align:right;font-size:11px">'+fmt(f.iva)+'</td><td style="text-align:right;font-weight:600">'+fmt(f.total)+'</td><td><span class="badge '+(f.estado==='cobrada'?'badge-g':'badge-a')+'">'+(f.estado||'pendiente')+'</span></td><td><button class="abtn" style="color:var(--rd)" onclick="deleteFactura(1,'+i+')">✕</button></td></tr>';}).join('')+
   '<tr class="total"><td colspan="3">TOTAL</td><td style="text-align:right">'+fmt(facturas.emitidas.reduce(function(s,f){return s+f.base;},0))+'</td><td style="text-align:right">'+fmt(facturas.emitidas.reduce(function(s,f){return s+f.iva;},0))+'</td><td style="text-align:right">'+fmt(facturas.emitidas.reduce(function(s,f){return s+f.total;},0))+'</td><td></td><td></td></tr></tbody></table></div>':'<div class="empty">Sin facturas emitidas</div>')+'</div>';
@@ -5311,7 +5311,7 @@ function renderCierre(c){
   // Check if cierre already done
   var cierreHecho=all.some(function(e){return e.concept&&e.concept.indexOf('Regularización')>=0&&e.type==='cierre';});
 
-  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Cierre del ejercicio '+ej+'</span></div><div class="card-b">'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Cierre del ejercicio '+ej+'</span></div><div class="card-b">'+
   '<div style="font-size:12px;color:var(--txM);margin-bottom:14px">El cierre de ejercicio genera 3 asientos automáticos:<br>1. <strong>Regularización</strong> — traspasa saldos G6 y G7 a la cuenta 12900000 (Resultado)<br>2. <strong>Cierre</strong> — deja todas las cuentas G1-G5 a cero<br>3. <strong>Apertura</strong> — abre el ejercicio siguiente con los saldos de cierre</div>'+
   (cierreHecho?'<div style="background:#E8F8ED;border:2px solid var(--ok);border-radius:6px;padding:12px;margin-bottom:14px;color:var(--ok);font-weight:600">✓ El cierre del ejercicio '+ej+' ya se ha realizado</div>':'')+
   '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--ok)">Ingresos (G7) — '+cuentasG7.length+' cuentas</div><table><tbody>'+
@@ -5382,14 +5382,14 @@ async function ejecutarCierre(){
 function renderBackups(c){
   var hist=getBackupHistory();
   var log=getBackupLog();
-  c.innerHTML='<div class="card"><div class="card-h"><span>💾 Historial de backups — '+hist.length+' versiones guardadas</span><button class="btn btn-p" onclick="doBackup()">💾 Descargar backup ahora</button></div>'+
-  (hist.length?'<div class="scr"><table><thead><tr><th>Fecha/Hora</th><th>Asientos</th><th>Tamaño</th><th style="width:120px">Acciones</th></tr></thead><tbody>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Historial de backups — '+hist.length+' versiones</span><button class="btn btn-p" onclick="doBackup()">Descargar backup</button></div>'+
+  (hist.length?'<div class="scr"><table><thead><tr><th>Fecha/Hora</th><th>Asientos</th><th>Tamaño</th><th style="width:140px">Acciones</th></tr></thead><tbody>'+
   hist.map(function(h2,i){
     var dt=new Date(h2.ts);var fh=String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear()+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
     var kb=Math.round(h2.size/1024);
-    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:11px">'+fh+'</td><td>'+h2.entries+' asientos</td><td style="font-size:11px;color:var(--txM)">'+kb+' KB</td><td style="white-space:nowrap"><button class="btn btn-p" style="font-size:9px;padding:3px 8px" onclick="restoreBackup('+i+')">♻️ Restaurar</button> <button class="btn btn-d" style="font-size:9px;padding:3px 8px" onclick="downloadBackupVersion('+i+')">📥</button></td></tr>';
-  }).join('')+'</tbody></table></div>':'<div class="empty" style="padding:20px">Sin versiones guardadas aún. Se crean automáticamente al entrar y al hacer backup.</div>')+'</div>'+
-  '<div class="card"><div class="card-h"><span>📋 Log de copias — últimas '+Math.min(log.length,20)+'</span></div>'+
+    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:11px">'+fh+'</td><td>'+h2.entries+' asientos</td><td style="font-size:11px;color:var(--txM)">'+kb+' KB</td><td style="white-space:nowrap"><button class="btn btn-p" style="font-size:10px;padding:4px 10px" onclick="restoreBackup('+i+')">Restaurar</button> <button class="btn btn-d" style="font-size:10px;padding:4px 10px" onclick="downloadBackupVersion('+i+')">↓</button></td></tr>';
+  }).join('')+'</tbody></table></div>':'<div class="empty" style="padding:20px">Sin versiones guardadas aún</div>')+'</div>'+
+  '<div class="card"><div class="card-h"><span>Log de copias — últimas '+Math.min(log.length,20)+'</span></div>'+
   (log.length?'<div class="scr" style="max-height:250px"><table><thead><tr><th>Fecha/Hora</th><th>Tipo</th><th>Usuario</th><th>Detalle</th><th>Asientos</th></tr></thead><tbody>'+
   log.slice(0,20).map(function(l,i){
     var dt=new Date(l.ts);var fh=String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
@@ -5433,12 +5433,11 @@ function renderAudit(c){
     if(auditFilters.action&&l.action!==auditFilters.action)return false;
     return true;
   });
-  c.innerHTML='<div class="card"><div class="card-h"><span>📝 Registro de auditoría — '+filtered.length+' de '+log.length+' registros</span><button class="btn btn-d" style="font-size:10px" onclick="if(confirm(\'¿Borrar todo el registro?\')){localStorage.removeItem(\'cf_audit_\'+state.company.id);render();}">🗑 Limpiar</button></div>'+
-  '<div style="padding:8px 14px;background:#F8F9FB;border-bottom:1px solid #EDF0F4;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
-  '<span style="font-size:11px;color:var(--txM);font-weight:600">Filtrar:</span>'+
-  '<div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px">Usuario</span><select class="sel" style="font-size:10px;padding:3px 6px" onchange="auditFilters.user=this.value;render();"><option value="">Todos</option>'+Object.keys(logUsers).map(function(u){return '<option value="'+h(u)+'"'+(auditFilters.user===u?' selected':'')+'>'+h(u)+'</option>';}).join('')+'</select></div>'+
-  '<div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px">Acción</span><select class="sel" style="font-size:10px;padding:3px 6px" onchange="auditFilters.action=this.value;render();"><option value="">Todas</option>'+Object.keys(logActions).sort().map(function(a){return '<option value="'+h(a)+'"'+(auditFilters.action===a?' selected':'')+'>'+h(a)+'</option>';}).join('')+'</select></div>'+
-  '<div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px">Empresa</span><select class="sel" style="font-size:10px;padding:3px 6px"><option value="">'+h(state.company?state.company.name:'Actual')+'</option></select></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Registro de auditoría — '+filtered.length+' de '+log.length+' registros</span><button class="btn btn-d" onclick="if(confirm(\'¿Borrar todo el registro?\')){localStorage.removeItem(\'cf_audit_\'+state.company.id);render();}">Limpiar</button></div>'+
+  '<div style="padding:10px 16px;background:#FAFBFC;border-bottom:1px solid #F3F4F6;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600">Filtrar:</span>'+
+  '<div style="display:flex;gap:4px;align-items:center"><span style="font-size:11px">Usuario</span><select class="sel" style="font-size:11px;padding:4px 8px" onchange="auditFilters.user=this.value;render();"><option value="">Todos</option>'+Object.keys(logUsers).map(function(u){return '<option value="'+h(u)+'"'+(auditFilters.user===u?' selected':'')+'>'+h(u)+'</option>';}).join('')+'</select></div>'+
+  '<div style="display:flex;gap:4px;align-items:center"><span style="font-size:11px">Acción</span><select class="sel" style="font-size:11px;padding:4px 8px" onchange="auditFilters.action=this.value;render();"><option value="">Todas</option>'+Object.keys(logActions).sort().map(function(a){return '<option value="'+h(a)+'"'+(auditFilters.action===a?' selected':'')+'>'+h(a)+'</option>';}).join('')+'</select></div>'+
   '</div>'+
   (filtered.length?'<div class="scr" style="max-height:500px"><table><thead><tr><th>Fecha/Hora</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead><tbody>'+
   filtered.map(function(l,i){
@@ -5455,7 +5454,7 @@ function renderAudit(c){
 function renderPeriods(c){
   var MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   var ej=state.ejercicio;
-  c.innerHTML='<div class="card"><div class="card-h"><span>🔒 Periodos contables — Ejercicio '+ej+'</span></div><div class="card-b">'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Periodos contables — Ejercicio '+ej+'</span></div><div class="card-b">'+
   '<div style="font-size:11px;color:var(--txM);margin-bottom:12px">Los periodos cerrados no permiten crear, editar ni borrar asientos. Haz clic para abrir/cerrar.</div>'+
   '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'+
   MESES.map(function(m,i){
@@ -5477,12 +5476,12 @@ function renderTrash(c){
   api('/api/entries/'+state.company.id+'?deleted=1').then(function(allEntries){
     var deleted=allEntries.filter(function(e){return e.del||e.deleted;});
     var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-    c.innerHTML='<div class="card"><div class="card-h"><span>🗑️ Papelera — '+deleted.length+' asientos eliminados</span>'+(deleted.length?'<button class="btn btn-r" style="font-size:10px" onclick="emptyTrash()">Vaciar papelera</button>':'')+'</div>'+
-    (deleted.length?'<div class="scr"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Líneas</th><th style="text-align:right">Importe</th><th style="width:80px">Acción</th></tr></thead><tbody>'+
+    c.innerHTML='<div class="card"><div class="card-h"><span>Papelera — '+deleted.length+' asientos eliminados</span>'+(deleted.length?'<button class="btn btn-r" onclick="emptyTrash()">Vaciar papelera</button>':'')+'</div>'+
+    (deleted.length?'<div class="scr"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Líneas</th><th style="text-align:right">Importe</th><th style="width:90px">Acción</th></tr></thead><tbody>'+
     deleted.map(function(e,i){
       var td=0;(e.lines||[]).forEach(function(l){td+=(l.d||0);});
-      return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px">'+fmtD(e.date)+'</td><td>'+h(e.concept||'')+'</td><td style="font-size:10px;color:var(--txM)">'+(e.lines||[]).length+' líneas</td><td style="text-align:right">'+fmt(td)+'€</td><td><button class="btn btn-p" style="font-size:9px;padding:3px 8px" onclick="restoreEntry(\''+e.id+'\')">♻️ Restaurar</button></td></tr>';
-    }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:40px;margin-bottom:10px">🗑️</div><div style="font-weight:600;margin-bottom:4px">Papelera vacía</div><div style="font-size:11px;color:var(--txM)">Los asientos eliminados aparecerán aquí y podrás restaurarlos</div></div>')+'</div>';
+      return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:11px">'+fmtD(e.date)+'</td><td>'+h(e.concept||'')+'</td><td style="font-size:11px;color:var(--txM)">'+(e.lines||[]).length+' líneas</td><td style="text-align:right">'+fmt(td)+'€</td><td><button class="btn btn-p" style="font-size:10px;padding:4px 10px" onclick="restoreEntry(\''+e.id+'\')">Restaurar</button></td></tr>';
+    }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:36px;margin-bottom:12px">🗑</div><div style="font-weight:600;margin-bottom:4px">Papelera vacía</div><div style="font-size:12px;color:var(--txM)">Los asientos eliminados aparecerán aquí</div></div>')+'</div>';
   });
 }
 async function restoreEntry(id){
