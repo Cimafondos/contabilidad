@@ -1986,6 +1986,28 @@ function exportPnLExcel(){
   rows.push(['','D) RESULTADO DEL EJERCICIO','',resEj]);
   exportExcel(rows,['Cuenta','Concepto','','Importe €'],'pyg_pgc2008');
 }
+function exportBalanceExcel(){
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var m={};all.forEach(function(e){e.lines.forEach(function(l){if(!m[l.a])m[l.a]=0;m[l.a]+=l.d-l.h;});});
+  var rows=[];
+  rows.push(['=== ACTIVO ===','','']);
+  Object.entries(m).forEach(function(x){var code=x[0],s=x[1];var g=parseInt(code[0])||0;
+    if((g>=1&&g<=5)&&Math.abs(s)>0.01){rows.push([code,am[code]?am[code].name:code,s]);}
+  });
+  rows.push(['=== PASIVO + PATRIMONIO NETO ===','','']);
+  Object.entries(m).forEach(function(x){var code=x[0],s=x[1];var g=parseInt(code[0])||0;
+    if((g>=1&&g<=5)&&Math.abs(s)>0.01&&(code.startsWith('1')||code.startsWith('4')||code.startsWith('5'))){
+      // Already included above
+    }
+  });
+  // Just export all accounts with saldo
+  rows=[];
+  rows.push(['=== BALANCE DE SITUACIÓN ===','','']);
+  Object.entries(m).sort(function(a,b){return a[0].localeCompare(b[0]);}).forEach(function(x){
+    if(Math.abs(x[1])>0.01)rows.push([x[0],am[x[0]]?am[x[0]].name:x[0],Math.round(x[1]*100)/100]);
+  });
+  exportExcel(rows,['Cuenta','Nombre','Saldo'],'balance_'+state.ejercicio);
+}
 
 // ═══ BALANCE — PGC 2008 abreviado ═══
 function renderBalance(c){
@@ -2028,7 +2050,7 @@ function renderBalance(c){
   '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total Activo</div><div style="font-size:20px;font-weight:700;color:var(--bl)">'+fmt(tActivo)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total Pasivo</div><div style="font-size:20px;font-weight:700;color:var(--vi)">'+fmt(tPasivo)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:14px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Estado</div><div style="font-size:20px;font-weight:700;color:'+(cuadre?'var(--ok)':'var(--rd)')+'">'+(cuadre?'Cuadrado':'Descuadre '+fmt(Math.abs(tActivo-tPasivo))+'€')+'</div></div></div>'+
-  '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--bl)">Activo</div><table><tbody>'+
+  '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--bl)"><span>Activo</span><button class="btn btn-d" style="font-size:10px" onclick="exportBalanceExcel()">↓ Excel</button></div><table><tbody>'+
   masaH('A) Activo no corriente','b')+
   (aInmIntang.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">I. Inmovilizado intangible</td></tr>'+sectB(aInmIntang,true):'')+
   (aInmMat.length||aAmort.length?'<tr><td colspan="3" style="padding-left:10px;font-weight:600;color:var(--txS)">II. Inmovilizado material</td></tr>'+sectB(aInmMat,true)+sectB(aAmort,true):'')+
