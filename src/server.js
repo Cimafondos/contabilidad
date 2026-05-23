@@ -918,6 +918,49 @@ app.post('/api/load-pgc/:companyId', authRequired, adminRequired, (req, res) => 
   res.json({ ok: true, added, cleaned: invalid.changes });
 });
 
+// ── OCR FACTURA (proxy to Anthropic API) ──
+app.post('/api/ocr-factura', authRequired, async (req, res) => {
+  const { image, mediaType } = req.body;
+  if (!image) return res.status(400).json({ error: 'Imagen requerida' });
+  
+  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_API_KEY) {
+    return res.status(500).json({ error: 'API key de Anthropic no configurada. Añade ANTHROPIC_API_KEY en las variables de entorno de Railway.' });
+  }
+  
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 500,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: image } },
+            { type: 'text', text: 'Lee esta imagen de factura/ticket. Responde SOLO con JSON puro sin backticks:\n{"proveedor":"nombre del proveedor/comercio","total":0.00,"base":0.00,"iva_importe":0.00,"fecha":"YYYY-MM-DD","concepto":"descripcion breve del gasto","iva_pct":21,"num_factura":"numero si visible"}\nSi no ves algo pon null. Total es el importe final con IVA incluido. Base es el importe sin IVA.' }
+          ]
+        }]
+      })
+    });
+    
+    const data = await response.json();
+    const txt = (data.content || []).map(c => c.text || '').join('');
+    const clean = txt.replace(/```json|```/g, '').trim();
+    const ocr = JSON.parse(clean);
+    auditLog(req, 'ocr-factura', ocr.proveedor || 'unknown');
+    res.json(ocr);
+  } catch (err) {
+    console.error('OCR error:', err.message);
+    res.status(500).json({ error: 'Error al leer la imagen: ' + err.message });
+  }
+});
+
 // ── FEEDBACK ──
 app.post('/api/feedback', authRequired, (req, res) => {
   const { type, message, screenshot, page, company, user, timestamp, userAgent } = req.body;

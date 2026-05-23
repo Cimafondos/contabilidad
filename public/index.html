@@ -490,7 +490,7 @@ function showManageUsersFromSelector(){
     var modal=document.createElement('div');
     modal.id='modalOverlay';
     modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
-    modal.onclick=function(e){if(e.target===modal)modal.remove();};
+    
     modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:500px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:80vh;overflow-y:auto">'+
       '<h3 style="margin:0 0 16px">👥 Gestionar usuarios</h3>'+
       '<table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+rows+'</tbody></table>'+
@@ -507,29 +507,17 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()
 // ═══ SISTEMA DE FEEDBACK ═══
 var _feedbackScreenshot=null;
 function openFeedback(){
-  _feedbackScreenshot=null;
+  // Auto-capture screen context before opening modal
+  var screenInfo='Pantalla: '+state.tab+'/'+state.view+' | Empresa: '+(state.company?state.company.name:'—')+' | Usuario: '+(state.user?state.user.name:'?')+' | '+new Date().toLocaleString('es-ES');
   var modal=document.createElement('div');
   modal.id='modalOverlay';
   modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
-  modal.onclick=function(e){if(e.target===modal)modal.remove();};
-  modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
+  modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:440px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
     '<h3 style="margin:0 0 4px">\ud83d\udcac Reportar problema o sugerencia</h3>'+
     '<div style="font-size:11px;color:var(--txM);margin-bottom:16px">Tu feedback nos ayuda a mejorar el programa</div>'+
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Tipo</label><select id="fbType" class="sel" style="width:100%"><option value="error">\ud83d\udc1b Error / Problema</option><option value="mejora">\ud83d\udca1 Sugerencia / Mejora</option><option value="duda">\u2753 Duda</option></select></div>'+
-    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Describe el problema o sugerencia</label><textarea id="fbMsg" class="inp" style="width:100%;height:100px;resize:vertical" placeholder="Explica qu\u00e9 ha pasado o qu\u00e9 te gustar\u00eda mejorar..."></textarea></div>'+
-    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Captura de pantalla (opcional)</label>'+
-    '<div style="margin-top:4px;padding:12px;border:2px dashed #ccc;border-radius:8px;text-align:center;min-height:60px" id="fbDropZone" tabindex="0">'+
-    '<div id="fbDropContent"><div style="font-size:24px">\ud83d\udcf8</div>'+
-    '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px">'+
-    '<button class="btn btn-d" onclick="document.getElementById(\'fbFileInput\').click()">📁 Seleccionar imagen</button>'+
-    '<button class="btn btn-d" onclick="document.getElementById(\'fbDropZone\').focus();toast(\'Pega con Ctrl+V\')">📋 Pegar (Ctrl+V)</button>'+
-    '</div>'+
-    '<input type="file" id="fbFileInput" accept="image/*" style="display:none" onchange="handleFeedbackFile(this)">'+
-    '</div>'+
-    '<img id="fbScreenshotImg" style="max-width:100%;border-radius:4px;display:none;margin-top:8px">'+
-    '<div id="fbRemoveImg" style="display:none;margin-top:4px;text-align:right"><button class="btn btn-d" style="font-size:10px" onclick="removeFeedbackImage()">✕ Quitar imagen</button></div>'+
-    '</div></div>'+
-    '<div style="margin-bottom:8px;padding:6px 10px;background:#F8F9FB;border-radius:6px;font-size:10px;color:var(--txM)">\ud83d\udccd Pantalla: '+state.tab+'/'+state.view+' | Empresa: '+(state.company?state.company.name:'\u2014')+'</div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Describe el problema o sugerencia</label><textarea id="fbMsg" class="inp" style="width:100%;height:120px;resize:vertical" placeholder="Explica qu\u00e9 ha pasado o qu\u00e9 te gustar\u00eda mejorar..."></textarea></div>'+
+    '<div style="margin-bottom:8px;padding:8px 10px;background:#F8F9FB;border-radius:6px;font-size:10px;color:var(--txM)">\ud83d\udccd '+h(screenInfo)+'</div>'+
     '<div id="fbError" style="color:var(--rd);font-size:11px;margin-bottom:8px;min-height:16px"></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end">'+
     '<button class="btn btn-d" onclick="closeModal()">Cancelar</button>'+
@@ -537,55 +525,6 @@ function openFeedback(){
     '</div></div>';
   document.body.appendChild(modal);
   document.getElementById('fbMsg').focus();
-  // Listen for paste on the whole modal
-  modal.addEventListener('paste',function(e){handleScreenshotPaste(e);});
-}
-function handleFeedbackFile(input){
-  if(!input.files||!input.files[0])return;
-  var file=input.files[0];
-  if(!file.type.startsWith('image/')){toast('Solo imágenes','error');return;}
-  var reader=new FileReader();
-  reader.onload=function(ev){
-    _feedbackScreenshot=ev.target.result;
-    var img=document.getElementById('fbScreenshotImg');
-    if(img){img.src=ev.target.result;img.style.display='block';}
-    var content=document.getElementById('fbDropContent');
-    if(content)content.style.display='none';
-    var rm=document.getElementById('fbRemoveImg');
-    if(rm)rm.style.display='block';
-    toast('✓ Imagen adjuntada');
-  };
-  reader.readAsDataURL(file);
-}
-function removeFeedbackImage(){
-  _feedbackScreenshot=null;
-  var img=document.getElementById('fbScreenshotImg');if(img){img.style.display='none';img.src='';}
-  var content=document.getElementById('fbDropContent');if(content)content.style.display='block';
-  var rm=document.getElementById('fbRemoveImg');if(rm)rm.style.display='none';
-  var fi=document.getElementById('fbFileInput');if(fi)fi.value='';
-}
-function handleScreenshotPaste(e){
-  var items=(e.clipboardData||e.originalEvent&&e.originalEvent.clipboardData||{}).items;
-  if(!items)return;
-  for(var i=0;i<items.length;i++){
-    if(items[i].type.indexOf('image')>=0){
-      e.preventDefault();e.stopPropagation();
-      var file=items[i].getAsFile();
-      var reader=new FileReader();
-      reader.onload=function(ev){
-        _feedbackScreenshot=ev.target.result;
-        var img=document.getElementById('fbScreenshotImg');
-        if(img){img.src=ev.target.result;img.style.display='block';}
-        var content=document.getElementById('fbDropContent');
-        if(content)content.style.display='none';
-        var rm=document.getElementById('fbRemoveImg');
-        if(rm)rm.style.display='block';
-        toast('\u2713 Captura adjuntada');
-      };
-      reader.readAsDataURL(file);
-      return;
-    }
-  }
 }
 async function sendFeedback(){
   var tipo=document.getElementById('fbType').value;
@@ -594,7 +533,7 @@ async function sendFeedback(){
   if(!msg){err.textContent='Escribe un mensaje';return;}
   showProgress('Enviando feedback','Guardando tu reporte...');
   try{
-    var body={type:tipo,message:msg,screenshot:_feedbackScreenshot||'',page:state.tab+'/'+state.view,company:state.company?state.company.name:'',user:state.user?state.user.name:'',timestamp:new Date().toISOString(),userAgent:navigator.userAgent};
+    var body={type:tipo,message:msg,screenshot:'',page:state.tab+'/'+state.view,company:state.company?state.company.name:'',user:state.user?state.user.name:'',timestamp:new Date().toISOString(),userAgent:navigator.userAgent};
     await api('/api/feedback',{method:'POST',body:body});
     closeModal();
     hideProgress('\u2705','Feedback enviado. \u00a1Gracias!');
@@ -630,7 +569,7 @@ function hideProgress(icon,title){
 }
 function showChangePassword(){
   var modal=document.createElement('div');
-  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';modal.onclick=function(e){if(e.target===modal)modal.remove();};
+  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
   modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
     '<h3 style="margin:0 0 16px">🔑 Cambiar contraseña</h3>'+
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Contraseña actual</label><input type="password" id="cpOld" class="inp" style="width:100%"></div>'+
@@ -941,20 +880,14 @@ function handleAssistFile(file){
     // Try OCR via Claude API
     var base64=dataUrl.split(',')[1];
     var mediaType=file.type||'image/jpeg';
-    fetch('https://api.anthropic.com/v1/messages',{
+    // Send image to our server for OCR processing
+    fetch(API+'/api/ocr-factura',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'placeholder'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:mediaType,data:base64}},
-          {type:'text',text:'Lee esta imagen de factura/ticket. Responde SOLO con JSON puro sin backticks:\n{"proveedor":"nombre","total":0.00,"fecha":"YYYY-MM-DD","concepto":"descripcion breve","iva_pct":21}\nSi no ves algo pon null. Total con IVA incluido.'}
-        ]}]
-      })
-    }).then(function(r){return r.json();}).then(function(data){
-      var txt=(data.content||[]).map(function(c2){return c2.text||'';}).join('');
-      var clean=txt.replace(/```json|```/g,'').trim();
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+(sessionStorage.getItem('cf_token')||'')},
+      body:JSON.stringify({image:base64,mediaType:mediaType})
+    }).then(function(r){if(!r.ok)throw new Error('Error '+r.status);return r.json();}).then(function(data){
       try{
-        var ocr=JSON.parse(clean);
+        var ocr=data;
         var el=$('ocrStatus');
         if(el){
           var parts=[];
@@ -2419,7 +2352,7 @@ async function importAsientosAll(){
   var total=asientos.filter(function(a){return a.cuadra;}).length+newAccts.length;
   var done=0;
   var modal=document.createElement('div');
-  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';modal.onclick=function(e){if(e.target===modal)modal.remove();};
+  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
   modal.innerHTML='<div style="background:#fff;border-radius:12px;padding:30px;text-align:center;min-width:400px"><div style="font-size:32px">⏳</div><div style="font-weight:700;font-size:16px;margin:12px 0" id="progTitle">Contabilizando asientos...</div><div style="font-size:12px;color:var(--txM);margin:8px 0" id="progDetail">Preparando...</div><div style="background:#E0E0E0;border-radius:6px;height:8px;margin:16px 0;overflow:hidden"><div id="progBar" style="height:100%;background:var(--pri);border-radius:6px;width:0%;transition:width 0.3s"></div></div><div style="font-size:11px;color:var(--txM)" id="progCount">0 / '+total+'</div></div>';
   document.body.appendChild(modal);
   function updateProg(msg){done++;$('progBar').style.width=Math.round(done/total*100)+'%';$('progDetail').textContent=msg;$('progCount').textContent=done+' / '+total;}
@@ -3281,7 +3214,7 @@ function newEmpresaGrupo(){
       return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:3px 0"><input type="checkbox" class="neUserCheck" value="'+u.id+'" checked>'+h(u.name)+' ('+u.username+')</label>';
     }).join('');
     var modal=document.createElement('div');
-    modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;overflow-y:auto';modal.onclick=function(e){if(e.target===modal)modal.remove();};
+    modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;overflow-y:auto';
     modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
       '<h3 style="margin:0 0 16px">\ud83c\udfe2 Nueva empresa</h3>'+
       '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre de la empresa *</label><input id="neNombre" class="inp" style="width:100%" placeholder="Ej: Mi Empresa S.L."></div>'+
@@ -3333,7 +3266,7 @@ function doNewEmpresaGrupo(){
 
 function newUsuarioGrupo(){
   var modal=document.createElement('div');
-  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';modal.onclick=function(e){if(e.target===modal)modal.remove();};
+  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
   modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
     '<h3 style="margin:0 0 16px">👤 Nuevo usuario</h3>'+
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Usuario (para iniciar sesión)</label><input id="nuUser" class="inp" style="width:100%" placeholder="Ej: juan"></div>'+
@@ -3367,8 +3300,8 @@ function doNewUsuarioGrupo(){
 function editEmpresaGrupo(id,nombre,cif){
   var modal=document.createElement('div');
   modal.id='modalOverlay';
-  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';modal.onclick=function(e){if(e.target===modal)modal.remove();};
-  modal.onclick=function(e){if(e.target===modal)modal.remove();};
+  modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+  
   modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
     '<h3 style="margin:0 0 16px">✏️ Editar empresa</h3>'+
     '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Nombre</label><input id="eeNombre" class="inp" style="width:100%" value="'+h(nombre)+'"></div>'+
@@ -3412,7 +3345,7 @@ function editUsuarioGrupo(id,username,nombre,rol){
     }).join('')||'<span style="font-size:11px;color:var(--txM)">Sin empresas disponibles</span>';
     
     var modal=document.createElement('div');
-    modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;overflow-y:auto';modal.onclick=function(e){if(e.target===modal)modal.remove();};
+    modal.id='modalOverlay';modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;overflow-y:auto';
     modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:380px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
       '<h3 style="margin:0 0 16px">✏️ Editar usuario</h3>'+
       '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--txM)">Usuario</label><input id="euUser" class="inp" style="width:100%" value="'+h(username)+'"></div>'+
