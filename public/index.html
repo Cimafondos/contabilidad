@@ -406,7 +406,14 @@ function render(){
   ];
   
   // Track which sections are open
-  if(!window._sideOpen)window._sideOpen={Contabilidad:true};
+  if(!window._sideOpen)window._sideOpen={};
+  // Auto-open section containing active view (only if not explicitly closed)
+  menuItems.forEach(function(sec){
+    if(sec.section&&window._sideOpen[sec.section]===undefined){
+      var hasActive=sec.items.some(function(it){return state.view===it.id||(it.id==='soportePanel'&&state.view==='soporte');});
+      if(hasActive)window._sideOpen[sec.section]=true;
+    }
+  });
   
   var sidebarHtml='<div class="sidebar'+(collapsed?' collapsed':'')+'" id="sidebar">'+
     '<div class="side-header"><div class="side-header-logo">CF</div><div class="side-header-text">Cimafondos</div>'+
@@ -416,8 +423,6 @@ function render(){
   menuItems.forEach(function(sec){
     if(sec.section){
       var isOpen=window._sideOpen[sec.section]||false;
-      var hasActive=sec.items.some(function(it){return state.view===it.id||(it.id==='soportePanel'&&state.view==='soporte');});
-      if(hasActive)isOpen=true;
       sidebarHtml+='<div class="side-section-label" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding-right:16px" onclick="window._sideOpen[\''+sec.section+'\']=!window._sideOpen[\''+sec.section+'\'];render();">'+sec.section+'<span style="font-size:8px">'+(isOpen?'▼':'▶')+'</span></div>';
       if(!isOpen){return;}
       // Apply custom order if saved
