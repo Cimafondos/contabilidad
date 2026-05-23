@@ -515,6 +515,13 @@ app.post('/api/entries/:companyId', authRequired, (req, res) => {
   res.json({ ok: true });
 });
 
+// Puntear asiento (marcar como revisado)
+app.put('/api/entries/:companyId/:id/puntear', authRequired, (req, res) => {
+  const { punteado } = req.body;
+  db.prepare('UPDATE entries SET punteado = ? WHERE id = ? AND company_id = ?').run(punteado ? 1 : 0, req.params.id, req.params.companyId);
+  res.json({ ok: true });
+});
+
 app.delete('/api/entries/:companyId/:id', authRequired, (req, res) => {
   db.prepare('UPDATE entries SET deleted = 1 WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
   res.json({ ok: true });
@@ -993,6 +1000,8 @@ try { db.exec("ALTER TABLE feedback ADD COLUMN replied_by TEXT DEFAULT ''"); } c
 try { db.exec("ALTER TABLE feedback ADD COLUMN forwarded_to TEXT DEFAULT ''"); } catch(e) {}
 // Migrate entries tags column
 try { db.exec("ALTER TABLE entries ADD COLUMN tags TEXT DEFAULT ''"); } catch(e) {}
+// Migrate entries punteado column
+try { db.exec("ALTER TABLE entries ADD COLUMN punteado INTEGER DEFAULT 0"); } catch(e) {}
 
 app.get('/api/feedback/my-replies', authRequired, (req, res) => {
   const rows = db.prepare("SELECT * FROM feedback WHERE username = ? AND reply != '' AND reply IS NOT NULL AND status = 'resuelto'").all(req.user.username);

@@ -407,7 +407,9 @@ function render(){
     {section:'Informes',items:[
       {id:'libroiva',icon:'📋',label:'Libro IVA'},
       {id:'facturas',icon:'🧾',label:'Facturas'},
-      {id:'analisis',icon:'🔍',label:'Proveedores'},
+      {id:'analisis',icon:'📊',label:'Inf. Ventas'},
+      {id:'analisisCompras',icon:'📉',label:'Inf. Compras'},
+      {id:'analisisProveedores',icon:'🏭',label:'Inf. Proveedores'},
       {id:'posicion',icon:'💰',label:'Tesorería'},
     ]},
     {section:'Fiscal',items:[
@@ -538,7 +540,9 @@ function renderView(){
   else if(v==='suppliers')renderMaster(c,'supplier','Proveedores','🏭');
   else if(v==='banks')renderMaster(c,'bank','Bancos','🏦');
   else if(v==='articulos')renderArticulos(c);
-  else if(v==='analisis')renderAnalisisProveedores(c);
+  else if(v==='analisis')renderInformeVentas(c);
+  else if(v==='analisisCompras')renderInformeCompras(c);
+  else if(v==='analisisProveedores')renderAnalisisProveedores(c);
   else if(v==='import')renderImport(c);
   else if(v==='trash')renderTrash(c);
   else if(v==='periods')renderPeriods(c);
@@ -919,6 +923,45 @@ function exportModelo303(){
   exportModeloCSV('modelo_303_'+state.ejercicio,['Trimestre','Base Rep.','IVA Rep.','Base Sop.','IVA Sop.','Resultado'],rows);
 }
 function exportModelo390(){exportModelo303();}
+function downloadModelo303TXT(){
+  // Generate simplified 303 data for current quarter
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var currentQ=Math.floor(new Date().getMonth()/3)+1;
+  var qStart=state.ejercicio+'-'+String((currentQ-1)*3+1).padStart(2,'0')+'-01';
+  var qEnd=state.ejercicio+'-'+String(currentQ*3).padStart(2,'0')+'-'+([0,31,30,30,31][currentQ]);
+  var qEntries=all.filter(function(e){return e.date>=qStart&&e.date<=qEnd;});
+  
+  var baseRep=0,cuotaRep=0,baseSop=0,cuotaSop=0;
+  qEntries.forEach(function(e){e.lines.forEach(function(l){
+    var g=parseInt((l.a||'')[0])||0;
+    if(l.a&&l.a.startsWith('477')){cuotaRep+=l.h-l.d;}
+    if(l.a&&l.a.startsWith('472')){cuotaSop+=l.d-l.h;}
+    if(g===7){baseRep+=l.h-l.d;}
+    if(g===6){baseSop+=l.d-l.h;}
+  });});
+  var resultado=cuotaRep-cuotaSop;
+  
+  var txt='MODELO 303 - AUTOLIQUIDACIÓN IVA\n';
+  txt+='==========================================\n';
+  txt+='NIF: '+(state.company?state.company.cif||'':'')+'  Empresa: '+(state.company?state.company.name:'')+'\n';
+  txt+='Ejercicio: '+state.ejercicio+'  Periodo: '+currentQ+'T\n';
+  txt+='==========================================\n\n';
+  txt+='IVA DEVENGADO (Repercutido)\n';
+  txt+='  Base imponible al 21%:  '+fmt(baseRep)+'\n';
+  txt+='  Cuota:                  '+fmt(cuotaRep)+'\n\n';
+  txt+='IVA DEDUCIBLE (Soportado)\n';
+  txt+='  Base imponible:         '+fmt(baseSop)+'\n';
+  txt+='  Cuota:                  '+fmt(cuotaSop)+'\n\n';
+  txt+='RESULTADO\n';
+  txt+='  Diferencia:             '+fmt(resultado)+'\n';
+  txt+='  '+(resultado>=0?'A INGRESAR':'A DEVOLVER')+':           '+fmt(Math.abs(resultado))+'\n';
+  
+  var blob=new Blob([txt],{type:'text/plain'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download='modelo303_'+state.ejercicio+'_'+currentQ+'T.txt';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  toast('✓ Fichero TXT descargado');
+}
 function exportModelo111(){
   var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
   var datos=[{n:'1T',from:'01',to:'03'},{n:'2T',from:'04',to:'06'},{n:'3T',from:'07',to:'09'},{n:'4T',from:'10',to:'12'}];
@@ -1308,14 +1351,15 @@ function renderJournal(c){
   '<input class="inp" style="max-width:120px;font-size:11px" placeholder="Cuenta..." oninput="colFilters.cuenta=this.value.toLowerCase();applyColumnFilters();">'+
   '<input class="inp" style="max-width:200px;font-size:11px" placeholder="Concepto..." oninput="colFilters.concept=this.value.toLowerCase();applyColumnFilters();">'+
   '</div>'+
-  (all.length?'<div class="scr"><table><thead><tr><th style="width:35px">Nº</th><th style="width:80px">Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right;width:100px">Debe</th><th style="text-align:right;width:100px">Haber</th><th style="width:70px">Acc.</th></tr></thead><tbody>'+
+  (all.length?'<div class="scr"><table><thead><tr><th style="width:30px">✓</th><th style="width:35px">Nº</th><th style="width:80px">Fecha</th><th>Cuenta</th><th>Concepto</th><th style="text-align:right;width:100px">Debe</th><th style="text-align:right;width:100px">Haber</th><th style="width:70px">Acc.</th></tr></thead><tbody>'+
   all.map(function(e,i){
     var entryTotal=e.lines.reduce(function(s,l){return s+l.d;},0);
     var typeColor=typeColors[e.type]||typeColors.manual;
+    var isPunteado=e.punteado||0;
     return e.lines.map(function(l,li){
       var filterData='date:'+e.date.toLowerCase()+'|cuenta:'+(l.a||'').toLowerCase()+'|concept:'+(e.concept||'').toLowerCase()+'|';
-      return '<tr data-filter="'+filterData+'" style="'+(li===0?'border-top:1px solid var(--bd)':'')+'">'+
-      (li===0?'<td style="font-weight:600;color:var(--txM);font-size:11px" rowspan="'+e.lines.length+'"><span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:'+typeColor+';margin-right:4px"></span>'+(i+1)+'</td><td style="font-size:11px" rowspan="'+e.lines.length+'">'+fmtD(e.date)+'</td>':'')+
+      return '<tr data-filter="'+filterData+'" style="'+(li===0?'border-top:1px solid var(--bd)':'')+(isPunteado?';opacity:0.5':'')+'">'+
+      (li===0?'<td rowspan="'+e.lines.length+'"><input type="checkbox" '+(isPunteado?'checked':'')+' onchange="puntearAsiento(\''+e.id+'\',this.checked)" title="Marcar como revisado"></td><td style="font-weight:600;color:var(--txM);font-size:11px" rowspan="'+e.lines.length+'"><span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:'+typeColor+';margin-right:4px"></span>'+(i+1)+'</td><td style="font-size:11px" rowspan="'+e.lines.length+'">'+fmtD(e.date)+'</td>':'')+
       '<td>'+acctLink(l.a,am[l.a]?am[l.a].name:'')+'</td>'+
       '<td style="font-size:11px;color:var(--txS)">'+(li===0?h(e.concept)+(e.tags?' <span style="display:inline-flex;gap:3px;margin-left:4px">'+e.tags.split(',').map(function(t){t=t.trim();return t?'<span style="background:#EFF6FF;color:#2563EB;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:500">'+h(t)+'</span>':'';}).join('')+'</span>':''):'')+'</td>'+
       '<td style="text-align:right;font-size:12px">'+(l.d>0?'<span style="color:var(--ok)">'+fmt(l.d)+'</span>':'')+'</td>'+
@@ -1339,6 +1383,13 @@ function exportJournalPDF(){
 async function deleteEntry(id){var entry=state.entries.find(function(e){return e.id===id;});if(entry&&isPeriodClosed(entry.date)){toast('⛔ Periodo cerrado — no se puede borrar','error');return;}if(!confirm('¿Eliminar asiento?'))return;await api('/api/entries/'+state.company.id+'/'+id,{method:'DELETE'});await loadData();checkIntegrity();auditLog('borrar_asiento',entry?entry.concept:'');toast('Asiento eliminado');render();}
 function editEntry(id){var e=state.entries.find(function(x){return x.id===id;});if(e)showEntryModal(e,'edit');}
 function dupEntry(id){var e=state.entries.find(function(x){return x.id===id;});if(e)showEntryModal(e,'dup');}
+async function puntearAsiento(id,checked){
+  try{
+    await api('/api/entries/'+state.company.id+'/'+id+'/puntear',{method:'PUT',body:{punteado:checked}});
+    var e=state.entries.find(function(x){return x.id===id;});
+    if(e)e.punteado=checked?1:0;
+  }catch(e){toast('Error al puntear: '+e.message,'error');}
+}
 
 // ═══ ENTRY MODAL with account search + auto-counterpart ═══
 var entryLines=[];var editingEntry=null;var entryMode='new';
@@ -1922,11 +1973,20 @@ function renderPnL(c){
     return '<tr style="'+bg+'"><td colspan="2" style="font-weight:'+(bold?'700':'600')+'">'+label+'</td><td style="text-align:right;font-weight:700;color:'+fc+'">'+fmt(val)+'€</td></tr>';
   }
 
+  // Comparativa año anterior
+  var prevYear=state.ejercicio-1;
+  var prevEntries=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(prevYear))&&!e.deleted;});
+  var sp={};prevEntries.forEach(function(e){e.lines.forEach(function(l){if(!sp[l.a])sp[l.a]=0;sp[l.a]+=l.d-l.h;});});
+  function sumPfxP(pfx,inv){var t=0;Object.entries(sp).forEach(function(x){for(var i=0;i<pfx.length;i++){if(x[0].startsWith(pfx[i])){t+=inv?-x[1]:x[1];break;}}});return t;}
+  var cifNegPrev=sumPfxP(['700','701','702','703','704','705','706','708','709'],true);
+  var resEjPrev=cifNegPrev-sumPfxP(['600','601','602','606','607','608','609'],false)-sumPfxP(['640','641','642','643','644','645','649'],false)-sumPfxP(['620','621','622','623','624','625','626','627','628','629','631','634','636','639','650','651','659'],false);
+  function varPct(act,ant){if(!ant||ant===0)return '';var p=Math.round((act-ant)/Math.abs(ant)*100);return '<div style="font-size:10px;margin-top:2px;color:'+(p>=0?'var(--ok)':'var(--rd)')+'">'+(p>=0?'↑':'↓')+' '+Math.abs(p)+'% vs '+prevYear+'</div>';}
+
   c.innerHTML=dateFilterHTML()+
   '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Cifra de negocios</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(cifNegocios)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Cifra de negocios</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(cifNegocios)+'€</div>'+varPct(cifNegocios,cifNegPrev)+'</div>'+
   '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total gastos</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(aprovision+gtosPersonal+otrosGtosExpl)+'€</div></div>'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Resultado del ejercicio</div><div style="font-size:22px;font-weight:700;color:'+(resEjercicio>=0?'var(--ok)':'var(--rd)')+'">'+fmt(resEjercicio)+'€</div></div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Resultado del ejercicio</div><div style="font-size:22px;font-weight:700;color:'+(resEjercicio>=0?'var(--ok)':'var(--rd)')+'">'+fmt(resEjercicio)+'€</div>'+varPct(resEjercicio,resEjPrev)+'</div></div>'+
   '<div class="card"><div class="card-h"><span>Pérdidas y Ganancias — PGC 2008</span><button class="btn btn-d" onclick="exportPnLExcel()">↓ Excel</button></div><div class="scr"><table><thead><tr><th>Cuenta</th><th>Concepto</th><th style="text-align:right">Importe €</th></tr></thead><tbody>'+
   '<tr><td colspan="3" style="font-weight:700;background:#E8F8ED;color:var(--ok)">1. Importe neto cifra de negocios</td></tr>'+
   sectHTML('',detPfx(['700','701','702','703','704','705','706','708','709'],true),'var(--ok)')+
@@ -3525,7 +3585,7 @@ function renderModelo303(c){
       rateDetail+='<tr style="background:#F8F9FB;font-size:11px"><td style="padding-left:20px;color:var(--txM)">↳ IVA '+r+'%</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(Math.abs(d.cuotaR-d.cuotaS))+'€</td><td></td></tr>';
     }
   });
-  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 303 — IVA Trimestral '+state.ejercicio+'</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="exportModelo303()">↓ Excel</button></div></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 303 — IVA Trimestral '+state.ejercicio+'</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="exportModelo303()">↓ Excel</button><button class="btn btn-d" onclick="downloadModelo303TXT()">↓ TXT AEAT</button></div></div>'+
   '<div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;border-bottom:1px solid #F3F4F6">'+
   '<div style="background:#FEF2F2;border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:#991B1B;margin-bottom:4px">IVA Repercutido</div><div style="font-size:20px;font-weight:700;color:#DC2626">'+fmt(totalRep)+'€</div></div>'+
   '<div style="background:#F0FDF4;border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:#166534;margin-bottom:4px">IVA Soportado</div><div style="font-size:20px;font-weight:700;color:#16A34A">'+fmt(totalSop)+'€</div></div>'+
@@ -5137,6 +5197,139 @@ document.addEventListener('keydown',function(e){
   if(e.key==='F2'){e.preventDefault();toggleDarkMode();}
 });
 
+// ═══ INFORME DE VENTAS (tipo Holded) ═══
+function renderInformeVentas(c){
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var monthData=[0,0,0,0,0,0,0,0,0,0,0,0];
+  var monthIva=[0,0,0,0,0,0,0,0,0,0,0,0];
+  var byClient={},byAccount={};
+  var totalVentas=0,totalIva=0;
+  
+  all.forEach(function(e){
+    var mo=parseInt(e.date.slice(5,7))-1;
+    e.lines.forEach(function(l){
+      var g=parseInt((l.a||'')[0])||0;
+      if(g===7){var v=l.h-l.d;totalVentas+=v;monthData[mo]+=v;
+        var key=l.a;if(!byAccount[key])byAccount[key]={name:am[l.a]?am[l.a].name:l.a,total:0};byAccount[key].total+=v;
+      }
+      if(l.a&&l.a.startsWith('477')){var iv=l.h-l.d;totalIva+=iv;monthIva[mo]+=iv;}
+      if(l.a&&l.a.startsWith('430')){
+        var cliName=am[l.a]?am[l.a].name:l.a;
+        if(!byClient[l.a])byClient[l.a]={name:cliName,total:0,count:0};
+        byClient[l.a].total+=l.d-l.h;byClient[l.a].count++;
+      }
+    });
+  });
+  
+  var clientList=Object.values(byClient).sort(function(a,b){return b.total-a.total;});
+  var accountList=Object.entries(byAccount).sort(function(a,b){return b[1].total-a[1].total;});
+  var curMonth=new Date().getMonth();
+  
+  c.innerHTML=dateFilterHTML()+
+  '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total ventas</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(totalVentas)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Venta media mensual</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+fmt(totalVentas/12)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">IVA repercutido</div><div style="font-size:22px;font-weight:700;color:var(--am)">'+fmt(totalIva)+'€</div></div></div>'+
+  
+  '<div class="card" style="margin-bottom:16px"><div class="card-h"><span>Evolución mensual de ventas</span><button class="btn btn-d" onclick="exportInformeVentasExcel()">↓ Excel</button></div>'+
+  '<div style="padding:16px"><canvas id="chartVentas" height="200"></canvas></div>'+
+  '<div style="overflow-x:auto"><table><thead><tr><th></th>'+MONTHS.map(function(m,i){return '<th style="text-align:right;'+(i===curMonth?'border-bottom:3px solid var(--bl);color:var(--bl)':'')+'">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:700">Total</th></tr></thead><tbody>'+
+  '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px"></span>Ventas</td>'+monthData.map(function(v,i){return '<td style="text-align:right;'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalVentas)+'</td></tr>'+
+  '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--am);margin-right:6px"></span>IVA</td>'+monthIva.map(function(v,i){return '<td style="text-align:right;color:var(--txM);'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700;color:var(--txM)">'+fmt(totalIva)+'</td></tr>'+
+  '<tr class="total"><td style="font-weight:700"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--bl);margin-right:6px"></span>Total</td>'+monthData.map(function(v,i){return '<td style="text-align:right;font-weight:700;'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v+monthIva[i])+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalVentas+totalIva)+'</td></tr>'+
+  '</tbody></table></div></div>'+
+  
+  '<div class="grid-2">'+
+  '<div class="card"><div class="card-h">Ventas por cliente</div>'+
+  (clientList.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Cliente</th><th style="text-align:right">Importe</th><th style="text-align:right">%</th></tr></thead><tbody>'+
+  clientList.map(function(cl,i){var pct=totalVentas>0?Math.round(cl.total/totalVentas*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;cursor:pointer;color:var(--pri)" onclick="showExtractoCuenta(\''+Object.keys(byClient).find(function(k){return byClient[k]===cl;})+'\')">'+h(cl.name)+'</td><td style="text-align:right;color:var(--ok)">'+fmt(cl.total)+'€</td><td style="text-align:right;font-size:11px;color:var(--txM)">'+pct+'%</td></tr>';}).join('')+
+  '</tbody></table></div>':'<div class="empty" style="padding:20px">Sin clientes</div>')+'</div>'+
+  
+  '<div class="card"><div class="card-h">Ventas por cuenta contable</div>'+
+  (accountList.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
+  accountList.map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td>'+acctLink(x[0],'')+'</td><td>'+h(x[1].name)+'</td><td style="text-align:right;color:var(--ok)">'+fmt(x[1].total)+'€</td></tr>';}).join('')+
+  '</tbody></table>':'<div class="empty" style="padding:20px">Sin datos</div>')+'</div></div>';
+  
+  setTimeout(function(){
+    var ctx=$('chartVentas');if(!ctx)return;
+    new Chart(ctx,{type:'bar',data:{labels:MONTHS,datasets:[{label:'Ventas',data:monthData,backgroundColor:'rgba(16,185,129,0.7)',borderRadius:4},{label:'IVA',data:monthIva,backgroundColor:'rgba(245,158,11,0.5)',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},usePointStyle:true,pointStyle:'circle'}},tooltip:{callbacks:{label:function(c2){return c2.dataset.label+': '+fmt(c2.parsed.y)+'€';}}}},scales:{y:{ticks:{callback:function(v){return fmt(v);},font:{size:10}},grid:{color:'#F3F4F6'}},x:{grid:{display:false}}}}});
+  },100);
+}
+function exportInformeVentasExcel(){
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var rows=[];
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(parseInt((l.a||'')[0])===7){rows.push([e.date,e.concept||'',l.a,am[l.a]?am[l.a].name:'',l.h-l.d]);}
+  });});
+  exportExcel(rows,['Fecha','Concepto','Cuenta','Nombre','Importe'],'informe_ventas');
+}
+
+// ═══ INFORME DE COMPRAS (tipo Holded) ═══
+function renderInformeCompras(c){
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var monthData=[0,0,0,0,0,0,0,0,0,0,0,0];
+  var monthIva=[0,0,0,0,0,0,0,0,0,0,0,0];
+  var byProv={},byAccount={};
+  var totalCompras=0,totalIva=0;
+  
+  all.forEach(function(e){
+    var mo=parseInt(e.date.slice(5,7))-1;
+    e.lines.forEach(function(l){
+      var g=parseInt((l.a||'')[0])||0;
+      if(g===6){var v=l.d-l.h;totalCompras+=v;monthData[mo]+=v;
+        var key=l.a;if(!byAccount[key])byAccount[key]={name:am[l.a]?am[l.a].name:l.a,total:0};byAccount[key].total+=v;
+      }
+      if(l.a&&l.a.startsWith('472')){var iv=l.d-l.h;totalIva+=iv;monthIva[mo]+=iv;}
+      if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))){
+        var provName=am[l.a]?am[l.a].name:l.a;
+        if(!byProv[l.a])byProv[l.a]={name:provName,total:0,count:0};
+        byProv[l.a].total+=l.h-l.d;byProv[l.a].count++;
+      }
+    });
+  });
+  
+  var provList=Object.values(byProv).sort(function(a,b){return b.total-a.total;});
+  var accountList=Object.entries(byAccount).sort(function(a,b){return b[1].total-a[1].total;});
+  var curMonth=new Date().getMonth();
+  
+  c.innerHTML=dateFilterHTML()+
+  '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total compras</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(totalCompras)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Media mensual</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+fmt(totalCompras/12)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">IVA soportado</div><div style="font-size:22px;font-weight:700;color:var(--am)">'+fmt(totalIva)+'€</div></div></div>'+
+  
+  '<div class="card" style="margin-bottom:16px"><div class="card-h"><span>Evolución mensual de compras</span><button class="btn btn-d" onclick="exportInformeComprasExcel()">↓ Excel</button></div>'+
+  '<div style="padding:16px"><canvas id="chartCompras" height="200"></canvas></div>'+
+  '<div style="overflow-x:auto"><table><thead><tr><th></th>'+MONTHS.map(function(m,i){return '<th style="text-align:right;'+(i===curMonth?'border-bottom:3px solid var(--bl);color:var(--bl)':'')+'">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:700">Total</th></tr></thead><tbody>'+
+  '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rd);margin-right:6px"></span>Compras</td>'+monthData.map(function(v,i){return '<td style="text-align:right;'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalCompras)+'</td></tr>'+
+  '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--am);margin-right:6px"></span>IVA</td>'+monthIva.map(function(v,i){return '<td style="text-align:right;color:var(--txM);'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700;color:var(--txM)">'+fmt(totalIva)+'</td></tr>'+
+  '</tbody></table></div></div>'+
+  
+  '<div class="grid-2">'+
+  '<div class="card"><div class="card-h">Compras por proveedor</div>'+
+  (provList.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Proveedor</th><th style="text-align:right">Importe</th><th style="text-align:right">Nº</th></tr></thead><tbody>'+
+  provList.map(function(p,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;cursor:pointer;color:var(--pri)" onclick="showExtractoCuenta(\''+Object.keys(byProv).find(function(k){return byProv[k]===p;})+'\')">'+h(p.name)+'</td><td style="text-align:right;color:var(--rd)">'+fmt(p.total)+'€</td><td style="text-align:right;font-size:11px;color:var(--txM)">'+p.count+'</td></tr>';}).join('')+
+  '</tbody></table></div>':'<div class="empty" style="padding:20px">Sin proveedores</div>')+'</div>'+
+  
+  '<div class="card"><div class="card-h">Compras por cuenta contable</div>'+
+  (accountList.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
+  accountList.map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td>'+acctLink(x[0],'')+'</td><td>'+h(x[1].name)+'</td><td style="text-align:right;color:var(--rd)">'+fmt(x[1].total)+'€</td></tr>';}).join('')+
+  '</tbody></table>':'<div class="empty" style="padding:20px">Sin datos</div>')+'</div></div>';
+  
+  setTimeout(function(){
+    var ctx=$('chartCompras');if(!ctx)return;
+    new Chart(ctx,{type:'bar',data:{labels:MONTHS,datasets:[{label:'Compras',data:monthData,backgroundColor:'rgba(239,68,68,0.7)',borderRadius:4},{label:'IVA',data:monthIva,backgroundColor:'rgba(245,158,11,0.5)',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},usePointStyle:true,pointStyle:'circle'}},tooltip:{callbacks:{label:function(c2){return c2.dataset.label+': '+fmt(c2.parsed.y)+'€';}}}},scales:{y:{ticks:{callback:function(v){return fmt(v);},font:{size:10}},grid:{color:'#F3F4F6'}},x:{grid:{display:false}}}}});
+  },100);
+}
+function exportInformeComprasExcel(){
+  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var rows=[];
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(parseInt((l.a||'')[0])===6){rows.push([e.date,e.concept||'',l.a,am[l.a]?am[l.a].name:'',l.d-l.h]);}
+  });});
+  exportExcel(rows,['Fecha','Concepto','Cuenta','Nombre','Importe'],'informe_compras');
+}
+
 // ═══ ANÁLISIS PROVEEDORES ═══
 function renderAnalisisProveedores(c){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
@@ -5387,7 +5580,32 @@ function saveFactura(tipo){
   var arr=tipoStr==='emitida'?facturas.emitidas:facturas.recibidas;
   arr.push({id:'f_'+uid(),num:num,date:date,tercero:tercero,cif:cif,base:base,iva:iva,total:total,estado:estado,concepto:concepto});
   saveFacturas();$('factModal').remove();
-  auditLog('nueva_factura_'+tipoStr,num+' '+tercero);toast('Factura guardada');render();
+  auditLog('nueva_factura_'+tipoStr,num+' '+tercero);
+  
+  // AUTO-CONTABILIZAR: crear asiento automáticamente
+  var cuentaTercero=window._selectedTerceroCode||(tipoStr==='emitida'?'43000000':'40000000');
+  var ivaPct=parseFloat(document.getElementById('fIvaPct')?document.getElementById('fIvaPct').value:21)||0;
+  var lines=[];
+  if(tipoStr==='emitida'){
+    lines.push({a:cuentaTercero,d:Math.round(total*100)/100,h:0});
+    lines.push({a:'70000000',d:0,h:Math.round(base*100)/100});
+    if(iva>0)lines.push({a:'47700000',d:0,h:Math.round(iva*100)/100});
+  }else{
+    lines.push({a:'60000000',d:Math.round(base*100)/100,h:0});
+    if(iva>0)lines.push({a:'47200000',d:Math.round(iva*100)/100,h:0});
+    lines.push({a:cuentaTercero,d:0,h:Math.round(total*100)/100});
+  }
+  var entryId='fra_'+tipoStr+'_'+uid();
+  api('/api/entries/'+state.company.id,{method:'POST',body:{
+    id:entryId,date:date,concept:(tipoStr==='emitida'?'Fra. emitida':'Fra. recibida')+' ['+num+'] '+tercero,
+    type:tipoStr==='emitida'?'fra_emitida':'fra_recibida',lines:lines,tags:''
+  }}).then(function(){
+    loadData().then(function(){render();});
+    toast('✓ Factura guardada + asiento contabilizado');
+  }).catch(function(e){
+    toast('Factura guardada pero error al contabilizar: '+e.message,'error');
+    render();
+  });
 }
 function deleteFactura(tipo,idx){
   var tipoStr=(tipo===1)?'emitida':'recibida';
