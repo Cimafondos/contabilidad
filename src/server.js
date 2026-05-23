@@ -347,7 +347,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS feedback (
   page TEXT,
   company TEXT,
   user_agent TEXT,
-  status TEXT DEFAULT 'nuevo'
+  status TEXT DEFAULT 'nuevo',
+  reply TEXT DEFAULT '',
+  replied_by TEXT DEFAULT '',
+  forwarded_to TEXT DEFAULT ''
 )`);
 
 function auditLog(req, action, detail) {
@@ -983,6 +986,28 @@ app.post('/api/feedback/:id/status', authRequired, adminRequired, (req, res) => 
   const { status } = req.body;
   db.prepare('UPDATE feedback SET status = ? WHERE id = ?').run(status || 'resuelto', req.params.id);
   res.json({ ok: true });
+});
+
+// Migrate feedback columns
+try { db.exec("ALTER TABLE feedback ADD COLUMN reply TEXT DEFAULT ''"); } catch(e) {}
+try { db.exec("ALTER TABLE feedback ADD COLUMN replied_by TEXT DEFAULT ''"); } catch(e) {}
+try { db.exec("ALTER TABLE feedback ADD COLUMN forwarded_to TEXT DEFAULT ''"); } catch(e) {}
+
+app.post('/api/feedback/:id/reply', authRequired, adminRequired, (req, res) => {
+  const { reply } = req.body;
+  if (!reply) return res.status(400).json({ error: 'Respuesta requerida' });
+  db.prepare('UPDATE feedback SET reply = ?, replied_by = ?, status = ? WHERE id = ?').run(reply, req.user.username, 'resuelto', req.params.id);
+  auditLog(req, 'reply-feedback', `#${req.params.id}: ${reply.slice(0,100)}`);
+  res.json({ ok: true });
+});
+
+app.post('/api/feedback/:id/forward', authRequired, adminRequired, (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email requerido' });
+  // Store the forward info (actual email sending would require SMTP config)
+  db.prepare('UPDATE feedback SET forwarded_to = ?, status = ? WHERE id = ?').run(email, 'reenviado', req.params.id);
+  auditLog(req, 'forward-feedback', `#${req.params.id} -> ${email}`);
+  res.json({ ok: true, note: 'Nota: el reenvío por email requiere configuración SMTP. De momento se guarda la referencia.' });
 });
 
 // ── MOVE COMPANY BETWEEN GROUPS ──
