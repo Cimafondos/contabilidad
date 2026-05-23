@@ -434,12 +434,12 @@ function render(){
   ];
   
   // Track which sections are open
-  if(!window._sideOpen)window._sideOpen={};
+  if(!window._sideOpen)window._sideOpen={Contabilidad:true};
   // Favorites
   if(!window._sideFavorites){try{window._sideFavorites=JSON.parse(localStorage.getItem('cf_sideFavs'))||[];}catch(e){window._sideFavorites=[];}}
-  // Auto-open section containing active view (only if not explicitly closed)
+  // Always auto-open section containing active view
   menuItems.forEach(function(sec){
-    if(sec.section&&window._sideOpen[sec.section]===undefined){
+    if(sec.section){
       var hasActive=sec.items.some(function(it){return state.view===it.id||(it.id==='soportePanel'&&state.view==='soporte');});
       if(hasActive)window._sideOpen[sec.section]=true;
     }
@@ -732,6 +732,8 @@ document.addEventListener('keydown',function(e){
   if(tag==='input'||tag==='textarea'||tag==='select')return;
   if(e.key==='m'||e.key==='M'){e.preventDefault();showEntryModal();}
   if(e.key==='n'||e.key==='N'){e.preventDefault();showAssistant();}
+  if(e.key==='f'||e.key==='F'){e.preventDefault();newFactura(1);}
+  if(e.key==='r'||e.key==='R'){e.preventDefault();if(typeof toggleRuleForm==='function')toggleRuleForm();}
   if(e.key==='f'||e.key==='F'){e.preventDefault();try{newFactura(1);}catch(ex){}}
   if(e.key==='r'||e.key==='R'){e.preventDefault();try{toggleRuleForm();}catch(ex){}}
 });
@@ -1284,7 +1286,14 @@ function renderDash(c){
   // Sorted gasto categories for donut
   var catGastoArr=Object.entries(catGasto).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
 
-  c.innerHTML=dateFilterHTML()+
+  c.innerHTML=
+  '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">'+
+  '<button class="btn btn-p" style="padding:10px 18px;font-size:13px" onclick="showEntryModal()">+ Nuevo asiento <span style="background:rgba(255,255,255,0.25);padding:1px 6px;border-radius:3px;font-size:10px;margin-left:4px">M</span></button>'+
+  '<button class="btn btn-d" style="padding:10px 18px;font-size:13px" onclick="showAssistant()">+ Nuevo gasto <span style="background:var(--priLt);color:var(--pri);padding:1px 6px;border-radius:3px;font-size:10px;margin-left:4px">N</span></button>'+
+  '<button class="btn btn-d" style="padding:10px 18px;font-size:13px" onclick="newFactura(1)">+ Factura <span style="background:var(--priLt);color:var(--pri);padding:1px 6px;border-radius:3px;font-size:10px;margin-left:4px">F</span></button>'+
+  '<button class="btn btn-d" style="padding:10px 18px;font-size:13px" onclick="setView(\'import\')">Importar</button>'+
+  '</div>'+
+  dateFilterHTML()+
   // Alertas proactivas
   (function(){
     var alerts=[];
