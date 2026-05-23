@@ -488,6 +488,7 @@ function render(){
   intBadge+
   '<input class="inp" style="font-size:11px;padding:4px 10px;width:180px" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)">'+
   '<span style="font-size:12px;color:var(--txS);cursor:pointer" onclick="showChangePassword()" title="Cambiar contraseña">'+h(state.user.name)+' 🔑</span>'+
+  '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
   '</div></div>'+
@@ -641,6 +642,7 @@ async function selectCompany(companyId){
   EMPRESA_MAP[em.id]=em.name;
   try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:em.id,name:em.name}));}catch(e){}
   showProgress('Cargando empresa','Abriendo '+em.name+'...');
+  initDates();
   try{
     await loadData();
     checkIntegrity();
@@ -648,6 +650,20 @@ async function selectCompany(companyId){
     state.accounts=[];state.entries=[];state.rules=[];
   }
   render();
+}
+
+async function recalcularDatos(){
+  showProgress('Recalculando','Recargando todos los datos del servidor...');
+  initDates();
+  try{
+    await loadData();
+    checkIntegrity();
+    hideProgress('✓','Datos recargados: '+state.entries.length+' asientos, '+state.accounts.length+' cuentas');
+    render();
+  }catch(e){
+    hideProgress('✗','Error al recargar');
+    toast('Error: '+e.message,'error');
+  }
 }
 
 function showCreateCompanyFromSelector(){
@@ -3963,7 +3979,7 @@ function deleteUsuarioGrupo(userId,nombre){
 
 async function renderAdmin(c){
   if(!state.user||state.user.role!=='superadmin'){c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">Acceso restringido a superadministradores</div></div>';return;}
-  c.innerHTML='<div class="card"><div class="card-h"><span>Panel de administración</span><button class="btn btn-p" onclick="runTestCuadre()">Test de cuadre fiscal</button></div><div class="card-b">'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Panel de administración</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="recalcularDatos()">↻ Recalcular datos</button><button class="btn btn-p" onclick="runTestCuadre()">Test de cuadre fiscal</button></div></div><div class="card-b">'+
   '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
   '<div style="background:#F0F9FF;border-radius:8px;padding:14px 16px"><div style="font-size:11px;color:var(--txS);margin-bottom:4px">Asientos</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+state.entries.length+'</div></div>'+
   '<div style="background:#F0FDF4;border-radius:8px;padding:14px 16px"><div style="font-size:11px;color:var(--txS);margin-bottom:4px">Cuentas</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+state.accounts.length+'</div></div>'+
