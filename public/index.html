@@ -394,26 +394,26 @@ function render(){
   // Sidebar menu structure
   var menuItems=[
     {section:'',items:[
-      {id:'dash',icon:'📊',label:'Dashboard'},
+      {id:'dash',icon:'📊',label:'Panel'},
       {id:'soportePanel',icon:'💬',label:'Soporte',badge:isAdmin?state.unreadTickets:state.hasUnreadFeedback?1:0},
     ]},
     {section:'Contabilidad',items:[
       {id:'journal',icon:'📖',label:'Diario'},
-      {id:'ledger',icon:'📘',label:'Mayor'},
+      {id:'ledger',icon:'📘',label:'Libro mayor'},
       {id:'trial',icon:'📊',label:'Saldos'},
       {id:'balance',icon:'⚖️',label:'Balance'},
       {id:'pnl',icon:'📈',label:'PyG'},
       {id:'import',icon:'📂',label:'Importar'},
       {id:'newEntry',icon:'➕',label:'Nuevo gasto'},
-      {id:'manualEntry',icon:'✏️',label:'Manual'},
+      {id:'manualEntry',icon:'✏️',label:'Asiento manual'},
     ]},
-    {section:'Informes',items:[
+    {section:'Analítica',items:[
+      {id:'analisis',icon:'📊',label:'Ventas'},
+      {id:'analisisCompras',icon:'📉',label:'Compras'},
+      {id:'analisisProveedores',icon:'🏭',label:'Proveedores'},
+      {id:'posicion',icon:'💰',label:'Tesorería'},
       {id:'libroiva',icon:'📋',label:'Libro IVA'},
       {id:'facturas',icon:'🧾',label:'Facturas'},
-      {id:'analisis',icon:'📊',label:'Inf. Ventas'},
-      {id:'analisisCompras',icon:'📉',label:'Inf. Compras'},
-      {id:'analisisProveedores',icon:'🏭',label:'Inf. Proveedores'},
-      {id:'posicion',icon:'💰',label:'Tesorería'},
     ]},
     {section:'Fiscal',items:[
       {id:'modelo303',icon:'📄',label:'303 IVA'},
@@ -523,7 +523,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:9px;color:var(--txM)">v7.8.5</span>'+
+  '<span style="font-size:9px;color:var(--txM)">v7.9.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -4055,75 +4055,83 @@ async function renderSoporte(c){
   var isAdmin=state.user&&(state.user.role==='superadmin'||state.user.role==='admin');
   
   if(isAdmin){
-    // ADMIN VIEW: show all users and their chats
     c.innerHTML='<div style="text-align:center;padding:40px;color:var(--txM)">Cargando tickets...</div>';
     try{
       var fb=await api('/api/feedback');
-      var userMap={};
-      (fb||[]).forEach(function(f){
-        if(f.username===state.user.username)return;
-        if(!userMap[f.username])userMap[f.username]={username:f.username,company:f.company,messages:[],unread:0};
-        userMap[f.username].messages.push(f);
-        if(f.status==='nuevo')userMap[f.username].unread++;
-      });
-      var users=Object.values(userMap).sort(function(a,b){return b.unread-a.unread||b.messages.length-a.messages.length;});
+      var tickets=(fb||[]).filter(function(f){return f.username!==state.user.username;});
+      tickets.sort(function(a,b){return (b.timestamp||'').localeCompare(a.timestamp||'');});
       
-      if(!users.length){
-        c.innerHTML='<div class="card"><div class="card-h"><span>\ud83d\udcac Centro de soporte</span></div><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)"><div style="font-size:36px;margin-bottom:10px">\ud83d\udced</div>No hay tickets de soporte</div></div>';return;
-      }
+      var statusColors={nuevo:'badge-r',pendiente:'badge-a',resuelto:'badge-g'};
+      var statusLabels={nuevo:'Abierto',pendiente:'Pendiente',resuelto:'Resuelto'};
+      var typeLabels={error:'Error',mejora:'Mejora',duda:'Consulta'};
       
-      c.innerHTML='<div style="display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - 140px);border:1px solid var(--bd);border-radius:8px;overflow:hidden">'+
-      '<div style="background:#F8F9FB;border-right:1px solid var(--bd);overflow-y:auto" id="soporteUsers">'+
-      '<div style="padding:12px;font-weight:700;font-size:14px;border-bottom:1px solid var(--bd)">\ud83d\udcac Usuarios</div>'+
-      users.map(function(u,i){
-        return '<div class="soporte-user'+(i===0?' active':'')+'" onclick="loadUserChat(\''+h(u.username)+'\',this)" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px;'+(i===0?'background:#fff;border-left:3px solid var(--pri)':'border-left:3px solid transparent')+'">'+
-        '<div style="flex:1"><div style="font-weight:600;font-size:13px">'+h(u.username)+(u.unread>0?' <span class="blink" style="color:var(--rd);font-size:10px">\u25cf '+u.unread+' nuevo'+(u.unread>1?'s':'')+'</span>':'')+'</div>'+
-        '<div style="font-size:10px;color:var(--txM)">'+h(u.company||'')+'</div>'+
-        '<div style="font-size:10px;color:var(--txM)">'+u.messages.length+' mensajes</div></div></div>';
-      }).join('')+
-      '</div>'+
-      '<div id="soporteChat" style="display:flex;flex-direction:column;background:#fff">'+
-      '<div style="padding:12px;font-weight:700;font-size:14px;border-bottom:1px solid var(--bd)" id="soporteChatHeader">Selecciona un usuario</div>'+
-      '<div style="flex:1;overflow-y:auto;padding:16px" id="soporteChatMessages"></div>'+
-      '<div style="padding:12px;border-top:1px solid var(--bd);display:flex;gap:8px">'+
-      '<textarea class="inp" id="soporteReply" style="flex:1;height:50px;resize:none" placeholder="Escribe la respuesta..."></textarea>'+
-      '<button class="btn btn-p" style="align-self:flex-end" onclick="sendSoporteReply()">Enviar</button>'+
-      '</div></div></div>';
-      if(users.length)loadUserChat(users[0].username,null);
+      c.innerHTML='<div class="card"><div class="card-h"><span>Centro de soporte — '+tickets.length+' tickets</span></div>'+
+      (tickets.length?'<div class="scr" style="max-height:600px"><table><thead><tr><th style="width:40px">#</th><th>Fecha</th><th>Usuario</th><th>Empresa</th><th>Tipo</th><th>Mensaje</th><th>Estado</th><th style="width:120px">Acciones</th></tr></thead><tbody>'+
+      tickets.map(function(t,i){
+        var time=t.timestamp?t.timestamp.slice(0,16).replace('T',' '):'';
+        var status=t.status||'nuevo';
+        return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;color:var(--txM)">'+(i+1)+'</td><td style="font-size:11px;white-space:nowrap">'+time+'</td><td style="font-weight:600">'+h(t.username)+'</td><td style="font-size:11px;color:var(--txS)">'+h(t.company||'')+'</td><td><span class="badge badge-b">'+(typeLabels[t.type]||t.type)+'</span></td><td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(t.message||'')+'</td><td><span class="badge '+(statusColors[status]||'badge-b')+'">'+(statusLabels[status]||status)+'</span></td><td style="white-space:nowrap"><button class="btn btn-d" style="font-size:10px;padding:3px 8px" onclick="openTicketModal('+t.id+')">Ver</button> <button class="btn btn-d" style="font-size:10px;padding:3px 8px" onclick="resolveTicket('+t.id+')">✓</button></td></tr>';
+      }).join('')+'</tbody></table></div>':'<div class="empty" style="padding:40px">Sin tickets de soporte</div>')+'</div>';
     }catch(e){c.innerHTML='<div class="card"><div class="card-b" style="color:var(--rd);padding:20px">Error: '+e.message+'</div></div>';}
   }else{
-    // USER VIEW: show own chat history + new message form
     c.innerHTML='<div style="text-align:center;padding:40px;color:var(--txM)">Cargando...</div>';
     try{
       var history=await api('/api/feedback/my-history');
-      var typeIcons={error:'\ud83d\udc1b',mejora:'\ud83d\udca1',duda:'\u2753'};
-      var historyHtml='';
-      (history||[]).forEach(function(m){
-        var time=m.timestamp?m.timestamp.slice(0,16).replace('T',' '):'';
-        historyHtml+='<div style="display:flex;margin-bottom:10px"><div style="max-width:75%;background:#E3F2FD;border-radius:12px 12px 12px 0;padding:10px 14px">'+
-          '<div style="font-size:10px;color:var(--txM);margin-bottom:3px">'+(typeIcons[m.type]||'')+' '+time+'</div>'+
-          '<div style="font-size:13px;white-space:pre-wrap">'+h(m.message)+'</div></div></div>';
-        if(m.reply){
-          historyHtml+='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><div style="max-width:75%;background:#E8F5E9;border-radius:12px 12px 0 12px;padding:10px 14px">'+
-            '<div style="font-size:10px;color:var(--ok);margin-bottom:3px">\u2709\ufe0f Soporte</div>'+
-            '<div style="font-size:13px;white-space:pre-wrap">'+h(m.reply)+'</div></div></div>';
-        }
-        if(m.status==='resuelto')markFeedbackRead(m.id);
-      });
+      var statusLabels2={nuevo:'Abierto',pendiente:'Pendiente',resuelto:'Resuelto'};
+      var statusColors2={nuevo:'badge-a',pendiente:'badge-b',resuelto:'badge-g'};
       
-      c.innerHTML='<div style="max-width:700px;margin:0 auto;height:calc(100vh - 140px);display:flex;flex-direction:column;border:1px solid var(--bd);border-radius:8px;overflow:hidden;background:#fff">'+
-      '<div style="padding:14px 20px;font-weight:700;font-size:15px;border-bottom:1px solid var(--bd)">\ud83d\udcac Soporte</div>'+
-      '<div style="flex:1;overflow-y:auto;padding:16px" id="userChatMessages">'+
-      (historyHtml||'<div style="text-align:center;padding:40px;color:var(--txM)"><div style="font-size:36px;margin-bottom:10px">\ud83d\udcac</div>Escribe tu primer mensaje para contactar con soporte</div>')+
-      '</div>'+
-      '<div style="padding:12px 16px;border-top:1px solid var(--bd)">'+
-      '<div style="margin-bottom:8px"><select id="fbType" class="sel" style="width:100%;font-size:12px"><option value="error">\ud83d\udc1b Error / Problema</option><option value="mejora">\ud83d\udca1 Sugerencia</option><option value="duda">\u2753 Duda</option></select></div>'+
-      '<div style="display:flex;gap:8px"><textarea id="fbMsg" class="inp" style="flex:1;height:50px;resize:none" placeholder="Escribe tu mensaje..."></textarea>'+
-      '<button class="btn btn-p" style="align-self:flex-end" onclick="sendUserFeedback()">Enviar</button></div>'+
-      '</div></div>';
-      var msgs=document.getElementById('userChatMessages');if(msgs)msgs.scrollTop=msgs.scrollHeight;
+      c.innerHTML='<div class="card"><div class="card-h"><span>Mis tickets de soporte</span><button class="btn btn-p" onclick="showNewTicketForm()">+ Nuevo ticket</button></div>'+
+      '<div id="newTicketForm" style="display:none;padding:14px 16px;border-bottom:1px solid #F3F4F6;background:#FAFBFC">'+
+      '<div style="display:flex;gap:10px;margin-bottom:8px"><div><div class="lbl">Tipo</div><select id="fbType" class="sel"><option value="error">Error / Problema</option><option value="mejora">Sugerencia</option><option value="duda">Consulta</option></select></div><div style="flex:1"><div class="lbl">Asunto</div><input class="inp" id="fbSubject" placeholder="Breve descripción del problema"></div></div>'+
+      '<div class="lbl">Mensaje</div><textarea id="fbMsg" class="inp" rows="3" style="resize:vertical" placeholder="Describe tu consulta con detalle..."></textarea>'+
+      '<div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end"><button class="btn btn-d" onclick="showNewTicketForm()">Cancelar</button><button class="btn btn-p" onclick="sendUserFeedback()">Enviar ticket</button></div></div>'+
+      (history&&history.length?'<table><thead><tr><th style="width:40px">#</th><th>Fecha</th><th>Tipo</th><th>Mensaje</th><th>Estado</th><th>Respuesta</th></tr></thead><tbody>'+
+      history.map(function(m,i){
+        var time=m.timestamp?m.timestamp.slice(0,16).replace('T',' '):'';
+        var status=m.status||'nuevo';
+        if(status==='resuelto')markFeedbackRead(m.id);
+        return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;color:var(--txM)">'+(i+1)+'</td><td style="font-size:11px;white-space:nowrap">'+time+'</td><td><span class="badge badge-b">'+(m.type||'')+'</span></td><td style="font-size:12px">'+h(m.message||'')+'</td><td><span class="badge '+(statusColors2[status]||'badge-b')+'">'+(statusLabels2[status]||status)+'</span></td><td style="font-size:12px;color:var(--ok)">'+(m.reply?h(m.reply):'<span style="color:var(--txM)">Sin respuesta</span>')+'</td></tr>';
+      }).join('')+'</tbody></table>':'<div class="empty" style="padding:30px">No has enviado tickets aún. Pulsa "+ Nuevo ticket" para contactar con soporte.</div>')+'</div>';
     }catch(e){c.innerHTML='<div class="card"><div class="card-b" style="color:var(--rd);padding:20px">Error: '+e.message+'</div></div>';}
   }
+}
+function showNewTicketForm(){var el=document.getElementById('newTicketForm');if(el)el.style.display=el.style.display==='none'?'block':'none';}
+async function openTicketModal(id){
+  try{
+    var fb=await api('/api/feedback');
+    var ticket=fb.find(function(f){return f.id===id;});
+    if(!ticket)return;
+    var time=ticket.timestamp?ticket.timestamp.slice(0,16).replace('T',' '):'';
+    var bg=document.createElement('div');bg.className='modal-bg';bg.id='ticketModal';
+    bg.innerHTML='<div class="modal" style="max-width:600px"><div class="card-h"><span>Ticket #'+id+' — '+h(ticket.username)+'</span><button class="btn btn-d" onclick="document.getElementById(\'ticketModal\').remove()">✕</button></div><div class="card-b">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'+
+    '<div><div class="lbl">Fecha</div><div style="font-size:13px">'+time+'</div></div>'+
+    '<div><div class="lbl">Tipo</div><div style="font-size:13px">'+h(ticket.type||'')+'</div></div>'+
+    '<div><div class="lbl">Usuario</div><div style="font-size:13px;font-weight:600">'+h(ticket.username)+'</div></div>'+
+    '<div><div class="lbl">Empresa</div><div style="font-size:13px">'+h(ticket.company||'')+'</div></div></div>'+
+    '<div class="lbl">Mensaje</div><div style="background:#F3F4F6;border-radius:6px;padding:10px 14px;font-size:13px;margin-bottom:12px;white-space:pre-wrap">'+h(ticket.message||'')+'</div>'+
+    (ticket.reply?'<div class="lbl">Respuesta anterior</div><div style="background:#F0FDF4;border-radius:6px;padding:10px 14px;font-size:13px;margin-bottom:12px;white-space:pre-wrap">'+h(ticket.reply)+'</div>':'')+
+    '<div class="lbl">Responder</div><textarea class="inp" id="ticketReply" rows="3" style="resize:vertical" placeholder="Escribe la respuesta...">'+(ticket.reply||'')+'</textarea>'+
+    '<div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end"><select class="sel" id="ticketStatus"><option value="pendiente">Pendiente</option><option value="resuelto" '+(ticket.status==='resuelto'?'selected':'')+'>Resuelto</option></select><button class="btn btn-p" onclick="replyTicket('+id+')">Guardar</button></div>'+
+    '</div></div>';
+    document.body.appendChild(bg);
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+async function replyTicket(id){
+  var reply=$('ticketReply')?$('ticketReply').value:'';
+  var status=$('ticketStatus')?$('ticketStatus').value:'pendiente';
+  try{
+    await api('/api/feedback/'+id+'/reply',{method:'POST',body:{reply:reply}});
+    await api('/api/feedback/'+id+'/status',{method:'PUT',body:{status:status}});
+    document.getElementById('ticketModal').remove();
+    toast('✓ Ticket actualizado');renderView();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+async function resolveTicket(id){
+  try{
+    await api('/api/feedback/'+id+'/status',{method:'PUT',body:{status:'resuelto'}});
+    toast('✓ Ticket resuelto');renderView();
+  }catch(e){toast('Error: '+e.message,'error');}
 }
 
 window._soporteCurrentUser=null;
@@ -4456,11 +4464,110 @@ async function renderAdmin(c){
   '<button class="btn btn-r" onclick="softDeleteAsientos(\'todas\')">Marcar TODOS como eliminados</button>'+
   '<button class="btn btn-p" onclick="recuperarAsientos()">Recuperar eliminados</button>'+
   '<button class="btn btn-d" onclick="exportarTodoCSV()">↓ Exportar CSV</button>'+
+  '<button class="btn btn-d" onclick="repairProveedores()">Reparar proveedores</button>'+
   '</div>'+
   '<div style="margin-top:8px;font-size:11px;color:var(--txM)">Los asientos eliminados se pueden recuperar. Para borrado definitivo usa la Papelera.</div>'+
   '</div></div>'+
   '<div id="testResults"></div>'+
   '</div></div>';
+}
+
+async function repairProveedores(){
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var all=state.entries;
+  
+  // Collect all 400 accounts used in entries
+  var usedProvCodes={};
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))&&l.a!=='40000000'&&l.a!=='41000000'){
+      if(!usedProvCodes[l.a])usedProvCodes[l.a]={code:l.a,concept:e.concept||'',count:0};
+      usedProvCodes[l.a].count++;
+    }
+  });});
+  
+  // Find which ones don't have an account name
+  var missing=[];
+  Object.values(usedProvCodes).forEach(function(p){
+    var acct=am[p.code];
+    if(!acct||!acct.name||acct.name===p.code){
+      // Try to extract name from entry concept: "Fra. PROVEEDOR NAME [INV/...]"
+      var name='';
+      all.forEach(function(e){
+        if(name)return;
+        e.lines.forEach(function(l){
+          if(l.a===p.code&&e.concept){
+            var m=e.concept.match(/(?:Fra\.|Abono)\s+(.+?)\s*\[/);
+            if(m)name=m[1].trim();
+          }
+        });
+      });
+      if(!name){
+        // Try from masters
+        var masters=[];
+        try{masters=JSON.parse(localStorage.getItem('cf_masters_supplier_'+state.company.id))||[];}catch(ex){}
+        var mast=masters.find(function(s){return s.account===p.code;});
+        if(mast&&mast.name)name=mast.name;
+      }
+      if(!name)name='Proveedor '+p.code;
+      missing.push({code:p.code,name:name,count:p.count});
+    }
+  });
+  
+  // Also check 430 client accounts
+  var usedCliCodes={};
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(l.a&&l.a.startsWith('430')&&l.a!=='43000000'){
+      if(!usedCliCodes[l.a])usedCliCodes[l.a]={code:l.a,concept:e.concept||'',count:0};
+      usedCliCodes[l.a].count++;
+    }
+  });});
+  
+  var missingCli=[];
+  Object.values(usedCliCodes).forEach(function(p){
+    var acct=am[p.code];
+    if(!acct||!acct.name||acct.name===p.code){
+      var name='';
+      all.forEach(function(e){
+        if(name)return;
+        e.lines.forEach(function(l){
+          if(l.a===p.code&&e.concept){
+            var m=e.concept.match(/(?:Fra\.|Abono)\s+(.+?)\s*\[/);
+            if(m)name=m[1].trim();
+          }
+        });
+      });
+      if(!name)name='Cliente '+p.code;
+      missingCli.push({code:p.code,name:name,count:p.count});
+    }
+  });
+  
+  var total=missing.length+missingCli.length;
+  if(total===0){toast('✓ Todas las cuentas de terceros están correctas');return;}
+  
+  if(!confirm('Se van a crear/actualizar '+total+' cuentas:\n- '+missing.length+' proveedores\n- '+missingCli.length+' clientes\n\n¿Continuar?'))return;
+  
+  var created=0;
+  for(var i=0;i<missing.length;i++){
+    var p=missing[i];
+    try{
+      await api('/api/accounts/'+state.company.id,{method:'POST',body:{code:p.code,name:p.name,g:4,t:'A'}});
+      var existing=state.accounts.find(function(a){return a.code===p.code;});
+      if(existing){existing.name=p.name;}else{state.accounts.push({code:p.code,name:p.name,g:4,t:'A'});}
+      created++;
+    }catch(e){}
+  }
+  for(var j=0;j<missingCli.length;j++){
+    var cl=missingCli[j];
+    try{
+      await api('/api/accounts/'+state.company.id,{method:'POST',body:{code:cl.code,name:cl.name,g:4,t:'A'}});
+      var existing2=state.accounts.find(function(a){return a.code===cl.code;});
+      if(existing2){existing2.name=cl.name;}else{state.accounts.push({code:cl.code,name:cl.name,g:4,t:'A'});}
+      created++;
+    }catch(e){}
+  }
+  
+  toast('✓ '+created+' cuentas creadas/actualizadas');
+  render();
 }
 function getEmpresas(){try{return JSON.parse(localStorage.getItem('cf_empresas')||'[]');}catch(e){return [];}}
 function saveEmpresas(arr){try{localStorage.setItem('cf_empresas',JSON.stringify(arr));}catch(e){}}
