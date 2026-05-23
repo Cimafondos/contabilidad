@@ -488,7 +488,7 @@ app.get('/api/entries/:companyId', authRequired, (req, res) => {
 });
 
 app.post('/api/entries/:companyId', authRequired, (req, res) => {
-  const { id, date, concept, type, lines } = req.body;
+  const { id, date, concept, type, lines, tags } = req.body;
   const companyId = req.params.companyId;
   ensureCompany(companyId);
 
@@ -502,13 +502,12 @@ app.post('/api/entries/:companyId', authRequired, (req, res) => {
     }
   }
 
-  // Validate company isolation - account codes should not contain other company references
-  const insertEntry = db.prepare('INSERT OR REPLACE INTO entries (id, date, concept, type, company_id, deleted) VALUES (?, ?, ?, ?, ?, 0)');
+  const insertEntry = db.prepare('INSERT OR REPLACE INTO entries (id, date, concept, type, company_id, deleted, tags) VALUES (?, ?, ?, ?, ?, 0, ?)');
   const deleteLine = db.prepare('DELETE FROM entry_lines WHERE entry_id = ?');
   const insertLine = db.prepare('INSERT INTO entry_lines (entry_id, account, debit, credit) VALUES (?, ?, ?, ?)');
   
   const tx = db.transaction(() => {
-    insertEntry.run(id, date, concept, type || 'manual', companyId);
+    insertEntry.run(id, date, concept, type || 'manual', companyId, tags || '');
     deleteLine.run(id);
     (lines || []).forEach(l => insertLine.run(id, l.a, l.d || 0, l.h || 0));
   });
@@ -992,6 +991,8 @@ app.post('/api/feedback/:id/status', authRequired, adminRequired, (req, res) => 
 try { db.exec("ALTER TABLE feedback ADD COLUMN reply TEXT DEFAULT ''"); } catch(e) {}
 try { db.exec("ALTER TABLE feedback ADD COLUMN replied_by TEXT DEFAULT ''"); } catch(e) {}
 try { db.exec("ALTER TABLE feedback ADD COLUMN forwarded_to TEXT DEFAULT ''"); } catch(e) {}
+// Migrate entries tags column
+try { db.exec("ALTER TABLE entries ADD COLUMN tags TEXT DEFAULT ''"); } catch(e) {}
 
 app.get('/api/feedback/my-replies', authRequired, (req, res) => {
   const rows = db.prepare("SELECT * FROM feedback WHERE username = ? AND reply != '' AND reply IS NOT NULL AND status = 'resuelto'").all(req.user.username);

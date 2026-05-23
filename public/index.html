@@ -407,6 +407,8 @@ function render(){
   
   // Track which sections are open
   if(!window._sideOpen)window._sideOpen={};
+  // Favorites
+  if(!window._sideFavorites){try{window._sideFavorites=JSON.parse(localStorage.getItem('cf_sideFavs'))||[];}catch(e){window._sideFavorites=[];}}
   // Auto-open section containing active view (only if not explicitly closed)
   menuItems.forEach(function(sec){
     if(sec.section&&window._sideOpen[sec.section]===undefined){
@@ -415,10 +417,27 @@ function render(){
     }
   });
   
+  // Build favorites section
+  var favItems=[];
+  window._sideFavorites.forEach(function(favId){
+    menuItems.forEach(function(sec){
+      sec.items.forEach(function(it){if(it.id===favId)favItems.push(it);});
+    });
+  });
+  
   var sidebarHtml='<div class="sidebar'+(collapsed?' collapsed':'')+'" id="sidebar">'+
     '<div class="side-header"><div class="side-header-logo">CF</div><div class="side-header-text">Cimafondos</div>'+
     '<span class="side-edit-btn" onclick="toggleSidebarEdit()" style="cursor:pointer;font-size:14px;margin-left:auto;opacity:0.5;'+(window._sidebarEditMode?'opacity:1;':'')+'">🔧</span></div>'+
     '<div class="side-nav">';
+  
+  // Render favorites if any
+  if(favItems.length){
+    sidebarHtml+='<div class="side-section-label" style="color:#F59E0B">★ Favoritos</div>';
+    favItems.forEach(function(it){
+      var active=state.view===it.id;
+      sidebarHtml+='<div class="side-item'+(active?' active':'')+'" onclick="setView(\''+it.id+'\')" style="padding-left:12px"><span class="side-icon">'+it.icon+'</span><span class="side-label">'+it.label+'</span></div>';
+    });
+  }
   
   menuItems.forEach(function(sec){
     if(sec.section){
@@ -442,7 +461,9 @@ function render(){
       var badge=it.badge&&it.badge>0?'<span class="side-badge blink">'+it.badge+'</span>':'';
       var editAttrs=window._sidebarEditMode?'draggable="true" ondragstart="sidebarDragStart(event,\''+it.id+'\')" ondragover="event.preventDefault();this.style.borderTop=\'2px solid var(--ok)\'" ondragleave="this.style.borderTop=\'\'" ondrop="sidebarDrop(event,\''+it.id+'\',\''+(sec.section||'main')+'\')"':'';
       var editStyle=window._sidebarEditMode?'cursor:grab;border:1px dashed rgba(255,255,255,0.3);margin:2px 8px;border-radius:4px;padding:6px 8px;':'';
-      sidebarHtml+='<div class="side-item'+(active?' active':'')+'" data-sid="'+it.id+'" data-sec="'+(sec.section||'main')+'" '+editAttrs+' onclick="'+(window._sidebarEditMode?'':'setView(\''+it.id+'\')')+'" style="'+editStyle+'"><span class="side-icon">'+it.icon+'</span><span class="side-label">'+it.label+'</span>'+badge+'</div>';
+      var isFav=window._sideFavorites.indexOf(it.id)>=0;
+      var starHtml=window._sidebarEditMode?'<span onclick="event.stopPropagation();toggleFavorite(\''+it.id+'\')" style="cursor:pointer;font-size:12px;margin-left:auto">'+(isFav?'★':'☆')+'</span>':'';
+      sidebarHtml+='<div class="side-item'+(active?' active':'')+'" data-sid="'+it.id+'" data-sec="'+(sec.section||'main')+'" '+editAttrs+' onclick="'+(window._sidebarEditMode?'':'setView(\''+it.id+'\')')+'" style="'+editStyle+'"><span class="side-icon">'+it.icon+'</span><span class="side-label">'+it.label+'</span>'+badge+starHtml+'</div>';
     });
   });
   
@@ -723,10 +744,18 @@ window._sidebarDragId=null;
 function toggleSidebarEdit(){
   window._sidebarEditMode=!window._sidebarEditMode;
   if(!window._sidebarEditMode){
-    toast('✓ Orden guardado');
+    localStorage.setItem('cf_sideFavs',JSON.stringify(window._sideFavorites));
+    toast('✓ Cambios guardados');
   }else{
-    toast('Arrastra los items para reordenar. Pulsa 🔧 para guardar.');
+    toast('Arrastra para reordenar, ★ para favoritos. Pulsa 🔧 para guardar.');
   }
+  render();
+}
+function toggleFavorite(id){
+  var idx=window._sideFavorites.indexOf(id);
+  if(idx>=0)window._sideFavorites.splice(idx,1);
+  else window._sideFavorites.push(id);
+  localStorage.setItem('cf_sideFavs',JSON.stringify(window._sideFavorites));
   render();
 }
 function sidebarDragStart(e,id){
@@ -1056,7 +1085,7 @@ function renderJournal(c){
   all.map(function(e,i){return e.lines.map(function(l,li){var filterData='date:'+e.date.toLowerCase()+'|cuenta:'+(l.a||'').toLowerCase()+'|concept:'+(e.concept||'').toLowerCase()+'|';return '<tr data-filter="'+filterData+'" class="'+(i%2?'alt':'')+'" style="'+(li===0?'border-top:2px solid var(--bd)':'')+'">'+
   (li===0?'<td style="font-weight:600;color:var(--txM)" rowspan="'+e.lines.length+'">'+(i+1)+'</td><td style="font-size:10px" rowspan="'+e.lines.length+'">'+fmtD(e.date)+'</td>':'')+
   '<td><span class="acct">'+l.a+'</span> <span style="color:var(--txM);font-size:10px">'+(am[l.a]?am[l.a].name:'')+'</span></td>'+
-  '<td style="font-size:10px;color:var(--txS)">'+(li===0?h(e.concept):'')+'</td>'+
+  '<td style="font-size:11px;color:var(--txS)">'+(li===0?h(e.concept)+(e.tags?' <span style="display:inline-flex;gap:3px;margin-left:4px">'+e.tags.split(',').map(function(t){t=t.trim();return t?'<span style="background:#EFF6FF;color:#2563EB;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:500">'+h(t)+'</span>':'';}).join('')+'</span>':''):'')+'</td>'+
   '<td style="text-align:right" class="amt-pos">'+(l.d>0?fmt(l.d):'')+'</td>'+
   '<td style="text-align:right" class="amt-neg">'+(l.h>0?fmt(l.h):'')+'</td>'+
   (li===0?'<td rowspan="'+e.lines.length+'" style="white-space:nowrap"><button class="abtn" onclick="editEntry(\''+e.id+'\')" title="Editar">✏️</button> <button class="abtn" onclick="dupEntry(\''+e.id+'\')" title="Duplicar">📋</button> <button class="abtn" style="color:var(--rd)" onclick="deleteEntry(\''+e.id+'\')" title="Borrar">🗑</button></td>':'')+
@@ -1086,7 +1115,7 @@ function showEntryModal(entry,mode){
   var dateVal=mode==='dup'?today():(entry?entry.date:today());
   var conceptVal=mode==='dup'?(entry?entry.concept:'')+' (copia)':(entry?entry.concept:'');
   var bg=document.createElement('div');bg.className='modal-bg';bg.id='entryModal';
-  bg.innerHTML='<div class="modal"><div class="card-h"><span>'+title+'</span><button class="btn btn-d" onclick="document.getElementById(\'entryModal\').remove()">✕</button></div><div class="card-b"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><div style="width:125px"><div class="lbl">Fecha</div><input type="date" class="inp" id="eDate" value="'+dateVal+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div><div style="flex:1;min-width:180px"><div class="lbl">Concepto</div><input class="inp" id="eConcept" value="'+h(conceptVal)+'"></div></div><div id="eLines"></div><div style="margin-top:8px"><button class="btn btn-d" onclick="addEntryLine()">+ Línea</button></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span id="eBalance"></span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="saveAsPlantilla()" title="Guardar como plantilla">📄 Plantilla</button><button class="btn btn-a" onclick="saveDraft()" title="Guardar borrador sin contabilizar">📝 Borrador</button><button class="btn btn-p" id="eSave" onclick="saveEntry()">💾 '+(mode==='edit'?'Guardar':'Crear')+'</button></div></div></div></div>';
+  bg.innerHTML='<div class="modal"><div class="card-h"><span>'+(mode==='edit'?'Editar asiento':mode==='dup'?'Duplicar asiento':'Nuevo asiento manual')+'</span><button class="btn btn-d" onclick="document.getElementById(\'entryModal\').remove()">✕</button></div><div class="card-b"><div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><div style="width:125px"><div class="lbl">Fecha</div><input type="date" class="inp" id="eDate" value="'+dateVal+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div><div style="flex:1;min-width:180px"><div class="lbl">Concepto</div><input class="inp" id="eConcept" value="'+h(conceptVal)+'"></div><div style="width:180px"><div class="lbl">Etiquetas</div><input class="inp" id="eTags" value="'+h(entry&&entry.tags?entry.tags:'')+'" placeholder="proyecto, departamento..."></div></div><div id="eLines"></div><div style="margin-top:8px"><button class="btn btn-d" onclick="addEntryLine()">+ Línea</button></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span id="eBalance"></span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="saveAsPlantilla()" title="Guardar como plantilla">Plantilla</button><button class="btn btn-p" id="eSave" onclick="saveEntry()">'+(mode==='edit'?'Guardar':'Crear asiento')+'</button></div></div></div></div>';
   document.body.appendChild(bg);renderEntryLines();
 }
 
@@ -1179,20 +1208,21 @@ async function saveEntry(){
   if(entryMode!=='edit'){var dup=state.entries.find(function(e){return e.date===date&&Math.abs(e.lines.reduce(function(s,l){return s+l.d;},0)-tD)<0.01;});
   if(dup&&!confirm('⚠ Posible duplicado. ¿Contabilizar igualmente?'))return;}
   var id=entryMode==='edit'?editingEntry.id:entryMode+'_'+uid();
-  await api('/api/entries/'+state.company.id,{method:'POST',body:{id:id,date:date,concept:concept,type:entryMode==='edit'?(editingEntry.type||'manual'):'manual',lines:lines}});
+  var tags='';try{tags=$('eTags').value.trim();}catch(e){}
+  await api('/api/entries/'+state.company.id,{method:'POST',body:{id:id,date:date,concept:concept,type:entryMode==='edit'?(editingEntry.type||'manual'):'manual',lines:lines,tags:tags}});
   $('entryModal').remove();await loadData();checkIntegrity();auditLog(entryMode==='edit'?'editar_asiento':'crear_asiento',concept);toast(entryMode==='edit'?'Asiento guardado':'Asiento creado');render();
 }
 
 // ═══ ASSISTANT with file upload ═══
 function showAssistant(){
   var bg=document.createElement('div');bg.className='modal-bg';bg.id='assistModal';
-  bg.innerHTML='<div class="modal" style="max-width:840px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">🤖 Asistente contable</span><button class="btn btn-d" onclick="document.getElementById(\'assistModal\').remove()">✕</button></div><div class="card-b">'+
-  '<div style="border:2px dashed var(--bd);border-radius:6px;padding:16px;text-align:center;cursor:pointer;color:var(--txM);margin-bottom:12px" onclick="$(\'aFile\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--pri)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';handleAssistFiles(event.dataTransfer.files)"><div style="font-size:24px">📄</div><div style="font-weight:600;color:var(--tx)">Arrastra factura/ticket o haz clic</div><div style="font-size:10px">PDF · Imagen · Una o varias a la vez</div><input id="aFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple style="display:none" onchange="handleAssistFiles(this.files)"></div>'+
+  bg.innerHTML='<div class="modal" style="max-width:840px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">Asistente contable</span><button class="btn btn-d" onclick="document.getElementById(\'assistModal\').remove()">✕</button></div><div class="card-b">'+
+  '<div style="border:2px dashed var(--bd);border-radius:8px;padding:16px;text-align:center;cursor:pointer;color:var(--txM);margin-bottom:12px;transition:border-color 0.15s" onclick="$(\'aFile\').click()" onmouseover="this.style.borderColor=\'var(--pri)\'" onmouseout="this.style.borderColor=\'var(--bd)\'" ondragover="event.preventDefault();this.style.borderColor=\'var(--pri)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';handleAssistFiles(event.dataTransfer.files)"><div style="font-size:24px">☁</div><div style="font-weight:600;color:var(--tx)">Arrastra factura/ticket o haz clic</div><div style="font-size:10px">PDF · Imagen · Una o varias a la vez</div><input id="aFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple style="display:none" onchange="handleAssistFiles(this.files)"></div>'+
   '<div id="aFileInfo"></div>'+
-  '<div class="lbl">✍️ Describe el gasto (texto o voz)</div><div style="display:flex;gap:6px;margin-bottom:10px"><input class="inp" id="aDesc" placeholder="Ej: comida restaurante 35 euros pagado Pepe" style="flex:1" oninput="extractFromDesc()" onchange="extractFromDesc()" onpaste="setTimeout(extractFromDesc,100)"><button class="btn btn-d" id="aVoiceBtn" onclick="toggleVoice()" title="Hablar">🎤</button></div>'+
+  '<div class="lbl">Describe el gasto (texto o voz)</div><div style="display:flex;gap:6px;margin-bottom:10px"><input class="inp" id="aDesc" placeholder="Ej: comida restaurante 35 euros pagado Pepe" style="flex:1" oninput="extractFromDesc()" onchange="extractFromDesc()" onpaste="setTimeout(extractFromDesc,100)"><button class="btn btn-d" id="aVoiceBtn" onclick="toggleVoice()" title="Hablar">🎤</button></div>'+
   '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><div style="width:100px"><div class="lbl">Importe €</div><input class="inp" id="aAmt" style="text-align:right" placeholder="0"></div><div style="width:90px"><div class="lbl">IVA</div><select class="sel" id="aIva" style="width:100%">'+IVA.map(function(r){return '<option value="'+r.id+'">'+r.l+'</option>';}).join('')+'</select></div><div style="width:120px"><div class="lbl">Fecha</div><input type="date" class="inp" id="aDate" value="'+today()+'" min="'+state.ejercicio+'-01-01" max="'+state.ejercicio+'-12-31"></div></div>'+
   '<div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:6px;padding:8px 12px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">👤</span><div style="flex:1"><div style="font-size:11px;font-weight:700;color:#E65100;margin-bottom:3px">¿Quién ha pagado?</div><select class="sel" id="aPaidBy" style="width:100%;font-size:13px;padding:8px 10px;font-weight:600"><option value="">💳 Banco (cuenta empresa)</option>'+SOCIOS.map(function(s){return '<option value="'+s.a+'">👤 '+s.n+'</option>';}).join('')+'</select></div></div></div>'+
-  '<button class="btn btn-p" style="width:100%;justify-content:center;padding:9px" onclick="proposeEntry()">🔍 Proponer asiento</button>'+
+  '<button class="btn btn-p" style="width:100%;justify-content:center;padding:10px;font-size:13px" onclick="proposeEntry()">Proponer asiento</button>'+
   '<div id="aProposal"></div></div></div>';
   document.body.appendChild(bg);
 }
@@ -4916,7 +4946,7 @@ function newFactura(tipo){
   var esEmitida=tipo===1||tipo==='emitida';
   var tipoStr=esEmitida?'emitida':'recibida';
   var bg=document.createElement('div');bg.className='modal-bg';bg.id='factModal';
-  var h2='<div class="modal" style="max-width:550px"><div class="card-h"><span>'+(esEmitida?'🟢 Nueva factura emitida':'🔴 Nueva factura recibida')+'</span><button class="btn btn-d" onclick="$(\'factModal\').remove()">✕</button></div><div class="card-b">';
+  var h2='<div class="modal" style="max-width:550px"><div class="card-h"><span>'+(esEmitida?'Nueva factura emitida':'Nueva factura recibida')+'</span><button class="btn btn-d" onclick="$(\'factModal\').remove()">✕</button></div><div class="card-b">';
   h2+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
   h2+='<div><div class="lbl">Nº Factura *</div><input class="inp" id="fNum" placeholder="F-2026-001"></div>';
   h2+='<div><div class="lbl">Fecha *</div><input type="date" class="inp" id="fDate" value="'+today()+'"></div>';
