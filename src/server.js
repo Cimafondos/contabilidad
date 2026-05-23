@@ -993,6 +993,21 @@ try { db.exec("ALTER TABLE feedback ADD COLUMN reply TEXT DEFAULT ''"); } catch(
 try { db.exec("ALTER TABLE feedback ADD COLUMN replied_by TEXT DEFAULT ''"); } catch(e) {}
 try { db.exec("ALTER TABLE feedback ADD COLUMN forwarded_to TEXT DEFAULT ''"); } catch(e) {}
 
+app.get('/api/feedback/my-replies', authRequired, (req, res) => {
+  const rows = db.prepare("SELECT * FROM feedback WHERE username = ? AND reply != '' AND reply IS NOT NULL AND status = 'resuelto'").all(req.user.username);
+  res.json(rows);
+});
+
+app.get('/api/feedback/my-history', authRequired, (req, res) => {
+  const rows = db.prepare("SELECT * FROM feedback WHERE username = ? ORDER BY id ASC").all(req.user.username);
+  res.json(rows);
+});
+
+app.post('/api/feedback/:id/read', authRequired, (req, res) => {
+  db.prepare("UPDATE feedback SET status = 'leido' WHERE id = ? AND username = ?").run(req.params.id, req.user.username);
+  res.json({ ok: true });
+});
+
 app.post('/api/feedback/:id/reply', authRequired, adminRequired, (req, res) => {
   const { reply } = req.body;
   if (!reply) return res.status(400).json({ error: 'Respuesta requerida' });

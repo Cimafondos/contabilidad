@@ -63,6 +63,8 @@ tr.total{background:var(--priLt);font-weight:700}
 .login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg)}
 .login-box{width:100%;max-width:340px}
 .login-logo{width:52px;height:52px;border-radius:12px;background:var(--pri);display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;margin-bottom:10px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.blink{animation:blink 1s ease-in-out infinite}
 .toast{position:fixed;top:12px;right:12px;z-index:999;border-radius:8px;padding:10px 16px;max-width:420px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:8px}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
@@ -265,7 +267,8 @@ var TABS=[
 {id:'tesoreria',label:'Tesorería',groups:[{label:'Socios',items:[{id:'partners',icon:'👥',label:'Socios'}]},{label:'Posición',items:[{id:'posicion',icon:'🏦',label:'Posición'},{id:'prevision',icon:'📊',label:'Previsión'}]},{label:'Operaciones',items:[{id:'conciliacion',icon:'🔄',label:'Conciliación'},{id:'infconc',icon:'📄',label:'Inf.Conc.'},{id:'inmovilizado',icon:'🏗️',label:'Inmovilizado'}]}]},
 {id:'maestros',label:'Maestros',groups:[{label:'Terceros',items:[{id:'clients',icon:'🏢',label:'Clientes'},{id:'suppliers',icon:'🏭',label:'Proveedores'}]},{label:'Tablas',items:[{id:'banks',icon:'🏦',label:'Bancos'},{id:'articulos',icon:'📦',label:'Artículos'}]},{label:'Análisis',items:[{id:'analisis',icon:'📊',label:'Proveedores'}]}]},
 {id:'fiscal',label:'Fiscal',groups:[{label:'Modelos',items:[{id:'modelo303',icon:'📋',label:'303 IVA'},{id:'modelo390',icon:'📋',label:'390 Anual'},{id:'modelo111',icon:'📋',label:'111 IRPF'},{id:'modelo347',icon:'📋',label:'347 Terceros'},{id:'modelo200',icon:'📋',label:'200 IS'},{id:'modelo115',icon:'📋',label:'115 Alq.'}]},{label:'Informes',items:[{id:'pendientes',icon:'⏳',label:'Pendientes'},{id:'chatcontable',icon:'💬',label:'Chat'}]}]},
-{id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'incidencias',icon:'⚠️',label:'Incidencias'},{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'backups',icon:'💾',label:'Backups'},{id:'audit',icon:'📝',label:'Auditoría'},{id:'trash',icon:'🗑️',label:'Papelera'},{id:'migrupo',icon:'🏢',label:'Mi Grupo'},{id:'soporte',icon:'💬',label:'Soporte'},{id:'admin',icon:'👤',label:'Admin'}]}]}
+{id:'config',label:'Config',groups:[{label:'Cuentas',items:[{id:'accounts',icon:'📑',label:'Plan cuentas'}]},{label:'Reglas',items:[{id:'rules',icon:'⚙️',label:'Reglas'}]},{label:'Sistema',items:[{id:'incidencias',icon:'⚠️',label:'Incidencias'},{id:'cierre',icon:'📋',label:'Cierre'},{id:'periods',icon:'🔒',label:'Periodos'},{id:'backups',icon:'💾',label:'Backups'},{id:'audit',icon:'📝',label:'Auditoría'},{id:'trash',icon:'🗑️',label:'Papelera'},{id:'migrupo',icon:'🏢',label:'Mi Grupo'},{id:'admin',icon:'👤',label:'Admin'}]}]},
+{id:'soporte',label:'💬 Soporte',groups:[{label:'',items:[{id:'soportePanel',icon:'💬',label:'Tickets'}]}]}
 ];
 
 function setView(v){if(v==='newEntry'){showAssistant();return;}if(v==='manualEntry'){showEntryModal();return;}state.view=v;render();}
@@ -320,14 +323,14 @@ function render(){
   var intBadge=state.integrity?(state.integrity.ok?'<span class="integrity-ok">✓ OK</span>':'<span class="integrity-err" style="cursor:pointer" onclick="state.tab=\'config\';state.view=\'incidencias\';render();">✗ '+state.integrity.errors.length+' errores</span>'):'';
   app.innerHTML=(state.toast?'<div class="toast" style="background:'+(state.toast.type==='error'?'#FDF0F0':'#E8F8ED')+';border:2px solid '+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+'" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
   '<div class="topbar"><div style="display:flex;align-items:center;gap:8px"><div class="logo">CF</div>'+
-  '<span style="color:#fff;font-weight:600;font-size:13px;cursor:pointer" onclick="state.company=null;render();" title="Cambiar empresa">'+(function(){var n=state.company.name;var emps=state.serverEmpresas||[];var em=emps.find(function(e){return e.id===state.company.id;});if(em)n=em.name;return h(n);})()+' ▾</span>'  +'<span style="opacity:0.7">— v7.4.6</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7;cursor:pointer" onclick="showChangePassword()" title="Cambiar contraseña">'+h(state.user.name)+' 🔑</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn" onclick="openFeedback()" title="Reportar problema" style="background:rgba(255,200,0,0.3)">💬</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
-  '<div class="tabs">'+TABS.map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
+  '<span style="color:#fff;font-weight:600;font-size:13px;cursor:pointer" onclick="state.company=null;render();" title="Cambiar empresa">'+(function(){var n=state.company.name;var emps=state.serverEmpresas||[];var em=emps.find(function(e){return e.id===state.company.id;});if(em)n=em.name;return h(n);})()+' ▾</span>'  +'<span style="opacity:0.7">— v7.4.6</span><select class="sel" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);font-size:11px;padding:2px 6px" onchange="changeEjercicio(this.value)"><option value="2024" '+(state.ejercicio===2024?'selected':'')+'>2024</option><option value="2025" '+(state.ejercicio===2025?'selected':'')+'>2025</option><option value="2026" '+(state.ejercicio===2026?'selected':'')+'>2026</option></select>'+intBadge+'</div><div style="flex:1;max-width:250px;margin:0 10px"><input class="inp" style="font-size:10px;padding:4px 8px;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff" placeholder="🔍 Buscar..." onkeydown="if(event.key===\'Enter\')globalSearch(this.value)"></div><div style="display:flex;align-items:center;gap:10px">'+(function(){var bi=getLastBackupInfo();return bi?'<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;background:'+(bi.ok?'rgba(165,214,167,0.25)':'rgba(255,82,82,0.3)')+';color:'+(bi.ok?'#a5d6a7':'#ff5252')+'">💾 '+bi.text+'</span>':'';})()+'<button class="topbar-btn" onclick="doBackup()">💾 Backup</button><span style="opacity:0.7;cursor:pointer" onclick="showChangePassword()" title="Cambiar contraseña">'+h(state.user.name)+' 🔑</span><button class="topbar-btn" onclick="openVoiceDialog()" title="Asistente por voz" id="globalMicBtn" style="font-size:16px;padding:4px 12px;background:rgba(255,255,255,0.25)">🎤</button><button class="topbar-btn" onclick="toggleDarkMode()" title="F2">🌙</button><button class="topbar-btn'+(state.hasUnreadFeedback?' blink':'')+'" onclick="openFeedback()" title="'+(state.hasUnreadFeedback?'¡Tienes una respuesta!':'Reportar problema')+'" style="background:'+(state.hasUnreadFeedback?'rgba(255,50,50,0.5)':'rgba(255,200,0,0.3)')+'">💬'+(state.hasUnreadFeedback?' ●':'')+'</button><button class="topbar-btn" onclick="logout()">Salir</button></div></div>'+
+  '<div class="tabs">'+TABS.filter(function(t){if(t.id==='soporte'&&state.user&&state.user.role!=='superadmin'&&state.user.role!=='admin')return false;return true;}).map(function(t){return '<div class="tab '+(state.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')">'+t.label+'</div>';}).join('')+'</div>'+
   (function(){
     var customOrder=null;
     try{customOrder=JSON.parse(localStorage.getItem('cf_btnOrder_'+tab.id));}catch(e){}
     var allItems=[];
     tab.groups.forEach(function(g){
-      var filteredItems=g.items.filter(function(it){if(it.id==='admin'&&state.user&&state.user.role!=='superadmin'&&state.user.role!=='admin')return false;if(it.id==='soporte'&&state.user&&state.user.role!=='superadmin'&&state.user.role!=='admin')return false;if(it.id==='migrupo'&&state.user&&state.user.role!=='superadmin'&&state.user.role!=='admin'&&state.user.role!=='group_admin')return false;return true;});
+      var filteredItems=g.items.filter(function(it){if(it.id==='admin'&&state.user&&state.user.role!=='superadmin'&&state.user.role!=='admin')return false;if(it.id==='migrupo'&&state.user&&state.user.role!=='superadmin'&&state.user.role!=='admin'&&state.user.role!=='group_admin')return false;return true;});
       filteredItems.forEach(function(it){it._group=g.label;allItems.push(it);});
     });
     if(customOrder&&customOrder.length){
@@ -390,7 +393,7 @@ function renderView(){
   else if(v==='calendario')renderCalendario(c);
   else if(v==='modelo200')renderModelo200(c);
   else if(v==='chatcontable')renderChat(c);
-  else if(v==='soporte')renderSoporte(c);
+  else if(v==='soporte'||v==='soportePanel')renderSoporte(c);
   else if(v==='migrupo')renderMiGrupo(c);
   else if(v==='admin')renderAdmin(c);
   else if(v==='incidencias')renderIncidencias(c);
@@ -430,6 +433,7 @@ async function doLogin(){
       state.user=r.user;
       if(r.token)sessionStorage.setItem('cf_token',r.token);
       try{state.serverEmpresas=await api('/api/companies');}catch(e){state.serverEmpresas=[];}
+      try{checkUnreadFeedback();}catch(e){}
       loginOk=true;
     }
   }catch(e){console.log('Server login failed:',e.message);}
@@ -532,16 +536,20 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()
 // ═══ RIBBON DRAG & DROP ═══
 window._ribbonEditMode=false;
 window._ribbonDragId=null;
+window._ribbonOrder={};
 function toggleRibbonEdit(tabId){
   window._ribbonEditMode=!window._ribbonEditMode;
   if(!window._ribbonEditMode){
-    // Save current order
-    var btns=document.querySelectorAll('#ribbonBtns .rbtn');
-    var order=[];
-    btns.forEach(function(b){var id=b.getAttribute('data-id');if(id)order.push(id);});
-    if(order.length)localStorage.setItem('cf_btnOrder_'+tabId,JSON.stringify(order));
+    // Save current order from _ribbonOrder
+    if(window._ribbonOrder[tabId]&&window._ribbonOrder[tabId].length){
+      localStorage.setItem('cf_btnOrder_'+tabId,JSON.stringify(window._ribbonOrder[tabId]));
+    }
     toast('✓ Orden guardado');
   }else{
+    // Initialize order from current buttons
+    var btns=document.querySelectorAll('#ribbonBtns [data-id]');
+    var order=[];btns.forEach(function(b){order.push(b.getAttribute('data-id'));});
+    window._ribbonOrder[tabId]=order;
     toast('Arrastra los botones para reordenar. Pulsa 🔧 para guardar.');
   }
   render();
@@ -549,25 +557,113 @@ function toggleRibbonEdit(tabId){
 function ribbonDragStart(e,id){
   window._ribbonDragId=id;
   e.dataTransfer.effectAllowed='move';
+  e.target.style.opacity='0.4';
 }
 function ribbonDrop(e,targetId){
   e.preventDefault();
   var sourceId=window._ribbonDragId;
   if(!sourceId||sourceId===targetId)return;
-  var btns=document.getElementById('ribbonBtns');
-  if(!btns)return;
-  var children=Array.from(btns.children);
-  var sourceBtn=children.find(function(b){return b.getAttribute('data-id')===sourceId;});
-  var targetBtn=children.find(function(b){return b.getAttribute('data-id')===targetId;});
-  if(sourceBtn&&targetBtn){
-    btns.insertBefore(sourceBtn,targetBtn);
-    targetBtn.style.borderLeft='';
+  // Find current tab
+  var tabId=state.tab;
+  var order=window._ribbonOrder[tabId]||[];
+  if(!order.length){
+    var btns=document.querySelectorAll('#ribbonBtns [data-id]');
+    btns.forEach(function(b){order.push(b.getAttribute('data-id'));});
+  }
+  // Reorder in the array
+  var srcIdx=order.indexOf(sourceId);
+  var tgtIdx=order.indexOf(targetId);
+  if(srcIdx>=0&&tgtIdx>=0){
+    order.splice(srcIdx,1);
+    order.splice(tgtIdx,0,sourceId);
+    window._ribbonOrder[tabId]=order;
+    // Save and re-render to show new order
+    localStorage.setItem('cf_btnOrder_'+tabId,JSON.stringify(order));
+    render();
   }
 }
 
 // ═══ SISTEMA DE FEEDBACK ═══
-var _feedbackScreenshot=null;
+function checkUnreadFeedback(){
+  api('/api/feedback/my-replies').then(function(replies){
+    state.hasUnreadFeedback=replies&&replies.length>0;
+    if(state.hasUnreadFeedback){
+      state.unreadReplies=replies;
+    }
+  }).catch(function(){});
+}
+// Check periodically (every 5 minutes)
+setInterval(function(){if(state.user)checkUnreadFeedback();},300000);
+
 function openFeedback(){
+  // If there are unread replies, show them first
+  if(state.hasUnreadFeedback&&state.unreadReplies&&state.unreadReplies.length>0){
+    var reply=state.unreadReplies[0];
+    var modal=document.createElement('div');
+    modal.id='modalOverlay';
+    modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+    modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:440px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">'+
+      '<h3 style="margin:0 0 12px">📩 Respuesta del soporte</h3>'+
+      '<div style="background:#F8F9FB;border-radius:8px;padding:12px;margin-bottom:12px"><div style="font-size:10px;color:var(--txM);margin-bottom:4px">Tu mensaje:</div><div style="font-size:12px">'+h(reply.message)+'</div></div>'+
+      '<div style="background:#E8F5E9;border-radius:8px;padding:12px;margin-bottom:16px"><div style="font-size:10px;color:var(--ok);margin-bottom:4px;font-weight:600">Respuesta de '+h(reply.replied_by||'admin')+':</div><div style="font-size:13px">'+h(reply.reply)+'</div></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+      '<button class="btn btn-d" onclick="markFeedbackRead('+reply.id+');openFeedbackNew()">Nuevo mensaje</button>'+
+      '<button class="btn btn-p" onclick="markFeedbackRead('+reply.id+')">Entendido</button>'+
+      '</div></div>';
+    document.body.appendChild(modal);
+    return;
+  }
+  openFeedbackNew();
+}
+function markFeedbackRead(id){
+  api('/api/feedback/'+id+'/read',{method:'POST'}).then(function(){
+    state.hasUnreadFeedback=false;state.unreadReplies=[];
+    closeModal();render();
+  }).catch(function(){closeModal();});
+}
+function openFeedbackNew(){
+  // Load user's message history
+  api('/api/feedback/my-history').then(function(history){
+    var modal=document.createElement('div');
+    modal.id='modalOverlay';
+    modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
+    
+    var historyHtml='';
+    if(history&&history.length){
+      var typeIcons={error:'🐛',mejora:'💡',duda:'❓'};
+      history.forEach(function(m){
+        var time=m.timestamp?m.timestamp.slice(0,16).replace('T',' '):'';
+        historyHtml+='<div style="display:flex;margin-bottom:8px"><div style="max-width:80%;background:#E3F2FD;border-radius:10px 10px 10px 0;padding:8px 12px;font-size:12px">'+
+          '<div style="font-size:9px;color:var(--txM);margin-bottom:2px">'+(typeIcons[m.type]||'')+' '+time+'</div>'+
+          '<div style="white-space:pre-wrap">'+h(m.message)+'</div></div></div>';
+        if(m.reply){
+          historyHtml+='<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><div style="max-width:80%;background:#E8F5E9;border-radius:10px 10px 0 10px;padding:8px 12px;font-size:12px">'+
+            '<div style="font-size:9px;color:var(--ok);margin-bottom:2px">✉️ Soporte</div>'+
+            '<div style="white-space:pre-wrap">'+h(m.reply)+'</div></div></div>';
+        }
+      });
+    }
+    
+    modal.innerHTML='<div style="background:var(--bg);border-radius:12px;width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:85vh;display:flex;flex-direction:column;overflow:hidden">'+
+      '<div style="padding:16px 20px;border-bottom:1px solid var(--bd);font-weight:700;font-size:15px">💬 Soporte</div>'+
+      (historyHtml?'<div style="flex:1;overflow-y:auto;padding:16px;max-height:300px" id="fbHistory">'+historyHtml+'</div>':'')+
+      '<div style="padding:16px 20px;border-top:1px solid var(--bd)">'+
+      '<div style="margin-bottom:8px"><select id="fbType" class="sel" style="width:100%;font-size:12px"><option value="error">🐛 Error / Problema</option><option value="mejora">💡 Sugerencia</option><option value="duda">❓ Duda</option></select></div>'+
+      '<div style="display:flex;gap:8px"><textarea id="fbMsg" class="inp" style="flex:1;height:50px;resize:none" placeholder="Escribe tu mensaje..."></textarea>'+
+      '<button class="btn btn-p" style="align-self:flex-end" onclick="sendFeedback()">Enviar</button></div>'+
+      '<div id="fbError" style="color:var(--rd);font-size:11px;margin-top:4px;min-height:14px"></div>'+
+      '<div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn btn-d" style="font-size:11px" onclick="closeModal()">Cerrar</button></div>'+
+      '</div></div>';
+    document.body.appendChild(modal);
+    document.getElementById('fbMsg').focus();
+    var hist=document.getElementById('fbHistory');
+    if(hist)hist.scrollTop=hist.scrollHeight;
+  }).catch(function(){
+    // Fallback: just show new message form
+    openFeedbackSimple();
+  });
+}
+function openFeedbackSimple(){
   // Auto-capture screen context before opening modal
   var screenInfo='Pantalla: '+state.tab+'/'+state.view+' | Empresa: '+(state.company?state.company.name:'—')+' | Usuario: '+(state.user?state.user.name:'?')+' | '+new Date().toLocaleString('es-ES');
   var modal=document.createElement('div');
@@ -3231,92 +3327,111 @@ function initUsers(){var u=getUsers();if(!u.length){u=[{user:'admin',name:'Admin
 initUsers();
 async function renderSoporte(c){
   if(!state.user||(state.user.role!=='superadmin'&&state.user.role!=='admin')){
-    c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">⛔ Acceso restringido a administradores</div></div>';return;
+    c.innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)">\u26d4 Acceso restringido a administradores</div></div>';return;
   }
   c.innerHTML='<div style="text-align:center;padding:40px;color:var(--txM)">Cargando tickets...</div>';
   try{
     var fb=await api('/api/feedback');
-    var typeIcons={error:'🐛',mejora:'💡',duda:'❓'};
-    var typeLabels={error:'Error',mejora:'Mejora',duda:'Duda'};
-    var statusLabels={nuevo:'🔴 Nuevo',visto:'🟡 En revisión',resuelto:'🟢 Resuelto',reenviado:'🔵 Reenviado'};
+    // Group by username
+    var userMap={};
+    (fb||[]).forEach(function(f){
+      if(!userMap[f.username])userMap[f.username]={username:f.username,company:f.company,messages:[],unread:0};
+      userMap[f.username].messages.push(f);
+      if(f.status==='nuevo')userMap[f.username].unread++;
+    });
+    var users=Object.values(userMap).sort(function(a,b){return b.unread-a.unread||b.messages.length-a.messages.length;});
     
-    if(!fb||!fb.length){
-      c.innerHTML='<div class="card"><div class="card-h"><span>💬 Centro de soporte</span></div><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)"><div style="font-size:36px;margin-bottom:10px">📭</div>No hay tickets de soporte</div></div>';
-      return;
+    if(!users.length){
+      c.innerHTML='<div class="card"><div class="card-h"><span>\ud83d\udcac Centro de soporte</span></div><div class="card-b" style="text-align:center;padding:40px;color:var(--txM)"><div style="font-size:36px;margin-bottom:10px">\ud83d\udced</div>No hay tickets de soporte</div></div>';return;
     }
     
-    c.innerHTML='<div class="card"><div class="card-h"><span>💬 Centro de soporte — '+fb.length+' tickets</span><span style="font-size:10px;color:var(--txM)">'+fb.filter(function(f){return f.status==='nuevo';}).length+' nuevos</span></div><div class="card-b" style="padding:0">'+
-    '<table style="width:100%"><thead><tr><th style="width:30px"></th><th>Usuario</th><th>Empresa</th><th>Mensaje</th><th>Pantalla</th><th>Fecha</th><th>Estado</th><th style="width:120px">Acciones</th></tr></thead><tbody>'+
-    fb.map(function(f,i){
-      var statusColor=f.status==='nuevo'?'badge-r':f.status==='visto'?'badge-a':f.status==='reenviado'?'badge-b':'badge-g';
-      return '<tr class="'+(i%2?'alt':'')+'" style="cursor:pointer" onclick="openTicket('+f.id+')">'+
-      '<td>'+(typeIcons[f.type]||'📋')+'</td>'+
-      '<td style="font-weight:600">'+h(f.username||'—')+'</td>'+
-      '<td style="font-size:11px">'+h(f.company||'—')+'</td>'+
-      '<td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(f.message||'')+'</td>'+
-      '<td style="font-size:10px;color:var(--txM)">'+h(f.page||'')+'</td>'+
-      '<td style="font-size:10px;white-space:nowrap">'+f.timestamp.slice(0,16).replace('T',' ')+'</td>'+
-      '<td><span class="badge '+statusColor+'">'+(statusLabels[f.status]||f.status)+'</span></td>'+
-      '<td style="white-space:nowrap" onclick="event.stopPropagation()">'+
-      '<select class="sel" style="font-size:9px;padding:1px 3px" onchange="updateTicketStatus('+f.id+',this.value)">'+
-      '<option value="nuevo"'+(f.status==='nuevo'?' selected':'')+'>Nuevo</option>'+
-      '<option value="visto"'+(f.status==='visto'?' selected':'')+'>En revisión</option>'+
-      '<option value="reenviado"'+(f.status==='reenviado'?' selected':'')+'>Reenviado</option>'+
-      '<option value="resuelto"'+(f.status==='resuelto'?' selected':'')+'>Resuelto</option>'+
-      '</select></td></tr>';
-    }).join('')+'</tbody></table></div></div>';
+    c.innerHTML='<div style="display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - 140px);border:1px solid var(--bd);border-radius:8px;overflow:hidden">'+
+    '<div style="background:#F8F9FB;border-right:1px solid var(--bd);overflow-y:auto" id="soporteUsers">'+
+    '<div style="padding:12px;font-weight:700;font-size:14px;border-bottom:1px solid var(--bd)">\ud83d\udcac Usuarios</div>'+
+    users.map(function(u,i){
+      return '<div class="soporte-user'+(i===0?' active':'')+'" onclick="loadUserChat(\''+h(u.username)+'\',this)" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px;'+(i===0?'background:#fff;border-left:3px solid var(--pri)':'border-left:3px solid transparent')+'">'+
+      '<div style="flex:1"><div style="font-weight:600;font-size:13px">'+h(u.username)+(u.unread>0?' <span class="blink" style="color:var(--rd);font-size:10px">\u25cf '+u.unread+' nuevo'+(u.unread>1?'s':'')+'</span>':'')+'</div>'+
+      '<div style="font-size:10px;color:var(--txM)">'+h(u.company||'')+'</div>'+
+      '<div style="font-size:10px;color:var(--txM)">'+u.messages.length+' mensajes</div></div></div>';
+    }).join('')+
+    '</div>'+
+    '<div id="soporteChat" style="display:flex;flex-direction:column;background:#fff">'+
+    '<div style="padding:12px;font-weight:700;font-size:14px;border-bottom:1px solid var(--bd)" id="soporteChatHeader">Selecciona un usuario</div>'+
+    '<div style="flex:1;overflow-y:auto;padding:16px" id="soporteChatMessages"></div>'+
+    '<div style="padding:12px;border-top:1px solid var(--bd);display:flex;gap:8px" id="soporteChatInput" style="display:none">'+
+    '<textarea class="inp" id="soporteReply" style="flex:1;height:50px;resize:none" placeholder="Escribe la respuesta..."></textarea>'+
+    '<button class="btn btn-p" style="align-self:flex-end" onclick="sendSoporteReply()">Enviar</button>'+
+    '</div>'+
+    '</div></div>';
+    
+    // Auto-load first user
+    if(users.length)loadUserChat(users[0].username,null);
   }catch(e){c.innerHTML='<div class="card"><div class="card-b" style="color:var(--rd);padding:20px">Error: '+e.message+'</div></div>';}
 }
 
-function openTicket(id){
-  api('/api/feedback').then(function(fb){
-    var ticket=fb.find(function(f){return f.id===id;});
-    if(!ticket)return;
-    var typeIcons={error:'🐛',mejora:'💡',duda:'❓'};
-    var modal=document.createElement('div');
-    modal.id='modalOverlay';
-    modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999';
-    modal.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:24px;width:560px;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
-      '<h3 style="margin:0">'+(typeIcons[ticket.type]||'📋')+' Ticket #'+ticket.id+'</h3>'+
-      '<button class="btn btn-d" onclick="closeModal()">✕</button></div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;font-size:12px">'+
-      '<div><span style="color:var(--txM)">Usuario:</span> <strong>'+h(ticket.username||'—')+'</strong></div>'+
-      '<div><span style="color:var(--txM)">Empresa:</span> <strong>'+h(ticket.company||'—')+'</strong></div>'+
-      '<div><span style="color:var(--txM)">Pantalla:</span> '+h(ticket.page||'—')+'</div>'+
-      '<div><span style="color:var(--txM)">Fecha:</span> '+ticket.timestamp.slice(0,16).replace('T',' ')+'</div>'+
-      '</div>'+
-      '<div style="background:#F8F9FB;border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.6;white-space:pre-wrap">'+h(ticket.message)+'</div>'+
-      '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">Responder al usuario</label>'+
-      '<textarea id="ticketReply" class="inp" style="width:100%;height:80px;resize:vertical" placeholder="Escribe la respuesta..."></textarea></div>'+
-      '<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--txM)">Reenviar a informáticos (email o nota)</label>'+
-      '<div style="display:flex;gap:8px"><input id="ticketForwardEmail" class="inp" style="flex:1" placeholder="email@informaticos.com"><button class="btn btn-d" onclick="forwardTicket('+ticket.id+')">📧 Reenviar</button></div></div>'+
-      '<div style="display:flex;gap:8px;justify-content:flex-end">'+
-      '<button class="btn btn-d" onclick="closeModal()">Cerrar</button>'+
-      '<button class="btn btn-p" onclick="replyTicket('+ticket.id+')">Enviar respuesta</button>'+
-      '</div></div>';
-    document.body.appendChild(modal);
-    // Mark as seen
-    if(ticket.status==='nuevo')updateTicketStatus(ticket.id,'visto');
-  });
+window._soporteCurrentUser=null;
+async function loadUserChat(username,el){
+  window._soporteCurrentUser=username;
+  // Update sidebar selection
+  document.querySelectorAll('.soporte-user').forEach(function(d){d.style.background='';d.style.borderLeftColor='transparent';d.classList.remove('active');});
+  if(el){el.style.background='#fff';el.style.borderLeftColor='var(--pri)';el.classList.add('active');}
+  
+  var header=document.getElementById('soporteChatHeader');
+  var msgs=document.getElementById('soporteChatMessages');
+  if(header)header.textContent='\ud83d\udcac Chat con '+username;
+  if(msgs)msgs.innerHTML='<div style="color:var(--txM)">Cargando...</div>';
+  
+  try{
+    var fb=await api('/api/feedback');
+    var userMsgs=(fb||[]).filter(function(f){return f.username===username;}).sort(function(a,b){return a.id-b.id;});
+    
+    if(!userMsgs.length){
+      if(msgs)msgs.innerHTML='<div style="color:var(--txM);text-align:center;padding:20px">Sin mensajes</div>';
+      return;
+    }
+    
+    var html='';
+    userMsgs.forEach(function(m){
+      var typeIcons={error:'\ud83d\udc1b',mejora:'\ud83d\udca1',duda:'\u2753'};
+      var time=m.timestamp?m.timestamp.slice(0,16).replace('T',' '):'';
+      // User message (left)
+      html+='<div style="display:flex;margin-bottom:12px"><div style="max-width:75%;background:#E3F2FD;border-radius:12px 12px 12px 0;padding:10px 14px">'+
+        '<div style="font-size:10px;color:var(--txM);margin-bottom:4px">'+(typeIcons[m.type]||'')+' '+time+(m.page?' \u00b7 '+h(m.page):'')+'</div>'+
+        '<div style="font-size:13px;white-space:pre-wrap">'+h(m.message)+'</div>'+
+        '</div></div>';
+      // Admin reply (right)
+      if(m.reply){
+        html+='<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><div style="max-width:75%;background:#E8F5E9;border-radius:12px 12px 0 12px;padding:10px 14px">'+
+          '<div style="font-size:10px;color:var(--ok);margin-bottom:4px">\u2709\ufe0f '+h(m.replied_by||'Admin')+'</div>'+
+          '<div style="font-size:13px;white-space:pre-wrap">'+h(m.reply)+'</div>'+
+          '</div></div>';
+      }
+      // Mark as seen
+      if(m.status==='nuevo')updateTicketStatus(m.id,'visto');
+    });
+    
+    if(msgs){msgs.innerHTML=html;msgs.scrollTop=msgs.scrollHeight;}
+  }catch(e){if(msgs)msgs.innerHTML='<div style="color:var(--rd)">Error: '+e.message+'</div>';}
 }
 
-async function replyTicket(id){
-  var reply=document.getElementById('ticketReply').value.trim();
-  if(!reply){toast('Escribe una respuesta','error');return;}
+async function sendSoporteReply(){
+  var reply=document.getElementById('soporteReply');
+  if(!reply||!reply.value.trim())return;
+  var username=window._soporteCurrentUser;
+  if(!username){toast('Selecciona un usuario','error');return;}
+  
+  // Find the last unreplied message from this user
   try{
-    await api('/api/feedback/'+id+'/reply',{method:'POST',body:{reply:reply}});
-    closeModal();toast('✓ Respuesta enviada');render();
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-
-async function forwardTicket(id){
-  var email=document.getElementById('ticketForwardEmail').value.trim();
-  if(!email){toast('Escribe un email','error');return;}
-  try{
-    await api('/api/feedback/'+id+'/forward',{method:'POST',body:{email:email}});
-    await updateTicketStatus(id,'reenviado');
-    toast('✓ Ticket reenviado a '+email);
+    var fb=await api('/api/feedback');
+    var userMsgs=(fb||[]).filter(function(f){return f.username===username;}).sort(function(a,b){return b.id-a.id;});
+    var lastUnreplied=userMsgs.find(function(f){return !f.reply;});
+    if(!lastUnreplied&&userMsgs.length)lastUnreplied=userMsgs[0];
+    if(!lastUnreplied){toast('No hay mensajes para responder','error');return;}
+    
+    await api('/api/feedback/'+lastUnreplied.id+'/reply',{method:'POST',body:{reply:reply.value.trim()}});
+    reply.value='';
+    toast('\u2713 Respuesta enviada');
+    loadUserChat(username,null);
   }catch(e){toast('Error: '+e.message,'error');}
 }
 
