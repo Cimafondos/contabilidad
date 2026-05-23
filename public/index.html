@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cimafondos — Contabilidad</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2300854D'/><text x='50%25' y='55%25' text-anchor='middle' dominant-baseline='middle' font-size='16' font-weight='800' fill='white' font-family='sans-serif'>CF</text></svg>">
+<title>Muvail Conta</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2300854D'/><text x='50%25' y='55%25' text-anchor='middle' dominant-baseline='middle' font-size='16' font-weight='800' fill='white' font-family='sans-serif'>MC</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -426,7 +426,7 @@ function render(){
   });
   
   var sidebarHtml='<div class="sidebar'+(collapsed?' collapsed':'')+'" id="sidebar">'+
-    '<div class="side-header"><div class="side-header-logo">CF</div><div class="side-header-text">Cimafondos</div>'+
+    '<div class="side-header"><div class="side-header-logo">MC</div><div class="side-header-text">Muvail Conta</div>'+
     '<span class="side-edit-btn" onclick="toggleSidebarEdit()" style="cursor:pointer;font-size:14px;margin-left:auto;opacity:0.5;'+(window._sidebarEditMode?'opacity:1;':'')+'">🔧</span></div>'+
     '<div class="side-nav">';
   
@@ -555,7 +555,7 @@ function showEmergencyAccess(){
   alert(msg);
 }
 function renderLogin(){
-  $('app').innerHTML='<div style="min-height:100vh;background:linear-gradient(135deg,#F0FDF4 0%,#ECFDF5 50%,#F0F9FF 100%);display:flex;align-items:center;justify-content:center;padding:20px"><div style="width:100%;max-width:380px"><div style="text-align:center;margin-bottom:28px"><div style="width:48px;height:48px;border-radius:12px;background:var(--pri);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#fff;margin-bottom:12px">CF</div><div style="font-size:22px;font-weight:700;color:#1F2937">Cimafondos</div><div style="font-size:12px;color:#6B7280;margin-top:4px">Sistema contable</div></div><div style="background:#fff;border-radius:12px;padding:28px;box-shadow:0 4px 24px rgba(0,0,0,0.06);border:1px solid #E5E7EB"><div style="margin-bottom:14px"><label style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:5px">Usuario</label><input class="inp" id="lu" style="padding:10px 14px;font-size:13px" autofocus onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'lp\').focus();}"></div><div style="margin-bottom:18px"><label style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:5px">Contraseña</label><input class="inp" type="password" id="lp" style="padding:10px 14px;font-size:13px" onkeydown="if(event.key===\'Enter\'){event.preventDefault();doLogin();}"></div><div id="lerr" style="color:var(--rd);font-size:12px;margin-bottom:10px;text-align:center;min-height:18px"></div><button class="btn btn-p" style="width:100%;justify-content:center;padding:11px;font-size:14px;font-weight:600;border-radius:8px" onclick="doLogin()">Entrar</button></div><div style="font-size:11px;color:#9CA3AF;text-align:center;margin-top:16px"><span style="cursor:pointer;text-decoration:underline" onclick="showEmergencyAccess()">¿Olvidaste tu contraseña?</span></div></div></div>';
+  $('app').innerHTML='<div style="min-height:100vh;background:linear-gradient(135deg,#F0FDF4 0%,#ECFDF5 50%,#F0F9FF 100%);display:flex;align-items:center;justify-content:center;padding:20px"><div style="width:100%;max-width:380px"><div style="text-align:center;margin-bottom:28px"><div style="width:48px;height:48px;border-radius:12px;background:var(--pri);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#fff;margin-bottom:12px">MC</div><div style="font-size:22px;font-weight:700;color:#1F2937">Muvail Conta</div><div style="font-size:12px;color:#6B7280;margin-top:4px">Sistema contable</div></div><div style="background:#fff;border-radius:12px;padding:28px;box-shadow:0 4px 24px rgba(0,0,0,0.06);border:1px solid #E5E7EB"><div style="margin-bottom:14px"><label style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:5px">Usuario</label><input class="inp" id="lu" style="padding:10px 14px;font-size:13px" autofocus onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'lp\').focus();}"></div><div style="margin-bottom:18px"><label style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:5px">Contraseña</label><input class="inp" type="password" id="lp" style="padding:10px 14px;font-size:13px" onkeydown="if(event.key===\'Enter\'){event.preventDefault();doLogin();}"></div><div id="lerr" style="color:var(--rd);font-size:12px;margin-bottom:10px;text-align:center;min-height:18px"></div><button class="btn btn-p" style="width:100%;justify-content:center;padding:11px;font-size:14px;font-weight:600;border-radius:8px" onclick="doLogin()">Entrar</button></div><div style="font-size:11px;color:#9CA3AF;text-align:center;margin-top:16px"><span style="cursor:pointer;text-decoration:underline" onclick="showEmergencyAccess()">¿Olvidaste tu contraseña?</span></div></div></div>';
   setTimeout(function(){var el=$('lu');if(el)el.focus();},100);
 }
 async function doLogin(){
@@ -619,8 +619,8 @@ function renderCompanySelector(){
   $('app').innerHTML='<div style="min-height:100vh;background:linear-gradient(135deg,#F0FDF4 0%,#ECFDF5 50%,#F0F9FF 100%);display:flex;align-items:center;justify-content:center;padding:20px">'+
   '<div style="max-width:600px;width:100%">'+
   '<div style="text-align:center;margin-bottom:28px">'+
-  '<div style="width:48px;height:48px;border-radius:12px;background:var(--pri);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#fff;margin-bottom:12px">CF</div>'+
-  '<div style="font-size:22px;font-weight:700;color:#1F2937">Cimafondos</div>'+
+  '<div style="width:48px;height:48px;border-radius:12px;background:var(--pri);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#fff;margin-bottom:12px">MC</div>'+
+  '<div style="font-size:22px;font-weight:700;color:#1F2937">Muvail Conta</div>'+
   '<div style="font-size:13px;color:#6B7280;margin-top:6px">Hola, '+h(state.user.name)+'</div>'+
   '</div>'+
   '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;margin-bottom:20px">'+
@@ -1018,7 +1018,7 @@ function getChart(id,config){
 // ═══ DASHBOARD PROFESIONAL ═══
 function renderDash(c){
   if(!state.company||state.company.id==='_none_'){
-    c.innerHTML='<div style="text-align:center;padding:60px 20px"><div style="font-size:48px;margin-bottom:16px">🏢</div><h2 style="margin:0 0 8px">Bienvenido a Cimafondos</h2><p style="color:var(--txM);margin-bottom:24px">No tienes ninguna empresa asignada. Crea una empresa para empezar.</p><button class="btn btn-p" style="font-size:14px;padding:12px 24px" onclick="setView(\'migrupo\')">+ Crear mi primera empresa</button></div>';
+    c.innerHTML='<div style="text-align:center;padding:60px 20px"><div style="font-size:48px;margin-bottom:16px">🏢</div><h2 style="margin:0 0 8px">Bienvenido a Muvail Conta</h2><p style="color:var(--txM);margin-bottom:24px">No tienes ninguna empresa asignada. Crea una empresa para empezar.</p><button class="btn btn-p" style="font-size:14px;padding:12px 24px" onclick="setView(\'migrupo\')">+ Crear mi primera empresa</button></div>';
     return;
   }
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
@@ -4027,7 +4027,7 @@ function fixCompanyState(){
 function initEmpresas(){
   var em=getEmpresas();
   if(!em.length){
-    em=[{name:'Cimafondos S.L.',cif:'B98000001',direccion:'',cp:'',ciudad:'Valencia',provincia:'Valencia',activa:true},
+    em=[{name:'Muvail Conta S.L.',cif:'B98000001',direccion:'',cp:'',ciudad:'Valencia',provincia:'Valencia',activa:true},
         {name:'Valentia Alimentación S.L.',cif:'',direccion:'',cp:'',ciudad:'Valencia',provincia:'Valencia',activa:true},
         {name:'Espacio CF',cif:'',direccion:'',cp:'',ciudad:'Valencia',provincia:'Valencia',activa:true}];
     saveEmpresas(em);
