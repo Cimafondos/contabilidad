@@ -313,7 +313,10 @@ var TABS=[
 {id:'soporte',label:'💬 Soporte',groups:[{label:'',items:[{id:'soportePanel',icon:'💬',label:'Tickets'}]}]}
 ];
 
-function setView(v){if(v==='newEntry'){showAssistant();return;}if(v==='manualEntry'){showEntryModal();return;}state.view=v;history.pushState({view:v},'',null);render();}
+function setView(v){if(v==='newEntry'){showAssistant();return;}if(v==='manualEntry'){showEntryModal();return;}state.view=v;
+  // Auto-open the section that contains this view
+  if(window._sideOpen){window._sideOpen={};}
+  history.pushState({view:v},'',null);render();}
 
 // Browser back button — navigate between views, never exit the app
 window.addEventListener('popstate',function(e){
@@ -434,12 +437,12 @@ function render(){
   ];
   
   // Track which sections are open
-  if(!window._sideOpen)window._sideOpen={Contabilidad:true};
+  if(!window._sideOpen)window._sideOpen={};
   // Favorites
   if(!window._sideFavorites){try{window._sideFavorites=JSON.parse(localStorage.getItem('cf_sideFavs'))||[];}catch(e){window._sideFavorites=[];}}
-  // Always auto-open section containing active view
+  // Auto-open section containing active view ONLY if not explicitly set
   menuItems.forEach(function(sec){
-    if(sec.section){
+    if(sec.section&&window._sideOpen[sec.section]===undefined){
       var hasActive=sec.items.some(function(it){return state.view===it.id||(it.id==='soportePanel'&&state.view==='soporte');});
       if(hasActive)window._sideOpen[sec.section]=true;
     }
