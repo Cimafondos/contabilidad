@@ -1458,7 +1458,7 @@ function showEntryModal(entry,mode){
   '<div style="width:150px"><div class="lbl">Tipo de asiento</div><select class="sel" id="eType" style="width:100%">'+typeOpts+'</select></div>'+
   '<div style="width:180px"><div class="lbl">Asiento predefinido</div><select class="sel" id="ePredefined" style="width:100%" onchange="applyPredefinedEntry(this.value)">'+predOpts+'</select></div>'+
   '<div style="width:125px"><div class="lbl">Fecha</div><input type="date" class="inp" id="eDate" value="'+dateVal+'"></div>'+
-  '<div style="flex:1;min-width:150px"><div class="lbl">Concepto</div><input class="inp" id="eConcept" value="'+h(conceptVal)+'"></div>'+
+  '<div style="flex:1;min-width:150px"><div class="lbl">Concepto</div><input class="inp entryField" id="eConcept" value="'+h(conceptVal)+'" onkeydown="entryTab(event)"></div>'+
   '</div>'+
   '<div id="eLines"></div>'+
   '<div style="margin-top:6px;margin-bottom:12px"><button class="btn btn-d" onclick="addEntryLine()" style="font-size:12px">+ Añadir línea</button></div>'+
@@ -1499,7 +1499,7 @@ function applyPredefinedEntry(id){
 function renderEntryLines(){
   var el=$('eLines');if(!el)return;
   el.innerHTML='<table style="font-size:12px"><thead><tr><th style="width:35%">Cuenta</th><th style="width:20%">Descripción</th><th style="width:15%">Documento</th><th style="width:12%;text-align:right">Debe</th><th style="width:12%;text-align:right">Haber</th><th style="width:30px"></th></tr></thead><tbody>'+
-  entryLines.map(function(l,i){return '<tr><td>'+acSearchHTML('eAc'+i,l.aLabel,'onAcSelect')+'</td><td><input class="inp" style="font-size:11px" id="eDesc'+i+'" value="'+h(l.desc||'')+'" placeholder="Descripción" oninput="entryLines['+i+'].desc=this.value"></td><td><input class="inp" style="font-size:11px" id="eDoc'+i+'" value="'+h(l.doc||'')+'" placeholder="Nº doc" oninput="entryLines['+i+'].doc=this.value"></td><td><input class="inp" style="text-align:right" id="eD'+i+'" value="'+(l.d?fmtInput(l.d):'')+'" oninput="fmtAmtField(this);onDebeInput('+i+')" onfocus="selectAll(this)"></td><td><input class="inp" style="text-align:right" id="eH'+i+'" value="'+(l.h?fmtInput(l.h):'')+'" oninput="fmtAmtField(this);onHaberInput('+i+')" onfocus="selectAll(this)"></td><td><button class="abtn" style="color:var(--rd);font-size:14px" onclick="entryLines.splice('+i+',1);renderEntryLines()" title="Eliminar línea">✕</button></td></tr>';}).join('')+
+  entryLines.map(function(l,i){return '<tr><td>'+acSearchHTML('eAc'+i,l.aLabel,'onAcSelect')+'</td><td><input class="inp entryField" style="font-size:11px" id="eDesc'+i+'" value="'+h(l.desc||'')+'" placeholder="Descripción" oninput="entryLines['+i+'].desc=this.value" onkeydown="entryTab(event)"></td><td><input class="inp entryField" style="font-size:11px" id="eDoc'+i+'" value="'+h(l.doc||'')+'" placeholder="Nº doc" oninput="entryLines['+i+'].doc=this.value" onkeydown="entryTab(event)"></td><td><input class="inp entryField" style="text-align:right" id="eD'+i+'" value="'+(l.d?fmtInput(l.d):'')+'" oninput="fmtAmtField(this);onDebeInput('+i+')" onfocus="selectAll(this)" onkeydown="entryTab(event)"></td><td><input class="inp entryField" style="text-align:right" id="eH'+i+'" value="'+(l.h?fmtInput(l.h):'')+'" oninput="fmtAmtField(this);onHaberInput('+i+')" onfocus="selectAll(this)" onkeydown="entryTab(event)"></td><td><button class="abtn" style="color:var(--rd);font-size:14px" onclick="entryLines.splice('+i+',1);renderEntryLines()" title="Eliminar línea">✕</button></td></tr>';}).join('')+
   '</tbody></table>';
   updateBalance();
 }
@@ -1530,6 +1530,25 @@ function onHaberInput(idx){
 }
 
 function addEntryLine(){entryLines.push({a:'',aLabel:'',d:'',h:'',desc:'',doc:''});renderEntryLines();}
+function entryTab(e){
+  if(e.key==='Enter'){
+    e.preventDefault();
+    var modal=document.getElementById('entryModal');if(!modal)return;
+    var inputs=Array.from(modal.querySelectorAll('input:not([type=hidden]):not([type=checkbox]),select,textarea'));
+    var idx=inputs.indexOf(e.target);
+    if(idx>=0&&idx<inputs.length-1){
+      inputs[idx+1].focus();
+      if(inputs[idx+1].select)inputs[idx+1].select();
+    } else {
+      // Last field — add new line and focus first field of new line
+      addEntryLine();
+      setTimeout(function(){
+        var newInputs=Array.from(modal.querySelectorAll('input:not([type=hidden]):not([type=checkbox]),select,textarea'));
+        if(newInputs.length)newInputs[newInputs.length-5].focus();
+      },50);
+    }
+  }
+}
 function updateBalance(){
   // Read current values from inputs
   for(var i=0;i<entryLines.length;i++){
