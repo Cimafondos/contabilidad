@@ -3010,7 +3010,7 @@ function renderExpedientes(c){
   var estados={};expedientes.forEach(function(e){var st=e.estado||'gestion';if(!estados[st])estados[st]=0;estados[st]++;});
 
   c.innerHTML='<div class="row"><div class="stat"><div class="stat-v" style="color:var(--bl)">'+expedientes.length+'</div><div class="stat-l">📁 Total expedientes</div></div><div class="stat"><div class="stat-v" style="color:var(--am)">'+fmt(totalDeuda)+'€</div><div class="stat-l">💰 Deuda total</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(totalPrecio)+'€</div><div class="stat-l">🏷️ Precio compra total</div></div><div class="stat"><div class="stat-v" style="color:var(--vi)">'+fmt(totalDeuda>0?(totalPrecio/totalDeuda*100):0)+'%</div><div class="stat-l">📊 % medio compra</div></div></div>'+
-  '<div class="card"><div class="card-h"><span>📁 Expedientes NPL — '+expedientes.length+'</span><div style="display:flex;gap:4px"><button class="btn btn-p" onclick="newExpediente()">+ Nuevo</button><button class="btn btn-d" style="font-size:10px" onclick="exportExpExcel()">📊</button></div></div>'+
+  '<div class="card"><div class="card-h"><span>Expedientes NPL — '+expedientes.length+'</span><div style="display:flex;gap:4px"><button class="btn btn-p" onclick="newExpediente()">+ Nuevo</button><button class="btn btn-d" style="font-size:10px" onclick="exportExpExcel()">📊</button></div></div>'+
   (expedientes.length?'<div class="scr"><table><thead><tr><th>Código</th><th>Deudor</th><th style="text-align:right">Deuda</th><th style="text-align:right">Precio</th><th>Tipo</th><th>Estado</th><th>Captador</th><th>Judicial</th><th style="width:50px"></th></tr></thead><tbody>'+
   expedientes.map(function(e,i){
     var rentab=e.deuda&&e.precio?Math.round((e.deuda-e.precio)/e.precio*100):0;
@@ -3249,7 +3249,7 @@ function renderModelo390(c){
   [21,10,4].forEach(function(r){var d=rates[r];if(Math.abs(d.baseR)>0.01||Math.abs(d.cuotaR)>0.01){devRows+='<tr><td style="padding-left:20px">Régimen general '+r+'%</td><td style="text-align:right">'+fmt(d.baseR)+'€</td><td style="text-align:right">'+fmt(d.cuotaR)+'€</td></tr>';}});
   var dedRows='';
   [21,10,4].forEach(function(r){var d=rates[r];if(Math.abs(d.baseS)>0.01||Math.abs(d.cuotaS)>0.01){dedRows+='<tr><td style="padding-left:20px">Cuotas soportadas '+r+'%</td><td style="text-align:right">'+fmt(d.baseS)+'€</td><td style="text-align:right">'+fmt(d.cuotaS)+'€</td></tr>';}});
-  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 390 — Resumen anual IVA '+state.ejercicio+'</span></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 390 — Resumen anual IVA '+state.ejercicio+'</span></div>'+
   '<table><thead><tr><th>Concepto</th><th style="text-align:right">Base imponible</th><th style="text-align:right">Cuota IVA</th></tr></thead><tbody>'+
   '<tr><td colspan="3" style="font-weight:700;background:#E8F8ED;color:var(--ok)">IVA DEVENGADO (Repercutido)</td></tr>'+
   devRows+
@@ -3287,7 +3287,7 @@ function renderModelo111(c){
   var totalRet=datos.reduce(function(s,d){return s+d.total;},0);
   var verificacion='';
   if(totalBaseT>0&&totalRet===0)verificacion='<div style="padding:8px 14px;background:#FDF0F0;border-bottom:1px solid var(--rd);font-size:11px;color:var(--rd)">⚠️ Nóminas '+fmt(totalBaseT)+'€ sin retenciones IRPF (cuenta 4751). Revisa los asientos de nómina.</div>';
-  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 111 — Retenciones IRPF '+state.ejercicio+'</span></div>'+verificacion+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 111 — Retenciones IRPF '+state.ejercicio+'</span></div>'+verificacion+
   '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Base trabajadores</th><th style="text-align:right">Retenc. trabajo</th><th style="text-align:right">Base profesionales</th><th style="text-align:right">Retenc. profes.</th><th style="text-align:right">Total retenciones</th></tr></thead><tbody>'+
   datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+fmt(d.baseT)+'€</td><td style="text-align:right">'+fmt(d.retT)+'€</td><td style="text-align:right">'+fmt(d.baseP)+'€</td><td style="text-align:right">'+fmt(d.retP)+'€</td><td style="text-align:right;font-weight:700;color:var(--rd)">'+fmt(d.total)+'€</td></tr>';}).join('')+
   '<tr class="total"><td>ANUAL</td><td style="text-align:right">'+fmt(totalBaseT)+'€</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.retT;},0))+'€</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.baseP;},0))+'€</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.retP;},0))+'€</td><td style="text-align:right;font-size:14px">'+fmt(totalRet)+'€</td></tr></tbody></table></div>';
@@ -3349,7 +3349,7 @@ function renderModelo347(c){
   var totalCompras=lista.reduce(function(s,x){return s+x.compras;},0);
   var totalVentas=lista.reduce(function(s,x){return s+x.ventas;},0);
   
-  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 347 — Terceros >'+fmt(m347Minimo)+'€ — '+state.ejercicio+'</span><span class="badge badge-b">'+lista.length+' declarables</span></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 347 — Terceros >'+fmt(m347Minimo)+'€ — '+state.ejercicio+'</span><span class="badge badge-b">'+lista.length+' declarables</span></div>'+
   '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4;display:flex;justify-content:space-between;align-items:center"><span>Operaciones con clientes y proveedores (IVA incluido). Presentación: febrero año siguiente.</span><div style="display:flex;gap:6px;align-items:center"><span style="font-size:10px;font-weight:600">Mínimo €:</span><input class="inp" style="width:90px;font-size:10px;padding:3px 6px;text-align:right" id="m347min" value="'+fmt(m347Minimo)+'" onfocus="selectAll(this)"><button class="btn btn-p" style="font-size:9px;padding:3px 8px" onclick="var raw=$(\'m347min\').value.replace(/\\./g,\'\').replace(\',\',\'.\');m347Minimo=parseFloat(raw)||3005.06;render();">Aplicar</button></div></div>'+
   (lista.length?'<table><thead><tr><th>Tercero</th><th>CIF/NIF</th><th style="text-align:right">Compras (IVA incl.)</th><th style="text-align:right">Ventas (IVA incl.)</th><th style="text-align:right">Total</th><th style="text-align:right">1T</th><th style="text-align:right">2T</th><th style="text-align:right">3T</th><th style="text-align:right">4T</th></tr></thead><tbody>'+
   lista.map(function(x,i){var t=x.compras+x.ventas;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis">'+h(x.nombre)+'</td><td style="font-size:10px">'+h(x.cif||'—')+'</td><td style="text-align:right;color:var(--rd)">'+fmt(x.compras)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(x.ventas)+'€</td><td style="text-align:right;font-weight:700">'+fmt(t)+'€</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[0])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[1])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[2])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[3])+'</td></tr>';}).join('')+
@@ -3371,7 +3371,7 @@ function renderTareas(c){
   var vencidas=pendientes.filter(function(t){return t.fecha&&t.fecha<hoy;});
 
   c.innerHTML='<div class="row"><div class="stat"><div class="stat-v" style="color:var(--am)">'+pendientes.length+'</div><div class="stat-l">📋 Pendientes</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+vencidas.length+'</div><div class="stat-l">⚠️ Vencidas</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+completadas.length+'</div><div class="stat-l">✅ Completadas</div></div></div>'+
-  '<div class="card"><div class="card-h"><span>✅ Tareas — '+tareas.length+'</span><button class="btn btn-p" onclick="newTarea()">+ Nueva tarea</button></div>'+
+  '<div class="card"><div class="card-h"><span>Tareas — '+tareas.length+'</span><button class="btn btn-p" onclick="newTarea()">+ Nueva tarea</button></div>'+
   (pendientes.length?'<table><thead><tr><th style="width:30px">✓</th><th>Tarea</th><th>Expediente</th><th>Fecha límite</th><th>Prioridad</th><th style="width:30px"></th></tr></thead><tbody>'+
   pendientes.map(function(t,i){
     var idx=tareas.indexOf(t);
@@ -3420,7 +3420,7 @@ function renderCalendario(c){
   var proximos=eventos.filter(function(e){return e.date>=hoy;});
   var pasados=eventos.filter(function(e){return e.date<hoy;});
 
-  c.innerHTML='<div class="card"><div class="card-h"><span>📅 Calendario — '+eventos.length+' eventos</span></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Calendario — '+eventos.length+' eventos</span></div>'+
   '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Próximos: '+proximos.length+' · Pasados: '+pasados.length+'</div>'+
   '<div class="scr" style="max-height:500px"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Estado</th></tr></thead><tbody>'+
   eventos.map(function(e,i){
@@ -3439,7 +3439,7 @@ function renderModelo200(c){
   var tipo=resultado>0?0.25:0;
   var cuota=resultado>0?Math.round(resultado*tipo*100)/100:0;
   var deducciones=0;var liquidar=cuota-deducciones;
-  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 200 — Impuesto sobre Sociedades '+state.ejercicio+'</span></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 200 — Impuesto sobre Sociedades '+state.ejercicio+'</span></div>'+
   '<table><tbody>'+
   '<tr><td style="font-weight:600;width:60%">A) Ingresos computables</td><td style="text-align:right;color:var(--ok)">'+fmt(ingresos)+'€</td></tr>'+
   '<tr><td style="font-weight:600">B) Gastos deducibles</td><td style="text-align:right;color:var(--rd)">'+fmt(gastos)+'€</td></tr>'+
@@ -4467,7 +4467,7 @@ function renderCartera(c){
     var n=estados[st.k]||0;var pct=expedientes.length>0?Math.round(n/expedientes.length*100):0;
     return '<div style="text-align:center;padding:12px;border:1px solid var(--bd);border-radius:6px"><div style="font-size:24px;font-weight:700">'+n+'</div><div style="font-size:10px;color:var(--txM)">'+st.l+'</div><div style="margin-top:4px"><span class="badge '+st.c+'">'+pct+'%</span></div></div>';
   }).join('')+'</div></div></div>'+
-  '<div class="card"><div class="card-h"><span>📁 Expedientes por tipo</span></div>'+
+  '<div class="card"><div class="card-h"><span>Expedientes por tipo</span></div>'+
   (function(){
     var tipos={};expedientes.forEach(function(e){var t=e.tipo||'otros';if(!tipos[t])tipos[t]={count:0,deuda:0,precio:0};tipos[t].count++;tipos[t].deuda+=(e.deuda||0);tipos[t].precio+=(e.precio||0);});
     return '<table><thead><tr><th>Tipo</th><th style="text-align:right">Expedientes</th><th style="text-align:right">Deuda</th><th style="text-align:right">Inversión</th><th style="text-align:right">% compra</th></tr></thead><tbody>'+
@@ -4488,7 +4488,7 @@ function renderRentabilidad(c){
   var rentabMedia=totalInvertido>0?Math.round((totalRecuperable-totalInvertido)/totalInvertido*100):0;
 
   c.innerHTML='<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+fmt(totalInvertido)+'€</div><div class="stat-l">🏷️ Invertido</div></div><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(totalRecuperable)+'€</div><div class="stat-l">💰 Recuperable</div></div><div class="stat"><div class="stat-v" style="color:var(--ok)">'+rentabMedia+'%</div><div class="stat-l">📊 Rentabilidad media</div></div><div class="stat"><div class="stat-v" style="color:var(--vi)">x'+(totalInvertido>0?(totalRecuperable/totalInvertido).toFixed(1):'0')+'</div><div class="stat-l">📈 Múltiplo medio</div></div></div>'+
-  '<div class="card"><div class="card-h"><span>💰 Rentabilidad por expediente</span></div>'+
+  '<div class="card"><div class="card-h"><span>Rentabilidad por expediente</span></div>'+
   (items.length?'<table><thead><tr><th>Código</th><th>Deudor</th><th style="text-align:right">Inversión</th><th style="text-align:right">Deuda</th><th style="text-align:right">Rentab.</th><th style="text-align:right">Múltiplo</th><th>Estado</th><th>Barra</th></tr></thead><tbody>'+
   items.map(function(x,i){
     var barW=Math.min(Math.max(x.rentab,0),500)/5;
@@ -4531,7 +4531,7 @@ function renderModelo115(c){
     var retencion=Math.round(baseAlq*0.19*100)/100;
     return {name:t.name,base:baseAlq,retencion:retencion};
   });
-  c.innerHTML='<div class="card"><div class="card-h"><span>📋 Modelo 115 — Retenciones alquileres '+state.ejercicio+'</span></div>'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 115 — Retenciones alquileres '+state.ejercicio+'</span></div>'+
   '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Retención 19% sobre alquileres de locales de negocio. Presentación trimestral.</div>'+
   '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Nº perceptores</th><th style="text-align:right">Base retenciones</th><th style="text-align:right">Retenciones (19%)</th><th style="text-align:right">A ingresar</th></tr></thead><tbody>'+
   datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+(d.base>0?1:0)+'</td><td style="text-align:right">'+fmt(d.base)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.retencion)+'€</td><td style="text-align:right;font-weight:700">'+fmt(d.retencion)+'€</td></tr>';}).join('')+
@@ -4549,7 +4549,7 @@ function renderCuentasAnuales(c){
     if(g>=1&&g<=5){if(x[1]>0)activo+=x[1];else pasivo+=(-x[1]);}
   });
   var resultado=ingresos-gastos;
-  c.innerHTML='<div class="card"><div class="card-h"><span>📚 Cuentas Anuales — Registro Mercantil '+state.ejercicio+'</span></div><div class="card-b">'+
+  c.innerHTML='<div class="card"><div class="card-h"><span>Cuentas Anuales — Registro Mercantil '+state.ejercicio+'</span></div><div class="card-b">'+
   '<div style="font-size:12px;color:var(--txM);margin-bottom:14px">Las Cuentas Anuales comprenden el Balance, la Cuenta de PyG y la Memoria. Para PYMES se puede presentar en formato abreviado.</div>'+
   '<div class="grid-2">'+
   '<div class="card"><div class="card-h" style="color:var(--bl)">Balance de situación</div><div class="card-b">'+
@@ -5007,11 +5007,17 @@ function renderConciliacion(c){
   var totalConc=movsBanco.filter(function(m){return m.conciliado;}).length;
   var totalPend=movsBanco.length-totalConc;
   var saldo=0;
+  var pctConc=movsBanco.length?Math.round(totalConc/movsBanco.length*100):0;
 
-  c.innerHTML='<div class="card"><div class="card-h"><span>🔄 Conciliación bancaria</span><div style="display:flex;gap:8px;align-items:center"><span class="badge badge-g conc-count">'+totalConc+' conciliados</span><span class="badge badge-r conc-count">'+totalPend+' pendientes</span></div></div>'+
-  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4;display:flex;justify-content:space-between;align-items:center"><span>Marca los movimientos que coinciden con tu extracto del banco.</span><div style="display:flex;gap:6px"><button class="btn btn-d" style="font-size:10px" onclick="concSelectAll()">☑ Marcar todo</button><button class="btn btn-d" style="font-size:10px" onclick="concDeselectAll()">☐ Desmarcar todo</button></div></div>'+
+  c.innerHTML=dateFilterHTML()+
+  '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Conciliados</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+totalConc+'</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Pendientes</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+totalPend+'</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Progreso</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+pctConc+'%</div><div style="background:#E5E7EB;border-radius:4px;height:4px;margin-top:6px"><div style="background:var(--ok);border-radius:4px;height:4px;width:'+pctConc+'%"></div></div></div></div>'+
+  '<div class="card"><div class="card-h"><span>Conciliación bancaria</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="concSelectAll()">Marcar todo</button><button class="btn btn-d" onclick="concDeselectAll()">Desmarcar todo</button></div></div>'+
+  '<div style="padding:8px 16px;font-size:11px;color:var(--txM);border-bottom:1px solid #F3F4F6">Marca los movimientos que coinciden con tu extracto del banco</div>'+
   (movsBanco.length?'<div class="scr" style="max-height:500px"><table><thead><tr><th style="width:30px">✓</th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Entrada</th><th style="text-align:right">Salida</th><th style="text-align:right">Saldo</th></tr></thead><tbody>'+
-  movsBanco.map(function(m,i){saldo+=m.debe-m.haber;return '<tr class="'+(i%2?'alt':'')+'" data-conc-id="'+m.id+'" style="'+(m.conciliado?'opacity:0.6':'')+'"><td><input type="checkbox" class="conc-chk" data-id="'+m.id+'" '+(m.conciliado?'checked':'')+' onchange="toggleConciliado(\''+m.id+'\',this.checked)"></td><td style="font-size:10px">'+fmtD(m.date)+'</td><td style="font-size:11px">'+h(m.concept)+'</td><td style="text-align:right;color:var(--ok)">'+(m.debe>0?fmt(m.debe):'')+'</td><td style="text-align:right;color:var(--rd)">'+(m.haber>0?fmt(m.haber):'')+'</td><td style="text-align:right;font-weight:600">'+fmt(saldo)+'</td></tr>';}).join('')+
+  movsBanco.map(function(m,i){saldo+=m.debe-m.haber;return '<tr class="'+(i%2?'alt':'')+'" data-conc-id="'+m.id+'" style="'+(m.conciliado?'opacity:0.5':'')+'"><td><input type="checkbox" class="conc-chk" data-id="'+m.id+'" '+(m.conciliado?'checked':'')+' onchange="toggleConciliado(\''+m.id+'\',this.checked)"></td><td style="font-size:11px">'+fmtD(m.date)+'</td><td style="font-size:11px">'+h(m.concept)+'</td><td style="text-align:right;color:var(--ok)">'+(m.debe>0?fmt(m.debe):'')+'</td><td style="text-align:right;color:var(--rd)">'+(m.haber>0?fmt(m.haber):'')+'</td><td style="text-align:right;font-weight:600">'+fmt(saldo)+'</td></tr>';}).join('')+
   '</tbody></table></div>':'<div class="empty">Sin movimientos bancarios</div>')+'</div>';
 }
 function concSelectAll(){loadConciliado();document.querySelectorAll('.conc-chk').forEach(function(ch){ch.checked=true;conciliadoState[ch.dataset.id]=true;var row=document.querySelector('[data-conc-id="'+ch.dataset.id+'"]');if(row)row.style.opacity='0.6';});saveConciliado();var badges=document.querySelectorAll('.conc-count');var total=document.querySelectorAll('.conc-chk').length;if(badges.length>=2){badges[0].textContent=total+' conciliados';badges[1].textContent='0 pendientes';}}
@@ -5045,18 +5051,21 @@ function renderInmovilizado(c){
   var totalAmort=inmovilizados.reduce(function(s,x){return s+(x.amortAcum||0);},0);
   var totalNeto=totalCoste-totalAmort;
 
-  c.innerHTML='<div class="card"><div class="card-h"><span>🏗️ Inmovilizado — '+inmovilizados.length+' activos</span><button class="btn btn-p" onclick="newInmovilizado()">+ Nuevo activo</button></div>'+
-  '<div style="padding:8px 14px;display:flex;gap:20px;font-size:12px;border-bottom:1px solid #EDF0F4"><div>Coste: <strong>'+fmt(totalCoste)+'€</strong></div><div>Amort. acum: <strong style="color:var(--rd)">'+fmt(totalAmort)+'€</strong></div><div>Valor neto: <strong style="color:var(--ok)">'+fmt(totalNeto)+'€</strong></div></div>'+
+  c.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Coste total</div><div style="font-size:22px;font-weight:700;color:var(--tx)">'+fmt(totalCoste)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Amortización acumulada</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(totalAmort)+'€</div></div>'+
+  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Valor neto contable</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(totalNeto)+'€</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>Inmovilizado — '+inmovilizados.length+' activos</span><button class="btn btn-p" onclick="newInmovilizado()">Nuevo activo</button></div>'+
   (inmovilizados.length?'<div class="scr"><table><thead><tr><th>Descripción</th><th>Cuenta</th><th>Fecha alta</th><th style="text-align:right">Coste</th><th>Método</th><th>Años</th><th style="text-align:right">Amort/año</th><th style="text-align:right">Acumulada</th><th style="text-align:right">Neto</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
   inmovilizados.map(function(inv,i){
     var amortAnual=inv.metodo==='lineal'?Math.round(inv.coste/inv.vida*100)/100:0;
     var neto=inv.coste-(inv.amortAcum||0);
     return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:11px">'+h(inv.desc)+'</td><td class="acct" style="font-size:10px">'+inv.cuenta+'</td><td style="font-size:10px">'+fmtD(inv.fechaAlta)+'</td><td style="text-align:right">'+fmt(inv.coste)+'</td><td style="font-size:10px"><span class="badge badge-b">'+inv.metodo+'</span></td><td style="text-align:center">'+inv.vida+'</td><td style="text-align:right;color:var(--am)">'+fmt(amortAnual)+'</td><td style="text-align:right;color:var(--rd)">'+fmt(inv.amortAcum||0)+'</td><td style="text-align:right;font-weight:600;color:var(--ok)">'+fmt(neto)+'</td><td style="white-space:nowrap"><button class="abtn" style="color:var(--rd)" onclick="deleteInmovilizado('+i+')">🗑</button></td></tr>';
-  }).join('')+'</tbody></table></div>':'<div class="empty"><div style="font-size:30px;margin-bottom:8px">🏗️</div>Sin activos de inmovilizado</div>')+'</div>';
+  }).join('')+'</tbody></table></div>':'<div class="empty">Sin activos de inmovilizado</div>')+'</div>';
 }
 function newInmovilizado(){
   var bg=document.createElement('div');bg.className='modal-bg';bg.id='inmovModal';
-  var h2='<div class="modal" style="max-width:550px"><div class="card-h"><span>🏗️ Nuevo activo inmovilizado</span><button class="btn btn-d" onclick="$(\'inmovModal\').remove()">✕</button></div><div class="card-b">';
+  var h2='<div class="modal" style="max-width:550px"><div class="card-h"><span>Nuevo activo inmovilizado</span><button class="btn btn-d" onclick="$(\'inmovModal\').remove()">✕</button></div><div class="card-b">';
   h2+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
   h2+='<div style="grid-column:span 2"><div class="lbl">Descripción *</div><input class="inp" id="invDesc" placeholder="Ordenador portátil"></div>';
   h2+='<div><div class="lbl">Cuenta contable</div><select class="sel" id="invCuenta" style="width:100%"><option value="21000000">210 - Terrenos</option><option value="21100000">211 - Construcciones</option><option value="21200000">212 - Inst. técnicas</option><option value="21300000">213 - Maquinaria</option><option value="21600000">216 - Mobiliario</option><option value="21700000" selected>217 - Eq. informáticos</option><option value="21800000">218 - Elem. transporte</option></select></div>';
