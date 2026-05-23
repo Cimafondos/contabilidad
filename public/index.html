@@ -577,36 +577,37 @@ function renderCompanySelector(){
   var isAdmin=state.user&&(state.user.role==='superadmin'||state.user.role==='group_admin');
   
   var empCards=emps.map(function(em){
-    return '<div style="background:#fff;border:2px solid #E8E8E8;border-radius:10px;padding:16px;cursor:pointer;transition:all 0.2s" '+
-    'onmouseover="this.style.borderColor=\'var(--pri)\';this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" '+
-    'onmouseout="this.style.borderColor=\'#E8E8E8\';this.style.boxShadow=\'none\'" '+
+    return '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;cursor:pointer;transition:all 0.2s" '+
+    'onmouseover="this.style.borderColor=\'var(--pri)\';this.style.boxShadow=\'0 4px 16px rgba(0,0,0,0.08)\';this.style.transform=\'translateY(-2px)\'" '+
+    'onmouseout="this.style.borderColor=\'#E5E7EB\';this.style.boxShadow=\'none\';this.style.transform=\'none\'" '+
     'onclick="selectCompany(\''+h(em.id)+'\')">'+
-    '<div style="font-size:20px;margin-bottom:6px">🏢</div>'+
-    '<div style="font-weight:700;font-size:14px">'+h(em.name)+'</div>'+
-    '<div style="font-size:11px;color:var(--txM);margin-top:2px">'+(em.cif||'Sin CIF')+'</div>'+
+    '<div style="width:40px;height:40px;border-radius:10px;background:#F0FDF4;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:10px;font-weight:700;color:var(--pri)">'+h((em.name||'E')[0])+'</div>'+
+    '<div style="font-weight:700;font-size:14px;color:#1F2937">'+h(em.name)+'</div>'+
+    '<div style="font-size:11px;color:#9CA3AF;margin-top:3px">'+(em.cif||'Sin CIF')+'</div>'+
     '</div>';
   }).join('');
   
   if(!empCards){
-    empCards='<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--txM)">'+
-    '<div style="font-size:36px;margin-bottom:10px">📂</div>'+
-    '<div>No tienes empresas creadas</div>'+
+    empCards='<div style="grid-column:1/-1;text-align:center;padding:40px;color:#9CA3AF">'+
+    '<div style="font-size:40px;margin-bottom:12px">📂</div>'+
+    '<div style="font-size:14px">No tienes empresas creadas</div>'+
     '</div>';
   }
   
-  $('app').innerHTML='<div style="min-height:100vh;background:linear-gradient(135deg,#F0F4F8 0%,#E8F0FE 100%);display:flex;align-items:center;justify-content:center;padding:20px">'+
+  $('app').innerHTML='<div style="min-height:100vh;background:linear-gradient(135deg,#F0FDF4 0%,#ECFDF5 50%,#F0F9FF 100%);display:flex;align-items:center;justify-content:center;padding:20px">'+
   '<div style="max-width:600px;width:100%">'+
-  '<div style="text-align:center;margin-bottom:24px">'+
-  '<div style="font-size:32px;font-weight:700;color:var(--pri)">Cimafondos</div>'+
-  '<div style="font-size:13px;color:var(--txM);margin-top:4px">Hola, '+h(state.user.name)+' — Selecciona una empresa</div>'+
+  '<div style="text-align:center;margin-bottom:28px">'+
+  '<div style="width:48px;height:48px;border-radius:12px;background:var(--pri);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#fff;margin-bottom:12px">CF</div>'+
+  '<div style="font-size:22px;font-weight:700;color:#1F2937">Cimafondos</div>'+
+  '<div style="font-size:13px;color:#6B7280;margin-top:6px">Hola, '+h(state.user.name)+'</div>'+
   '</div>'+
-  '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:16px">'+
+  '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;margin-bottom:20px">'+
   empCards+
   '</div>'+
   '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'+
-  (isAdmin?'<button class="btn btn-p" onclick="showCreateCompanyFromSelector()">+ Nueva empresa</button>':'')+
-  (isAdmin?'<button class="btn btn-d" onclick="showManageUsersFromSelector()">👥 Gestionar usuarios</button>':'')+
-  '<button class="btn btn-d" onclick="logout()">Salir</button>'+
+  (isAdmin?'<button class="btn btn-p" style="border-radius:8px;padding:9px 18px" onclick="showCreateCompanyFromSelector()">+ Nueva empresa</button>':'')+
+  (isAdmin?'<button class="btn btn-d" style="border-radius:8px;padding:9px 18px" onclick="showManageUsersFromSelector()">Gestionar usuarios</button>':'')+
+  '<button class="btn btn-d" style="border-radius:8px;padding:9px 18px" onclick="logout()">Salir</button>'+
   '</div>'+
   '</div></div>';
 }
@@ -1016,7 +1017,7 @@ function renderDash(c){
     // Sin backup
     var bi=getLastBackupInfo();if(bi&&!bi.ok)alerts.push({type:'warning',msg:'💾 '+bi.text+'. Haz un backup.'});
     if(!alerts.length)return '';
-    return '<div style="margin-bottom:14px">'+alerts.map(function(a){return '<div style="background:'+(a.type==='danger'?'#FDF0F0;border:1px solid var(--rd);color:var(--rd)':'#FFF8E1;border:1px solid #FFD54F;color:#E65100')+';border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px">'+a.msg+'</div>';}).join('')+'</div>';
+    return '<div style="margin-bottom:16px">'+alerts.map(function(a){return '<div style="background:'+(a.type==='danger'?'#FEF2F2':'#FFFBEB')+';border:1px solid '+(a.type==='danger'?'#FECACA':'#FDE68A')+';border-radius:8px;padding:10px 16px;margin-bottom:8px;font-size:12px;color:'+(a.type==='danger'?'#991B1B':'#92400E')+';display:flex;align-items:center;gap:8px">'+a.msg+'</div>';}).join('')+'</div>';
   })()+
   '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px">'+
   '<div style="background:#fff;border-radius:10px;padding:18px 20px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:6px">Ventas</div><div style="font-size:24px;font-weight:700;color:var(--ok);letter-spacing:-0.02em">'+fmt(ti)+'€</div></div>'+
@@ -1024,12 +1025,12 @@ function renderDash(c){
   '<div style="background:#fff;border-radius:10px;padding:18px 20px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:6px">Resultado</div><div style="font-size:24px;font-weight:700;color:'+(tr>=0?'var(--ok)':'var(--rd)')+';letter-spacing:-0.02em">'+fmt(tr)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:18px 20px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:6px">Tesorería</div><div style="font-size:24px;font-weight:700;color:var(--bl);letter-spacing:-0.02em">'+fmt(tb)+'€</div></div>'+
   '<div style="background:#fff;border-radius:10px;padding:18px 20px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:6px">'+(tiva>=0?'IVA a pagar':'IVA a devolver')+'</div><div style="font-size:24px;font-weight:700;color:'+(tiva>=0?'var(--rd)':'var(--ok)')+';letter-spacing:-0.02em">'+fmt(Math.abs(tiva))+'€</div></div></div>'+
-  '<div class="grid-2"><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">📊 Ingresos vs Gastos mensuales</div><canvas id="chartIG"></canvas></div><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">🍩 Distribución de gastos</div><div style="display:flex;justify-content:center;align-items:center;height:210px"><canvas id="chartGasto"></canvas></div></div></div>'+
-  '<div class="grid-2"><div class="chart-box" style="min-height:260px"><div style="font-weight:600;margin-bottom:8px;font-size:12px">🏦 Evolución tesorería</div><canvas id="chartTes"></canvas></div><div class="card" style="min-height:260px"><div class="card-h">📒 Últimos asientos</div><div class="scr" style="max-height:220px"><table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
+  '<div class="grid-2"><div style="background:#fff;border-radius:10px;border:1px solid var(--bd);padding:18px;min-height:260px"><div style="font-weight:600;margin-bottom:12px;font-size:13px;color:var(--tx)">Ingresos vs Gastos</div><canvas id="chartIG"></canvas></div><div style="background:#fff;border-radius:10px;border:1px solid var(--bd);padding:18px;min-height:260px"><div style="font-weight:600;margin-bottom:12px;font-size:13px;color:var(--tx)">Distribución de gastos</div><div style="display:flex;justify-content:center;align-items:center;height:210px"><canvas id="chartGasto"></canvas></div></div></div>'+
+  '<div class="grid-2" style="margin-top:16px"><div style="background:#fff;border-radius:10px;border:1px solid var(--bd);padding:18px;min-height:260px"><div style="font-weight:600;margin-bottom:12px;font-size:13px;color:var(--tx)">Evolución tesorería</div><canvas id="chartTes"></canvas></div><div class="card" style="min-height:260px"><div class="card-h">Últimos asientos</div><div class="scr" style="max-height:220px"><table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
   all.slice(-10).reverse().map(function(e,i){var t=e.lines.reduce(function(s,l){return s+l.d;},0);return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px">'+fmtD(e.date)+'</td><td>'+h(e.concept)+'</td><td style="text-align:right" class="amt-pos">'+fmt(t)+'€</td></tr>';}).join('')+'</tbody></table></div></div></div>'+
-  '<div class="grid-2"><div class="card"><div class="card-h" style="color:var(--rd)">📊 Top gastos por categoría</div><table><tbody>'+
-  topProv.map(function(x,i){var pct=tg>0?Math.round(x[1]/tg*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right" class="amt-neg">'+fmt(x[1])+'€</td><td style="text-align:right;font-size:10px;color:var(--txM)">'+pct+'%</td></tr>';}).join('')+'</tbody></table></div><div class="card"><div class="card-h" style="color:var(--ok)">🏢 Top clientes</div><table><tbody>'+
-  topCli.map(function(x,i){var pct=ti>0?Math.round(x[1]/ti*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right" class="amt-pos">'+fmt(x[1])+'€</td><td style="text-align:right;font-size:10px;color:var(--txM)">'+pct+'%</td></tr>';}).join('')+'</tbody></table></div></div>';
+  '<div class="grid-2" style="margin-top:16px"><div class="card"><div class="card-h">Top gastos por categoría</div><div class="card-b"><table><tbody>'+
+  topProv.map(function(x,i){var pct=tg>0?Math.round(x[1]/tg*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right" class="amt-neg">'+fmt(x[1])+'€</td><td style="text-align:right;font-size:10px;color:var(--txM)">'+pct+'%</td></tr>';}).join('')+'</tbody></table></div></div><div class="card"><div class="card-h">Top clientes</div><div class="card-b"><table><tbody>'+
+  topCli.map(function(x,i){var pct=ti>0?Math.round(x[1]/ti*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(x[0])+'</td><td style="text-align:right" class="amt-pos">'+fmt(x[1])+'€</td><td style="text-align:right;font-size:10px;color:var(--txM)">'+pct+'%</td></tr>';}).join('')+'</tbody></table></div></div></div>';
 
   // Render charts
   setTimeout(function(){
@@ -1876,23 +1877,24 @@ function exportMasterExcel(type,title){
 
 // ═══ IMPORT — fixed to show results immediately ═══
 function renderImport(c){
-  c.innerHTML='<div class="card"><div class="card-h"><span>📂 Importar extracto bancario</span></div><div class="card-b">'+
-  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">'+
-  '<div style="border:2px dashed var(--bd);border-radius:6px;padding:20px;text-align:center;cursor:pointer" onclick="$(\'impFile\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--pri)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';processImportFile(event.dataTransfer.files[0])"><div style="font-size:28px">📊</div><div style="font-weight:600;margin:6px 0">Norma 43 / Excel</div><div style="font-size:10px;color:var(--txM)">.n43 · .xlsx · .xls · .csv</div><input id="impFile" type="file" accept=".n43,.xlsx,.xls,.csv" style="display:none" onchange="processImportFile(this.files[0])"></div>'+
-  '<div style="border:2px dashed var(--bd);border-radius:6px;padding:20px;text-align:center"><div style="font-size:28px">📋</div><div style="font-weight:600;margin:6px 0">Pegar desde Excel</div><div style="font-size:10px;color:var(--txM)">Copia columnas: Fecha · Concepto · Importe</div><textarea class="inp" id="impPaste" rows="3" style="margin-top:8px;font-size:10px" placeholder="Pega aquí los datos del banco"></textarea><button class="btn btn-p" style="width:100%;margin-top:6px" onclick="processImportPaste()">Procesar</button></div></div>'+
+  c.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
+  '<div class="card"><div class="card-h">Extracto bancario</div><div class="card-b">'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
+  '<div style="border:2px dashed var(--bd);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.15s" onclick="$(\'impFile\').click()" onmouseover="this.style.borderColor=\'var(--pri)\'" onmouseout="this.style.borderColor=\'var(--bd)\'" ondragover="event.preventDefault();this.style.borderColor=\'var(--pri)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';processImportFile(event.dataTransfer.files[0])"><div style="font-size:32px;margin-bottom:8px">☁</div><div style="font-weight:600;font-size:13px">Norma 43 / Excel</div><div style="font-size:11px;color:var(--txM);margin-top:4px">.n43 · .xlsx · .xls · .csv</div><input id="impFile" type="file" accept=".n43,.xlsx,.xls,.csv" style="display:none" onchange="processImportFile(this.files[0])"></div>'+
+  '<div style="text-align:center"><div style="font-weight:600;font-size:13px;margin-bottom:8px">Pegar desde Excel</div><div style="font-size:11px;color:var(--txM);margin-bottom:8px">Columnas: Fecha · Concepto · Importe</div><textarea class="inp" id="impPaste" rows="3" style="font-size:11px" placeholder="Pega aquí los datos del banco"></textarea><button class="btn btn-p" style="width:100%;margin-top:6px" onclick="processImportPaste()">Procesar</button></div></div>'+
   '</div></div>'+
-  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">'+
-  '<div class="card"><div class="card-h" style="color:var(--ok)"><span>📥 Importar facturas recibidas</span></div><div class="card-b">'+
-  '<div style="border:2px dashed var(--bd);border-radius:6px;padding:20px;text-align:center;cursor:pointer" onclick="$(\'impFactRec\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--ok)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';importFacturasExcel(event.dataTransfer.files[0],\'recibida\')"><div style="font-size:28px">📥</div><div style="font-weight:600;margin:6px 0">Excel del gestor documental</div><div style="font-size:10px;color:var(--txM)">Sube el .xlsx con las facturas de proveedores</div><div style="font-size:9px;color:var(--txM);margin-top:4px">Detecta: Nº factura · Proveedor · CIF · Bases IVA · Retenciones</div><input id="impFactRec" type="file" accept=".xlsx,.xls" style="display:none" onchange="importFacturasExcel(this.files[0],\'recibida\')"></div>'+
+  '<div class="card"><div class="card-h">Asientos contables</div><div class="card-b">'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
+  '<div style="border:2px dashed var(--bd);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.15s" onclick="$(\'impAsientos\').click()" onmouseover="this.style.borderColor=\'var(--vi)\'" onmouseout="this.style.borderColor=\'var(--bd)\'"><div style="font-size:32px;margin-bottom:8px">☁</div><div style="font-weight:600;font-size:13px">Subir Excel</div><div style="font-size:11px;color:var(--txM);margin-top:4px">Nº · Fecha · Cuenta · Descripción · Debe · Haber</div><input id="impAsientos" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="processAsientosFile(this.files[0])"></div>'+
+  '<div style="text-align:center"><div style="font-weight:600;font-size:13px;margin-bottom:8px">Pegar asientos</div><div style="font-size:11px;color:var(--txM);margin-bottom:8px">Nº · Fecha · Cuenta · Descripción · Debe · Haber</div><textarea class="inp" id="impPasteAsientos" rows="3" style="font-size:11px" placeholder="Pega aquí las líneas de asientos"></textarea><button class="btn btn-p" style="width:100%;margin-top:6px" onclick="processAsientosPaste()">Procesar asientos</button></div></div>'+
+  '<div id="impAsientosResult"></div></div></div></div>'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">'+
+  '<div class="card"><div class="card-h">Facturas recibidas</div><div class="card-b">'+
+  '<div style="border:2px dashed var(--bd);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.15s" onclick="$(\'impFactRec\').click()" onmouseover="this.style.borderColor=\'var(--ok)\'" onmouseout="this.style.borderColor=\'var(--bd)\'" ondragover="event.preventDefault();this.style.borderColor=\'var(--ok)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';importFacturasExcel(event.dataTransfer.files[0],\'recibida\')"><div style="font-size:32px;margin-bottom:8px">↓</div><div style="font-weight:600;font-size:13px">Excel del gestor documental</div><div style="font-size:11px;color:var(--txM);margin-top:4px">Sube el .xlsx con las facturas de proveedores</div><div style="font-size:10px;color:var(--txM);margin-top:6px">Detecta: Nº factura · Proveedor · CIF · Bases IVA · Retenciones</div><input id="impFactRec" type="file" accept=".xlsx,.xls" style="display:none" onchange="importFacturasExcel(this.files[0],\'recibida\')"></div>'+
   '</div></div>'+
-  '<div class="card"><div class="card-h" style="color:var(--bl)"><span>📤 Importar facturas emitidas</span></div><div class="card-b">'+
-  '<div style="border:2px dashed var(--bd);border-radius:6px;padding:20px;text-align:center;cursor:pointer" onclick="$(\'impFactEm\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--bl)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';importFacturasExcel(event.dataTransfer.files[0],\'emitida\')"><div style="font-size:28px">📤</div><div style="font-weight:600;margin:6px 0">Excel de facturas de venta</div><div style="font-size:10px;color:var(--txM)">Sube el .xlsx con las facturas a clientes</div><div style="font-size:9px;color:var(--txM);margin-top:4px">Detecta: Nº factura · Cliente · CIF · Bases IVA · Total</div><input id="impFactEm" type="file" accept=".xlsx,.xls" style="display:none" onchange="importFacturasExcel(this.files[0],\'emitida\')"></div>'+
-  '</div></div>'+
-  '<div class="card" style="margin-top:14px"><div class="card-h" style="color:#7B1FA2"><span>📒 Importar asientos contables</span></div><div class="card-b">'+
-  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
-  '<div style="border:2px dashed #7B1FA2;border-radius:6px;padding:20px;text-align:center;cursor:pointer;background:#F3E5F5" onclick="$(\'impAsientos\').click()"><div style="font-size:28px">📒</div><div style="font-weight:600;margin:6px 0;color:#7B1FA2">Subir Excel de asientos</div><div style="font-size:10px;color:var(--txM)">Columnas: Nº Asiento · Fecha · Cuenta · Descripción · Debe · Haber</div><input id="impAsientos" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="processAsientosFile(this.files[0])"></div>'+
-  '<div style="border:2px dashed #7B1FA2;border-radius:6px;padding:20px;text-align:center;background:#F3E5F5"><div style="font-size:28px">📋</div><div style="font-weight:600;margin:6px 0;color:#7B1FA2">Pegar asientos</div><div style="font-size:10px;color:var(--txM)">Nº Asiento · Fecha · Cuenta · Descripción · Debe · Haber</div><textarea class="inp" id="impPasteAsientos" rows="3" style="margin-top:8px;font-size:10px" placeholder="Pega aquí las líneas de asientos"></textarea><button class="btn" style="width:100%;margin-top:6px;background:#7B1FA2;color:#fff" onclick="processAsientosPaste()">Procesar asientos</button></div></div>'+
-  '<div id="impAsientosResult"></div></div></div>'+
+  '<div class="card"><div class="card-h">Facturas emitidas</div><div class="card-b">'+
+  '<div style="border:2px dashed var(--bd);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:border-color 0.15s" onclick="$(\'impFactEm\').click()" onmouseover="this.style.borderColor=\'var(--bl)\'" onmouseout="this.style.borderColor=\'var(--bd)\'" ondragover="event.preventDefault();this.style.borderColor=\'var(--bl)\'" ondragleave="this.style.borderColor=\'var(--bd)\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--bd)\';importFacturasExcel(event.dataTransfer.files[0],\'emitida\')"><div style="font-size:32px;margin-bottom:8px">↑</div><div style="font-weight:600;font-size:13px">Excel de facturas de venta</div><div style="font-size:11px;color:var(--txM);margin-top:4px">Sube el .xlsx con las facturas a clientes</div><div style="font-size:10px;color:var(--txM);margin-top:6px">Detecta: Nº factura · Cliente · CIF · Bases IVA · Total</div><input id="impFactEm" type="file" accept=".xlsx,.xls" style="display:none" onchange="importFacturasExcel(this.files[0],\'emitida\')"></div>'+
+  '</div></div></div>'+
   '<div id="impResult"></div>';
 }
 
