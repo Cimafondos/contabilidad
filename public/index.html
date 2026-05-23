@@ -514,7 +514,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.3</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.4</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -708,8 +708,8 @@ async function autoSyncGestor(){
     
     var file=new File([blob],'gestor_auto_sync.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     
-    // Process silently - importFacturasExcel will handle duplicates
-    importFacturasExcel(file,'recibida');
+    // Process with auto-detect tipo
+    importFacturasExcel(file,'auto');
     
     localStorage.setItem('cf_gestor_lastsync_'+(state.company?state.company.id:''),today);
     toast('⟳ Gestor documental sincronizado');
@@ -2627,7 +2627,7 @@ async function processFacturasRows(rows,tipo,resumenIVA){
       retencion:parseAmt(r[colMap.retencion]),
       recargo:parseAmt(r[colMap.recargo]),
       total:parseAmt(r[colMap.total]),
-      tipo:tipo,
+      tipo:tipo==='auto'?(tipoDoc.indexOf('EMITIDA')>=0||tipoDoc.indexOf('VENTA')>=0?'emitida':'recibida'):tipo,
       isAbono:tipoDoc.indexOf('ABONO')>=0
     };
     facturas.push(fact);
@@ -6274,8 +6274,16 @@ async function syncGestorDocumental(){
     // Convert blob to File and process
     var file=new File([blob],'gestor_sync.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     
-    // Use the existing importFacturasExcel function
-    importFacturasExcel(file,'recibida');
+    // Use the existing importFacturasExcel function with correct tipo
+    var tipoProc=$('gestorTipo')?$('gestorTipo').value:'todas';
+    if(tipoProc==='emitidas'){
+      importFacturasExcel(file,'emitida');
+    }else if(tipoProc==='recibidas'){
+      importFacturasExcel(file,'recibida');
+    }else{
+      // "todas" — process both types, the Excel contains a column "Tipo Documento"
+      importFacturasExcel(file,'auto');
+    }
     
     if(statusEl)statusEl.innerHTML='<span style="color:var(--ok);font-weight:600">✓ Sincronización completada — procesando facturas...</span>';
     toast('✓ Excel descargado del gestor documental');
