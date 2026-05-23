@@ -514,7 +514,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.2</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.3</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -676,6 +676,46 @@ async function selectCompany(companyId){
     state.accounts=[];state.entries=[];state.rules=[];
   }
   render();
+  // Auto-sync con Gestor Documental si hay API Key guardada
+  autoSyncGestor();
+}
+
+async function autoSyncGestor(){
+  var apiKey=localStorage.getItem('cf_gestor_apikey_'+(state.company?state.company.id:''));
+  if(!apiKey)return;
+  
+  // Check if already synced today
+  var lastSync=localStorage.getItem('cf_gestor_lastsync_'+(state.company?state.company.id:''));
+  var today=new Date().toISOString().slice(0,10);
+  if(lastSync===today)return;
+  
+  console.log('[Gestor] Auto-sincronizando...');
+  try{
+    var year=state.ejercicio||new Date().getFullYear();
+    var response=await fetch(API+'/api/gestor-sync',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+sessionStorage.getItem('cf_token')},
+      body:JSON.stringify({apiKey:apiKey,año:year,tipo:'todas'})
+    });
+    
+    if(!response.ok){
+      console.log('[Gestor] Error al sincronizar:', response.status);
+      return;
+    }
+    
+    var blob=await response.blob();
+    if(blob.size<100){console.log('[Gestor] Sin datos nuevos');return;}
+    
+    var file=new File([blob],'gestor_auto_sync.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    
+    // Process silently - importFacturasExcel will handle duplicates
+    importFacturasExcel(file,'recibida');
+    
+    localStorage.setItem('cf_gestor_lastsync_'+(state.company?state.company.id:''),today);
+    toast('⟳ Gestor documental sincronizado');
+  }catch(e){
+    console.log('[Gestor] Error auto-sync:', e.message);
+  }
 }
 
 async function recalcularDatos(){
