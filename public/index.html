@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.2</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.3</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2666,6 +2666,17 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     var tipoDoc=String(r[colMap.tipoDoc]||'').trim();
     var empresaOrigen=String(r[colMap.empresa]||'').trim();
     
+    // Extract CIF Emisor from concepto (the CIF column often has the receptor CIF)
+    var cifEmisor=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
+    if(cifEmisor&&cifEmisor[1]&&cifEmisor[1]!==cif){
+      cif=cifEmisor[1]; // Use emisor CIF for provider matching
+    }
+    // If CIF matches our own company CIF, try to find the real provider CIF
+    if(cif===state.company.cif||cif==='B22859755'){
+      var altCif=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
+      if(altCif&&altCif[1])cif=altCif[1];
+    }
+    
     // For emitidas: "Empresa Factura" is the CLIENT, "Proveedor" is US
     var isEmitida=tipoDoc.indexOf('EMITIDA')>=0||tipoDoc.indexOf('VENTA')>=0;
     // If user explicitly selected emitida, trust that
@@ -3096,8 +3107,8 @@ async function contabilizarFacturas(){
         masters.supplier.push(provRecord);
         saveMasters('supplier');
         if(!state.accounts.some(function(a){return a.code===provAccount;})){
-          try{api('/api/accounts/'+state.company.id,{method:'POST',body:{code:provAccount,name:f.tercero,g:4,t:'A'}});}catch(e){}
-          state.accounts.push({code:provAccount,name:f.tercero,g:4,t:'A'});
+          try{api('/api/accounts/'+state.company.id,{method:'POST',body:{code:provAccount,name:f.tercero,g:4,t:'P'}});}catch(e){}
+          state.accounts.push({code:provAccount,name:f.tercero,g:4,t:'P'});
         }
         provsCreated++;
       }else if(provRecord&&(provRecord.account==='40000000'||!provRecord.account)){
@@ -3106,8 +3117,8 @@ async function contabilizarFacturas(){
         provRecord.account=newProvAccount;
         saveMasters('supplier');
         if(!state.accounts.some(function(a){return a.code===newProvAccount;})){
-          try{api('/api/accounts/'+state.company.id,{method:'POST',body:{code:newProvAccount,name:provRecord.name,g:4,t:'A'}});}catch(e){}
-          state.accounts.push({code:newProvAccount,name:provRecord.name,g:4,t:'A'});
+          try{api('/api/accounts/'+state.company.id,{method:'POST',body:{code:newProvAccount,name:provRecord.name,g:4,t:'P'}});}catch(e){}
+          state.accounts.push({code:newProvAccount,name:provRecord.name,g:4,t:'P'});
         }
       }
       var cuentaProv=provRecord?provRecord.account:'40000000';
