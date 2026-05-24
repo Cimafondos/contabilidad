@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.4</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.5</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2470,6 +2470,32 @@ function exportMasterExcel(type,title){
 }
 
 // ═══ IMPORT — fixed to show results immediately ═══
+
+// ═══ LIMPIAR PROVEEDORES Y CUENTA 40000013 ═══
+async function cleanupProveedores(){
+  if(!confirm('¿Borrar TODOS los proveedores de maestros y la cuenta 40000013? Esto es necesario antes de reimportar para corregir la asignación de proveedores.'))return;
+  showProgress('Limpiando','Borrando proveedores...');
+  try{
+    await api('/api/masters-all/'+state.company.id+'/supplier',{method:'DELETE'});
+    // Also delete account 40000013
+    try{await api('/api/accounts/'+state.company.id+'/40000013',{method:'DELETE'});}catch(e){}
+    // Delete account 43000003 if it has CIF as name
+    try{
+      var accts=state.accounts.filter(function(a){return a.code.startsWith('4000')&&a.name&&a.name.match(/^[A-Z]\d{7}/i);});
+      for(var i=0;i<accts.length;i++){
+        try{await api('/api/accounts/'+state.company.id+'/'+accts[i].code,{method:'DELETE'});}catch(e2){}
+      }
+    }catch(e){}
+    await loadData();
+    hideProgress('✓','Proveedores limpiados. Ahora reimporta el Excel.');
+    toast('Proveedores limpiados. Reimporta el Excel para crear los correctos.','ok');
+    render();
+  }catch(e){
+    hideProgress('✗','Error');
+    toast('Error: '+e.message,'error');
+  }
+}
+
 function renderImport(c){
   var savedKey=localStorage.getItem('cf_gestor_apikey_'+(state.company?state.company.id:''))||'';
   c.innerHTML=

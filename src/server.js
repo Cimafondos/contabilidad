@@ -711,6 +711,20 @@ app.delete('/api/masters/:companyId/:type/:id', authRequired, (req, res) => {
   res.json({ ok: true });
 });
 
+// Delete ALL masters of a type for a company
+app.delete('/api/masters-all/:companyId/:type', authRequired, adminRequired, (req, res) => {
+  const count = db.prepare('SELECT COUNT(*) as c FROM masters WHERE company_id = ? AND type = ?').get(req.params.companyId, req.params.type);
+  db.prepare('DELETE FROM masters WHERE company_id = ? AND type = ?').run(req.params.companyId, req.params.type);
+  auditLog(req, 'delete-all-masters', `${req.params.type}: ${count.c} deleted`);
+  res.json({ ok: true, deleted: count.c });
+});
+
+// Cleanup: delete specific account
+app.delete('/api/accounts/:companyId/:code', authRequired, adminRequired, (req, res) => {
+  db.prepare('DELETE FROM accounts WHERE code = ? AND company_id = ?').run(req.params.code, req.params.companyId);
+  res.json({ ok: true });
+});
+
 // ── BACKUP ──
 app.get('/api/backup/:companyId', authRequired, (req, res) => {
   const cid = req.params.companyId;
