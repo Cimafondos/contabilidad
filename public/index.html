@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.2.1</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -3201,6 +3201,9 @@ async function contabilizarFacturas(){
     }
 
     var conceptStr=(f.isAbono?'Abono ':'Fra. ')+h(f.tercero)+' ['+f.numFact+']';
+    // Add meta to first line with complete invoice data
+    var metaObj={numFactura:f.numFact,tercero:f.tercero,cif:f.cif,tipoFactura:f.tipo||'recibida',isAbono:!!f.isAbono,base21:f.base21||0,iva21:f.iva21||0,base10:f.base10||0,iva10:f.iva10||0,base4:f.base4||0,iva4:f.iva4||0,base0:f.base0||0,retencion:f.retencion||0,recargo:f.recargo||0,totalFactura:f.total||0};
+    if(finalLines.length>0)finalLines[0].meta=JSON.stringify(metaObj);
     await api('/api/entries/'+state.company.id,{method:'POST',body:{
       id:(f.tipo==='recibida'?'fr_':'fe_')+uid(),
       date:f.fecha,
@@ -5425,6 +5428,187 @@ async function resolveExcluded(id,estado){
 }
 
 
+
+// ═══ FUNCIÓN CENTRAL: getInvoiceData() ═══
+// Única fuente de verdad para datos de facturas.
+// Todas las pantallas (Libro IVA, 303, Compras, Ventas, Libro FR, Libro FE, Tesorería) usan esta función.
+function getInvoiceData(opts){
+  opts=opts||{};
+  var year=opts.year||state.ejercicio;
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(year))&&!e.del;});
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  loadMasters();
+  var suppByCif={};(masters.supplier||[]).forEach(function(s){if(s.cif)suppByCif[s.cif]=s;});
+  var cliByCif={};(masters.client||[]).forEach(function(cl){if(cl.cif)cliByCif[cl.cif]=cl;});
+  
+  var facturas=[];
+  all.forEach(function(e){
+    if(!e.concept||e.concept.indexOf('[')<0)return;
+    var m=e.concept.match(/\[([^\]]+)\]/);
+    if(!m)return;
+    var numFact=m[1];
+    
+    // Check if first line has meta
+    var meta=null;
+    if(e.lines&&e.lines[0]&&e.lines[0].meta){
+      try{meta=JSON.parse(e.lines[0].meta);}catch(ex){}
+    }
+    
+    if(meta&&meta.numFactura){
+      // Use stored meta data — this is the reliable path
+      var f={
+        numFactura:meta.numFactura,
+        fecha:e.date,
+        tercero:meta.tercero||'',
+        cif:meta.cif||'',
+        tipoFactura:meta.tipoFactura||'recibida',
+        isAbono:!!meta.isAbono,
+        base21:meta.base21||0, iva21:meta.iva21||0,
+        base10:meta.base10||0, iva10:meta.iva10||0,
+        base4:meta.base4||0, iva4:meta.iva4||0,
+        base0:meta.base0||0,
+        retencion:meta.retencion||0,
+        recargo:meta.recargo||0,
+        totalFactura:meta.totalFactura||0,
+        totalBase:(meta.base21||0)+(meta.base10||0)+(meta.base4||0),
+        totalIva:(meta.iva21||0)+(meta.iva10||0)+(meta.iva4||0),
+        entryId:e.id,
+        lines:e.lines
+      };
+      facturas.push(f);
+    } else {
+      // Fallback: extract from entry lines (legacy entries without meta)
+      var isRecibida=e.lines.some(function(l){return l.a&&l.a.startsWith('400');});
+      var isEmitida=e.lines.some(function(l){return l.a&&l.a.startsWith('430');});
+      var isAbono=numFact.match(/^AB-|^R-/i)||e.concept.indexOf('Abono')>=0;
+      
+      // Extract CIF from concept
+      var cifM=e.concept.match(/([A-Z]\d{7,8}[A-Z]?)/i);
+      var cif=cifM?cifM[1]:'';
+      
+      // Get tercero name
+      var tercero='';
+      if(isRecibida){
+        e.lines.forEach(function(l){if(l.a&&l.a.startsWith('400')&&am[l.a])tercero=am[l.a].name;});
+        if(!tercero&&cif&&suppByCif[cif])tercero=suppByCif[cif].name;
+      } else if(isEmitida){
+        e.lines.forEach(function(l){if(l.a&&l.a.startsWith('430')&&am[l.a])tercero=am[l.a].name;});
+        if(!tercero&&cif&&cliByCif[cif])tercero=cliByCif[cif].name;
+      }
+      if(!tercero)tercero=cif||'Desconocido';
+      
+      // Calculate bases and IVA from lines
+      var totalBase=0,totalIva=0,totalG6=0,totalG7=0;
+      e.lines.forEach(function(l){
+        var g=parseInt((l.a||'')[0])||0;
+        if(g===6)totalG6+=l.d-l.h;
+        if(g===7)totalG7+=l.h-l.d;
+        if(l.a==='47200000')totalIva+=l.d-l.h;
+        if(l.a&&l.a.startsWith('477'))totalIva+=l.h-l.d;
+      });
+      totalBase=isRecibida?totalG6:totalG7;
+      
+      // Try to detect IVA rates from cuota amounts
+      var iva21=0,iva10=0,iva4=0,base21=0,base10=0,base4=0;
+      var ivaCuotas=[];
+      e.lines.forEach(function(l){
+        if(l.a==='47200000'){ivaCuotas.push(l.d-l.h);}
+        if(l.a&&l.a.startsWith('477')){ivaCuotas.push(l.h-l.d);}
+      });
+      if(ivaCuotas.length===1){
+        var rate=detectIvaRateFromCuota(ivaCuotas[0],Math.abs(totalBase),Math.abs(totalIva));
+        var rateInt=Math.round(rate*100);
+        if(rateInt===21){iva21=ivaCuotas[0];base21=iva21/0.21;}
+        else if(rateInt===10){iva10=ivaCuotas[0];base10=iva10/0.10;}
+        else if(rateInt===4){iva4=ivaCuotas[0];base4=iva4/0.04;}
+        else{iva21=ivaCuotas[0];base21=totalBase;}
+      } else {
+        ivaCuotas.forEach(function(cuota){
+          var rate=detectIvaRateFromCuota(cuota,Math.abs(totalBase),Math.abs(totalIva));
+          var rateInt=Math.round(rate*100);
+          if(rateInt===21){iva21+=cuota;base21+=cuota/0.21;}
+          else if(rateInt===10){iva10+=cuota;base10+=cuota/0.10;}
+          else if(rateInt===4){iva4+=cuota;base4+=cuota/0.04;}
+          else{iva21+=cuota;base21+=cuota/0.21;}
+        });
+      }
+      
+      var totalFactTotal=Math.abs(totalBase)+Math.abs(totalIva);
+      e.lines.forEach(function(l){
+        if(l.a&&(l.a.startsWith('400')||l.a.startsWith('430'))){
+          totalFactTotal=Math.abs(l.d-l.h)||totalFactTotal;
+        }
+      });
+      
+      facturas.push({
+        numFactura:numFact,
+        fecha:e.date,
+        tercero:tercero,
+        cif:cif,
+        tipoFactura:isRecibida?'recibida':(isEmitida?'emitida':'otro'),
+        isAbono:!!isAbono,
+        base21:Math.round(base21*100)/100, iva21:Math.round(iva21*100)/100,
+        base10:Math.round(base10*100)/100, iva10:Math.round(iva10*100)/100,
+        base4:Math.round(base4*100)/100, iva4:Math.round(iva4*100)/100,
+        base0:0,
+        retencion:0,
+        recargo:0,
+        totalFactura:Math.round(totalFactTotal*100)/100,
+        totalBase:Math.round((Math.abs(base21)+Math.abs(base10)+Math.abs(base4))*100)/100,
+        totalIva:Math.round((Math.abs(iva21)+Math.abs(iva10)+Math.abs(iva4))*100)/100,
+        entryId:e.id,
+        lines:e.lines
+      });
+    }
+  });
+  
+  // Filter by tipo if requested
+  if(opts.tipo)facturas=facturas.filter(function(f){return f.tipoFactura===opts.tipo;});
+  
+  return facturas;
+}
+
+// ═══ TESTS DE CUADRE AUTOMÁTICOS ═══
+function runIntegrityTests(){
+  var invoices=getInvoiceData();
+  var recibidas=invoices.filter(function(f){return f.tipoFactura==='recibida';});
+  var emitidas=invoices.filter(function(f){return f.tipoFactura==='emitida';});
+  
+  // Test 1: Cuadre general Debe = Haber
+  var totalD=0,totalH=0;
+  state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){totalD+=l.d;totalH+=l.h;});});
+  var cuadre=Math.abs(totalD-totalH)<0.02;
+  
+  // Test 2: IVA Soportado desde facturas vs desde asientos
+  var ivaSopFacturas=recibidas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*(Math.abs(f.iva21)+Math.abs(f.iva10)+Math.abs(f.iva4));},0);
+  var ivaSopAsientos=0;
+  state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){if(l.a==='47200000')ivaSopAsientos+=l.d-l.h;});});
+  var ivaMatch=Math.abs(ivaSopFacturas-ivaSopAsientos)<1;
+  
+  // Test 3: IVA Repercutido
+  var ivaRepFacturas=emitidas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*(Math.abs(f.iva21)+Math.abs(f.iva10)+Math.abs(f.iva4));},0);
+  var ivaRepAsientos=0;
+  state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){if(l.a&&l.a.startsWith('477'))ivaRepAsientos+=l.h-l.d;});});
+  var ivaRepMatch=Math.abs(ivaRepFacturas-ivaRepAsientos)<1;
+  
+  var results={
+    cuadreGeneral:{ok:cuadre,debe:Math.round(totalD*100)/100,haber:Math.round(totalH*100)/100,diff:Math.round(Math.abs(totalD-totalH)*100)/100},
+    ivaSoportado:{ok:ivaMatch,facturas:Math.round(ivaSopFacturas*100)/100,asientos:Math.round(ivaSopAsientos*100)/100,diff:Math.round(Math.abs(ivaSopFacturas-ivaSopAsientos)*100)/100},
+    ivaRepercutido:{ok:ivaRepMatch,facturas:Math.round(ivaRepFacturas*100)/100,asientos:Math.round(ivaRepAsientos*100)/100,diff:Math.round(Math.abs(ivaRepFacturas-ivaRepAsientos)*100)/100},
+    totalFacturas:invoices.length,
+    totalRecibidas:recibidas.length,
+    totalEmitidas:emitidas.length,
+    allOk:cuadre&&ivaMatch&&ivaRepMatch
+  };
+  
+  if(!results.allOk){
+    console.warn('⚠ TESTS DE CUADRE FALLIDOS:',JSON.stringify(results));
+  }
+  
+  return results;
+}
+
+
 // ═══ CASHFLOW — PLAN FINANCIERO MENSUAL ═══
 function renderCashflow(c){
   var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
@@ -5629,69 +5813,26 @@ function renderInformesPanel(c){
 
 // ═══ LIBRO FACTURAS EMITIDAS ═══
 function renderLibroFacturasEmitidas(c){
-  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio))&&e.concept&&e.concept.indexOf('[')>=0;});
-  loadMasters();
-  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  var cliByCif={};(masters.client||[]).forEach(function(cl){if(cl.cif)cliByCif[cl.cif]=cl.name;});
-  var facturas=[];
-  all.forEach(function(e){
-    var isEmitida=e.lines.some(function(l){return l.a&&l.a.startsWith('430');});
-    if(!isEmitida)return;
-    var m=e.concept.match(/\[([^\]]+)\]/);
-    var numFact=m?m[1]:'';
-    var cifM=e.concept.match(/([A-Z]\d{7,8}[A-Z]?|[A-Z]\d{8})/i);
-    var cif=cifM?cifM[1]:'';
-    var base=0,iva=0,total=0,cliName='';
-    e.lines.forEach(function(l){
-      if(l.a&&l.a.startsWith('430')){total+=l.d-l.h;cliName=am[l.a]?am[l.a].name:'';}
-      if(l.a&&l.a.startsWith('477'))iva+=l.h-l.d;
-      if(l.a&&parseInt(l.a.substring(0,1))===7)base+=l.h-l.d;
-    });
-    if(!cliName&&cif)cliName=cliByCif[cif]||cif;
-    if(!cliName)cliName=cif||'Desconocido';
-    facturas.push({num:numFact,fecha:e.date,cliente:cliName,cif:cif,base:base,iva:iva,total:total});
-  });
-  var totalBase=facturas.reduce(function(s,f){return s+f.base;},0);
-  var totalIva=facturas.reduce(function(s,f){return s+f.iva;},0);
-  var totalFact=facturas.reduce(function(s,f){return s+f.total;},0);
+  var facturas=getInvoiceData({tipo:'emitida'});
+  var totalBase=facturas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalBase;},0);
+  var totalIva=facturas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalIva;},0);
+  var totalFact=facturas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalFactura;},0);
   c.innerHTML='<div class="card"><div class="card-h"><span>📖 Libro Facturas Emitidas — '+state.ejercicio+'</span><div style="font-size:11px;color:var(--txM)">'+facturas.length+' facturas</div></div>'+
-  (facturas.length?'<table><thead><tr><th>Nº Factura</th><th>Fecha</th><th>Cliente</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th></tr></thead><tbody>'+
-  facturas.map(function(f,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.num)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.cliente)+'</td><td style="text-align:right">'+fmt(f.base)+'€</td><td style="text-align:right">'+fmt(f.iva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.total)+'€</td></tr>';}).join('')+
-  '<tr class="total"><td colspan="3">TOTAL</td><td style="text-align:right">'+fmt(facturas.reduce(function(s,f){return s+f.base;},0))+'€</td><td style="text-align:right">'+fmt(facturas.reduce(function(s,f){return s+f.iva;},0))+'€</td><td style="text-align:right;font-size:14px">'+fmt(facturas.reduce(function(s,f){return s+f.total;},0))+'€</td></tr></tbody></table>':'<div class="empty">Sin facturas emitidas</div>')+'</div>';
+  (facturas.length?'<table><thead><tr><th>Nº Factura</th><th>Fecha</th><th>Cliente</th><th>CIF</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Tipo</th></tr></thead><tbody>'+
+  facturas.map(function(f,i){return '<tr class="'+(i%2?'alt':'')+'" style="'+(f.isAbono?'color:var(--rd)':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.numFactura)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="font-size:9px;color:var(--txM)">'+h(f.cif)+'</td><td style="text-align:right">'+fmt(f.totalBase)+'€</td><td style="text-align:right">'+fmt(f.totalIva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.totalFactura)+'€</td><td><span class="badge '+(f.isAbono?'badge-r':'badge-g')+'">'+(f.isAbono?'Abono':'Factura')+'</span></td></tr>';}).join('')+
+  '<tr class="total"><td colspan="4">TOTAL ('+facturas.length+' facturas)</td><td style="text-align:right">'+fmt(totalBase)+'€</td><td style="text-align:right">'+fmt(totalIva)+'€</td><td style="text-align:right;font-size:14px">'+fmt(totalFact)+'€</td><td></td></tr></tbody></table>':'<div class="empty">Sin facturas emitidas</div>')+'</div>';
 }
 
 // ═══ LIBRO FACTURAS RECIBIDAS ═══
 function renderLibroFacturasRecibidas(c){
-  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio))&&e.concept&&e.concept.indexOf('[')>=0;});
-  loadMasters();
-  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  var suppByCif={};(masters.supplier||[]).forEach(function(s){if(s.cif)suppByCif[s.cif]=s.name;});
-  var facturas=[];
-  all.forEach(function(e){
-    var isRecibida=e.lines.some(function(l){return l.a&&l.a.startsWith('400');});
-    if(!isRecibida)return;
-    var m=e.concept.match(/\[([^\]]+)\]/);
-    var numFact=m?m[1]:'';
-    var cifM=e.concept.match(/([A-Z]\d{7,8}[A-Z]?|[A-Z]\d{8})/i);
-    var cif=cifM?cifM[1]:'';
-    var base=0,iva=0,total=0,provName='';
-    e.lines.forEach(function(l){
-      if(l.a&&l.a.startsWith('400')){total+=l.h-l.d;provName=am[l.a]?am[l.a].name:'';}
-      if(l.a&&l.a.startsWith('472'))iva+=l.d-l.h;
-      if(l.a&&parseInt(l.a.substring(0,1))===6)base+=l.d-l.h;
-    });
-    if(!provName&&cif)provName=suppByCif[cif]||cif;
-    if(!provName)provName=cif||'Desconocido';
-    var isAbono=numFact.match(/^AB-|^R-/i)||total<0;
-    facturas.push({num:numFact,fecha:e.date,proveedor:provName,cif:cif,base:base,iva:iva,total:Math.abs(base)+Math.abs(iva),isAbono:isAbono});
-  });
-  var totalBase=facturas.reduce(function(s,f){return s+f.base;},0);
-  var totalIva=facturas.reduce(function(s,f){return s+f.iva;},0);
-  var totalFact=facturas.reduce(function(s,f){return s+(f.isAbono?-f.total:f.total);},0);
+  var facturas=getInvoiceData({tipo:'recibida'});
+  var totalBase=facturas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalBase;},0);
+  var totalIva=facturas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalIva;},0);
+  var totalFact=facturas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalFactura;},0);
   c.innerHTML='<div class="card"><div class="card-h"><span>📖 Libro Facturas Recibidas — '+state.ejercicio+'</span><div style="font-size:11px;color:var(--txM)">'+facturas.length+' facturas</div></div>'+
   (facturas.length?'<table><thead><tr><th>Nº Factura</th><th>Fecha</th><th>Proveedor</th><th>CIF</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Tipo</th></tr></thead><tbody>'+
-  facturas.map(function(f,i){return '<tr class="'+(i%2?'alt':'')+'" style="'+(f.isAbono?'color:var(--rd)':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.num)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.proveedor)+'</td><td style="font-size:9px;color:var(--txM)">'+h(f.cif)+'</td><td style="text-align:right">'+fmt(f.base)+'€</td><td style="text-align:right">'+fmt(f.iva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.total)+'€</td><td><span class="badge '+(f.isAbono?'badge-r':'badge-g')+'">'+(f.isAbono?'Abono':'Factura')+'</span></td></tr>';}).join('')+
-  '<tr class="total"><td colspan="4">TOTAL</td><td style="text-align:right">'+fmt(totalBase)+'€</td><td style="text-align:right">'+fmt(totalIva)+'€</td><td style="text-align:right;font-size:14px">'+fmt(totalFact)+'€</td><td></td></tr></tbody></table>':'<div class="empty">Sin facturas recibidas</div>')+'</div>';
+  facturas.map(function(f,i){return '<tr class="'+(i%2?'alt':'')+'" style="'+(f.isAbono?'color:var(--rd)':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.numFactura)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="font-size:9px;color:var(--txM)">'+h(f.cif)+'</td><td style="text-align:right">'+fmt(f.totalBase)+'€</td><td style="text-align:right">'+fmt(f.totalIva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.totalFactura)+'€</td><td><span class="badge '+(f.isAbono?'badge-r':'badge-g')+'">'+(f.isAbono?'Abono':'Factura')+'</span></td></tr>';}).join('')+
+  '<tr class="total"><td colspan="4">TOTAL ('+facturas.length+' facturas)</td><td style="text-align:right">'+fmt(totalBase)+'€</td><td style="text-align:right">'+fmt(totalIva)+'€</td><td style="text-align:right;font-size:14px">'+fmt(totalFact)+'€</td><td></td></tr></tbody></table>':'<div class="empty">Sin facturas recibidas</div>')+'</div>';
 }
 
 // ═══ BALANCE DE SITUACIÓN MEJORADO (estilo Holded) ═══
@@ -6685,10 +6826,24 @@ function renderLibroIVA(c){
   var tCuotaSop=soportado.reduce(function(s,x){return s+x.cuota;},0);
   var liquidacion=tCuotaRep-tCuotaSop;
 
-  // Summary by rate
+  // Summary by rate — use getInvoiceData for accurate rates
+  var invoiceData=getInvoiceData();
+  var byRate={21:{baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0},10:{baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0},4:{baseRep:0,cuotaRep:0,baseSop:0,cuotaSop:0}};
+  invoiceData.forEach(function(inv){
+    var sign=inv.isAbono?-1:1;
+    if(inv.tipoFactura==='recibida'){
+      byRate[21].baseSop+=sign*Math.abs(inv.base21);byRate[21].cuotaSop+=sign*Math.abs(inv.iva21);
+      byRate[10].baseSop+=sign*Math.abs(inv.base10);byRate[10].cuotaSop+=sign*Math.abs(inv.iva10);
+      byRate[4].baseSop+=sign*Math.abs(inv.base4);byRate[4].cuotaSop+=sign*Math.abs(inv.iva4);
+    } else if(inv.tipoFactura==='emitida'){
+      byRate[21].baseRep+=sign*Math.abs(inv.base21);byRate[21].cuotaRep+=sign*Math.abs(inv.iva21);
+      byRate[10].baseRep+=sign*Math.abs(inv.base10);byRate[10].cuotaRep+=sign*Math.abs(inv.iva10);
+      byRate[4].baseRep+=sign*Math.abs(inv.base4);byRate[4].cuotaRep+=sign*Math.abs(inv.iva4);
+    }
+  });
   var rateRows='';
   [21,10,4].forEach(function(r){
-    var d=resByRate[r];if(!d)return;
+    var d=byRate[r];if(!d)return;
     if(Math.abs(d.baseSop)>0.01||Math.abs(d.cuotaSop)>0.01||Math.abs(d.baseRep)>0.01||Math.abs(d.cuotaRep)>0.01){
       rateRows+='<tr><td style="font-weight:600">IVA '+r+'%</td><td style="text-align:right">'+fmt(d.baseRep)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.cuotaRep)+'€</td><td style="text-align:right">'+fmt(d.baseSop)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(d.cuotaSop)+'€</td><td style="text-align:right;font-weight:600;color:'+(d.cuotaRep-d.cuotaSop>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(d.cuotaRep-d.cuotaSop))+'€</td></tr>';
     }

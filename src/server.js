@@ -66,7 +66,8 @@ db.exec(`
     entry_id TEXT REFERENCES entries(id),
     account TEXT NOT NULL,
     debit REAL DEFAULT 0,
-    credit REAL DEFAULT 0
+    credit REAL DEFAULT 0,
+    meta TEXT DEFAULT ''
   );
 
   CREATE TABLE IF NOT EXISTS transactions (
@@ -142,6 +143,45 @@ db.exec(`
 // ── Migration: add group_id columns if not exist ──
 try { db.exec('ALTER TABLE companies ADD COLUMN group_id TEXT REFERENCES groups(id)'); } catch(e) {}
 try { db.exec('ALTER TABLE users ADD COLUMN group_id TEXT REFERENCES groups(id)'); } catch(e) {}
+
+// ── Migration: add meta column to entry_lines ──
+try { db.exec('ALTER TABLE entry_lines ADD COLUMN meta TEXT DEFAULT \'\''); } catch(e) {}
+
+// ── Migration: add tags column to entries ──
+try { db.exec('ALTER TABLE entries ADD COLUMN tags TEXT DEFAULT \'\''); } catch(e) {}
+try { db.exec('ALTER TABLE entries ADD COLUMN punteado INTEGER DEFAULT 0'); } catch(e) {}
+
+// ── Migration: fix provider accounts type A → P ──
+function migrateProviderAccounts() {
+  try {
+    const fixed = db.prepare("UPDATE accounts SET type = 'P' WHERE code LIKE '400%' AND type = 'A'").run();
+    if (fixed.changes > 0) console.log(`✓ Migration: fixed ${fixed.changes} provider accounts A→P`);
+  } catch(e) {}
+}
+
+// ── Migration: fix account 40000013 name from CIF to real provider name ──
+function migrateFixProviderNames() {
+  try {
+    // Find accounts with CIF as name (e.g. "B22859755")
+    const badAccounts = db.prepare("SELECT code, name FROM accounts WHERE code LIKE '4000%' AND name LIKE 'B%' AND LENGTH(name) <= 10").all();
+    badAccounts.forEach(acc => {
+      // Try to find the real provider name from entry concepts
+      const entry = db.prepare("SELECT e.concept FROM entries e JOIN entry_lines el ON e.id = el.entry_id WHERE el.account = ? AND e.deleted = 0 LIMIT 1").get(acc.code);
+      if (entry && entry.concept) {
+        // Extract provider name from concept: "Fra. PROVIDER_NAME [INVOICE_NUM]" or "Abono PROVIDER_NAME [INVOICE_NUM]"
+        const m = entry.concept.match(/(?:Fra\.|Abono)\s+(.*?)\s*\[/);
+        if (m && m[1]) {
+          // Remove CIF from name
+          const cleanName = m[1].replace(/[A-Z]\d{7,8}[A-Z]?/gi, '').trim();
+          if (cleanName.length > 3) {
+            db.prepare("UPDATE accounts SET name = ? WHERE code = ?").run(cleanName, acc.code);
+            console.log(`✓ Migration: fixed account ${acc.code} name: "${acc.name}" → "${cleanName}"`);
+          }
+        }
+      }
+    });
+  } catch(e) { console.error('Migration fix provider names error:', e.message); }
+}
 
 // ── Reset already completed in v7.3.0, no more resets ──
 
@@ -501,7 +541,7 @@ app.get('/api/entries/:companyId', authRequired, (req, res) => {
   const entries = db.prepare('SELECT * FROM entries WHERE company_id = ?' + (showDeleted ? '' : ' AND deleted = 0') + ' ORDER BY date').all(req.params.companyId);
   const lines = db.prepare('SELECT * FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ?' + (showDeleted ? '' : ' AND deleted = 0') + ')').all(req.params.companyId);
   const lineMap = {};
-  lines.forEach(l => { if (!lineMap[l.entry_id]) lineMap[l.entry_id] = []; lineMap[l.entry_id].push({ a: l.account, d: l.debit, h: l.credit }); });
+  lines.forEach(l => { if (!lineMap[l.entry_id]) lineMap[l.entry_id] = []; lineMap[l.entry_id].push({ a: l.account, d: l.debit, h: l.credit, meta: l.meta || '' }); });
   const result = entries.map(e => ({ ...e, del: !!e.deleted, lines: lineMap[e.id] || [] }));
   res.json(result);
 });
@@ -523,12 +563,12 @@ app.post('/api/entries/:companyId', authRequired, (req, res) => {
 
   const insertEntry = db.prepare('INSERT OR REPLACE INTO entries (id, date, concept, type, company_id, deleted, tags) VALUES (?, ?, ?, ?, ?, 0, ?)');
   const deleteLine = db.prepare('DELETE FROM entry_lines WHERE entry_id = ?');
-  const insertLine = db.prepare('INSERT INTO entry_lines (entry_id, account, debit, credit) VALUES (?, ?, ?, ?)');
+  const insertLine = db.prepare('INSERT INTO entry_lines (entry_id, account, debit, credit, meta) VALUES (?, ?, ?, ?, ?)');
   
   const tx = db.transaction(() => {
     insertEntry.run(id, date, concept, type || 'manual', companyId, tags || '');
     deleteLine.run(id);
-    (lines || []).forEach(l => insertLine.run(id, l.a, l.d || 0, l.h || 0));
+    (lines || []).forEach((l, i) => insertLine.run(id, l.a, l.d || 0, l.h || 0, l.meta || ''));
   });
   tx();
   res.json({ ok: true });
@@ -1151,6 +1191,8 @@ app.get('*', (req, res) => {
 
 // ── Start ──
 migratePasswords();
+migrateProviderAccounts();
+migrateFixProviderNames();
 scheduleDailyBackup();
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✓ Cimafondos v7.1.0 running on port ${PORT}`);
