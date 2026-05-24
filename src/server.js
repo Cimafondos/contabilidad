@@ -1153,3 +1153,4 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  Backups: ${BACKUP_DIR}`);
   console.log(`  JWT: active, ${TOKEN_EXPIRY} expiry`);
 });
+// force redeploy Sun May 24 21:27:00 UTC 2026
