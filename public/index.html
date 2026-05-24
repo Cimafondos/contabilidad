@@ -162,7 +162,17 @@ function isPeriodClosed(dateStr){if(!dateStr||!state.closedPeriods.length)return
 function togglePeriod(ym){var i=state.closedPeriods.indexOf(ym);if(i>=0)state.closedPeriods.splice(i,1);else state.closedPeriods.push(ym);saveClosedPeriods();render();}
 initDates();
 
-function toast(msg,type){state.toast={msg,type:type||'ok'};render();setTimeout(function(){state.toast=null;render();},4000);}
+function toast(msg,type){
+  // Remove existing toast
+  var existing=document.getElementById('toastEl');if(existing)existing.remove();
+  // Create toast element
+  var t=document.createElement('div');t.id='toastEl';
+  t.style.cssText='position:fixed;top:12px;right:12px;z-index:9999;background:'+(type==='error'?'#FEF2F2':'#F0FDF4')+';border:1px solid '+(type==='error'?'#FECACA':'#BBF7D0')+';color:'+(type==='error'?'var(--rd)':'var(--ok)')+';padding:10px 16px;border-radius:8px;font-size:12px;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.1);cursor:pointer';
+  t.innerHTML=(type==='error'?'❌':'✅')+' '+msg;
+  t.onclick=function(){t.remove();};
+  document.body.appendChild(t);
+  setTimeout(function(){if(t.parentNode)t.remove();},4000);
+}
 
 function filteredEntries(){
   return state.entries.filter(function(e){return e.date>=state.dateFrom&&e.date<=state.dateTo;});
@@ -500,7 +510,7 @@ function render(){
   var viewTitle=state.view;
   menuItems.forEach(function(sec){sec.items.forEach(function(it){if(it.id===state.view)viewTitle=it.label;});});
   
-  app.innerHTML=(state.toast?'<div class="toast" style="position:fixed;top:12px;right:12px;z-index:9999;background:'+(state.toast.type==='error'?'#FEF2F2':'#F0FDF4')+';border:1px solid '+(state.toast.type==='error'?'#FECACA':'#BBF7D0')+';color:'+(state.toast.type==='error'?'var(--rd)':'var(--ok)')+';padding:10px 16px;border-radius:8px;font-size:12px;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.1);cursor:pointer" onclick="state.toast=null;render();">'+(state.toast.type==='error'?'❌':'✅')+' '+h(state.toast.msg)+'</div>':'')+
+  app.innerHTML=
   sidebarHtml+
   '<div class="content-area" id="contentArea">'+
   '<div class="content-topbar">'+
@@ -514,7 +524,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.8</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v7.9.9</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
