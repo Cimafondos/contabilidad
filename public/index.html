@@ -524,7 +524,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.0.1</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.0.2</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2568,7 +2568,7 @@ function importFacturasExcel(file,tipo){
       // Find the data sheet (not 'Resumen IVA')
       var sheetName=wb.SheetNames.find(function(s){return s!=='Resumen IVA';})||wb.SheetNames[0];
       var ws=wb.Sheets[sheetName];
-      var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
       if(rows.length<2){toast('Sin datos en la hoja '+sheetName,'error');return;}
       processFacturasRows(rows,tipo,resumenIVA);
     }catch(err){toast('Error leyendo archivo: '+err.message,'error');}
@@ -2645,12 +2645,31 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     // Parse amounts - handle string numbers with comma/dot
     function parseAmt(v){
       if(v===null||v===undefined||v==='')return 0;
-      var s=String(v).replace(/\s/g,'');
-      // Handle "15.500,00" format (Spanish) and "15500.00" format
-      if(s.indexOf(',')>=0&&s.indexOf('.')>=0){
-        if(s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(/\./g,'').replace(',','.');
-        else s=s.replace(/,/g,'');
-      }else if(s.indexOf(',')>=0){s=s.replace(',','.');}
+      if(typeof v==='number')return v;
+      var s=String(v).replace(/\s/g,'').replace(/€/g,'');
+      // Detect format: "10.250,00" (Spanish) vs "10,250.00" (English) vs "10250.00" vs "10250,00"
+      var lastComma=s.lastIndexOf(',');
+      var lastDot=s.lastIndexOf('.');
+      if(lastComma>0&&lastDot>0){
+        // Both exist: the last separator is the decimal
+        if(lastComma>lastDot){
+          // Spanish: 10.250,00 → remove dots, replace comma
+          s=s.replace(/\./g,'').replace(',','.');
+        }else{
+          // English: 10,250.00 → remove commas
+          s=s.replace(/,/g,'');
+        }
+      }else if(lastComma>0){
+        // Only comma: could be "1.250" (thousands) or "12,50" (decimal)
+        // If exactly 2 digits after comma → decimal
+        var afterComma=s.substring(lastComma+1);
+        if(afterComma.length<=2){
+          s=s.replace(',','.');
+        }else{
+          s=s.replace(/,/g,'');
+        }
+      }
+      // else: only dots or no separator → parseFloat handles it
       return parseFloat(s)||0;
     }
 
