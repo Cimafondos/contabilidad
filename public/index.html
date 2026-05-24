@@ -128,7 +128,7 @@ tr.total{background:var(--priLt);font-weight:600}
 // ═══════════════════════════════════════════════════════════════
 var API='';
 var fmt=function(n){if(isNaN(n)||n===null||n===undefined)return'0,00';var neg=n<0;var abs=Math.abs(n);var parts=abs.toFixed(2).split('.');var intPart=parts[0];var decPart=parts[1];var result='';for(var i=intPart.length-1,c=0;i>=0;i--,c++){if(c>0&&c%3===0)result='.'+result;result=intPart[i]+result;}return(neg?'-':'')+result+','+decPart;};
-function fmtInput(v){var n=parseFloat(String(v).replace(/\./g,'').replace(',','.'))||0;if(n===0&&String(v)==='')return '';return fmt(n);}
+function fmtInput(v){if(typeof v==='number')return fmt(v);var s=String(v);if(s==='')return '';var n=parseFloat(s);if(!isNaN(n))return fmt(n);n=parseFloat(s.replace(/\./g,'').replace(',','.'))||0;return fmt(n);}
 function fmtAmtField(inp){var raw=inp.value.replace(/\./g,'').replace(',','.');var n=parseFloat(raw)||0;var pos=inp.selectionStart;inp._rawValue=raw;}
 function selectAll(inp){inp.select();}
 function getRawAmt(id){var el=$(id);if(!el)return 0;var raw=el.value.replace(/\./g,'').replace(',','.');return parseFloat(raw)||0;}
@@ -524,7 +524,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.0.2</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.0.3</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
