@@ -1114,16 +1114,21 @@ app.get('/api/excluded-invoices/:companyId', authRequired, (req, res) => {
 app.post('/api/excluded-invoices/:companyId', authRequired, (req, res) => {
   const { invoices } = req.body;
   if (!invoices || !Array.isArray(invoices)) return res.status(400).json({ error: 'invoices array required' });
-  const ins = db.prepare('INSERT OR REPLACE INTO excluded_invoices (id, num_factura, fecha, tercero, cif, base, iva, total, tipo, motivo, excluded_by, company_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  const check = db.prepare('SELECT id FROM excluded_invoices WHERE num_factura = ? AND company_id = ? AND estado = ?');
+  const ins = db.prepare('INSERT INTO excluded_invoices (id, num_factura, fecha, tercero, cif, base, iva, total, tipo, motivo, excluded_by, company_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  let count = 0;
   const tx = db.transaction(() => {
     invoices.forEach(f => {
+      const existing = check.get(f.num_factura, req.params.companyId, 'pendiente');
+      if (existing) return;
       const id = 'exc_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
       ins.run(id, f.num_factura, f.fecha||'', f.tercero||'', f.cif||'', f.base||0, f.iva||0, f.total||0, f.tipo||'recibida', f.motivo||'Desmarcada manualmente', req.user.username, req.params.companyId);
+      count++;
     });
   });
   tx();
-  auditLog(req, 'exclude-invoices', `${invoices.length} facturas excluidas`);
-  res.json({ ok: true, count: invoices.length });
+  if (count > 0) auditLog(req, 'exclude-invoices', `${count} facturas excluidas`);
+  res.json({ ok: true, count });
 });
 
 app.put('/api/excluded-invoices/:companyId/:id', authRequired, (req, res) => {

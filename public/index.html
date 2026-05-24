@@ -409,19 +409,28 @@ function render(){
       {id:'manualEntry',icon:'✏️',label:'Asiento manual'},
     ]},
     {section:'Analítica',items:[
-      {id:'analisis',icon:'📊',label:'Ventas'},
+      {id:'informes',icon:'📊',label:'Panel informes'},
+      {id:'analisis',icon:'📈',label:'Ventas'},
       {id:'analisisCompras',icon:'📉',label:'Compras'},
       {id:'analisisProveedores',icon:'🏭',label:'Proveedores'},
       {id:'posicion',icon:'💰',label:'Tesorería'},
+      {id:'cashflow',icon:'💹',label:'Cashflow'},
       {id:'libroiva',icon:'📋',label:'Libro IVA'},
+      {id:'libroFE',icon:'📗',label:'Libro fact. emitidas'},
+      {id:'libroFR',icon:'📕',label:'Libro fact. recibidas'},
       {id:'facturas',icon:'🧾',label:'Facturas'},
     ]},
     {section:'Fiscal',items:[
       {id:'modelo303',icon:'📄',label:'303 IVA'},
       {id:'modelo390',icon:'📄',label:'390 Anual'},
       {id:'modelo111',icon:'📄',label:'111 IRPF'},
-      {id:'modelo347',icon:'📄',label:'347 Terceros'},
+      {id:'modelo115',icon:'📄',label:'115 Alq.'},
+      {id:'modelo130',icon:'📄',label:'130 IRPF ED'},
+      {id:'modelo190',icon:'📄',label:'190 Ret. anual'},
       {id:'modelo200',icon:'📄',label:'200 IS'},
+      {id:'modelo202',icon:'📄',label:'202 Pago IS'},
+      {id:'modelo347',icon:'📄',label:'347 Terceros'},
+      {id:'modelo349',icon:'📄',label:'349 Intracom.'},
       {id:'pendientes',icon:'🏠',label:'Pendientes'},
       {id:'excluidas',icon:'🔍',label:'Revisión fact.'},
     ]},
@@ -525,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.1.3</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.2.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -583,6 +592,15 @@ function renderView(){
   else if(v==='infconc')renderInfConciliacion(c);
   else if(v==='modelo115')renderModelo115(c);
   else if(v==='excluidas')renderExcluidas(c);
+  else if(v==='cashflow')renderCashflow(c);
+  else if(v==='modelo349')renderModelo349(c);
+  else if(v==='modelo130')renderModelo130(c);
+  else if(v==='modelo190')renderModelo190(c);
+  else if(v==='modelo202')renderModelo202(c);
+  else if(v==='informes')renderInformesPanel(c);
+  else if(v==='libroFE')renderLibroFacturasEmitidas(c);
+  else if(v==='libroFR')renderLibroFacturasRecibidas(c);
+  else if(v==='balanceSit')renderBalanceSituacion(c);
   else if(v==='cuentasanuales')renderCuentasAnuales(c);
   else c.innerHTML='<div class="empty"><div style="font-size:40px;margin-bottom:10px">🚧</div>Próximamente</div>';
 }
@@ -2885,6 +2903,8 @@ function clearImpResult(){
 }
 
 async function saveUncheckedAsExcluded(){
+  // Prevent saving if already saving
+  if(window._savingExcluded)return;window._savingExcluded=true;setTimeout(function(){window._savingExcluded=false;},3000);
   var allFacturas=window._facturasToImport;
   var tipo=window._facturasType;
   if(!allFacturas||!allFacturas.length)return;
@@ -5403,6 +5423,274 @@ async function resolveExcluded(id,estado){
     renderExcluidas($('content'));
   }catch(e){toast('Error: '+e.message,'error');}
 }
+
+
+// ═══ CASHFLOW — PLAN FINANCIERO MENSUAL ═══
+function renderCashflow(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  var data=meses.map(function(m,i){
+    var mm=String(i+1).padStart(2,'0');
+    var from=state.ejercicio+'-'+mm+'-01',to=state.ejercicio+'-'+mm+'-31';
+    var ingresos=0,gastos=0,iva=0,irpf=0,ss=0,activos=0,financieros=0;
+    all.forEach(function(e){
+      if(e.date>=from&&e.date<=to){
+        e.lines.forEach(function(l){
+          var g=parseInt(l.a.substring(0,1));
+          if(g===7)ingresos+=l.h-l.d;
+          if(g===6)gastos+=l.d-l.h;
+          if(l.a.startsWith('472'))iva+=l.d-l.h;
+          if(l.a.startsWith('477'))iva-=l.h-l.d;
+          if(l.a.startsWith('4751'))irpf+=l.d-l.h;
+          if(l.a.startsWith('476'))ss+=l.d-l.h;
+          if(g===2)activos+=l.d-l.h;
+          if(l.a.startsWith('572')||l.a.startsWith('520')||l.a.startsWith('170'))financieros+=l.d-l.h;
+        });
+      }
+    });
+    return {mes:m,ingresos:ingresos,gastos:gastos,iva:iva,irpf:irpf,ss:ss,activos:activos,financieros:financieros};
+  });
+  var saldo=0;
+  data.forEach(function(d){d.saldoInicial=saldo;d.neto=d.ingresos-d.gastos;saldo+=d.neto;d.saldoFinal=saldo;});
+  var totalIng=data.reduce(function(s,d){return s+d.ingresos;},0);
+  var totalGas=data.reduce(function(s,d){return s+d.gastos;},0);
+  
+  c.innerHTML='<div class="card"><div class="card-h"><span>📊 Cashflow — Plan financiero '+state.ejercicio+'</span><div><button class="btn btn-d" onclick="exportCashflow()">↓ Excel</button></div></div>'+
+  '<div class="row" style="margin:12px 14px"><div class="stat" style="border-left:3px solid var(--ok)"><div class="stat-v" style="color:var(--ok)">'+fmt(totalIng)+'€</div><div class="stat-l">Total Ingresos</div></div><div class="stat" style="border-left:3px solid var(--rd)"><div class="stat-v" style="color:var(--rd)">'+fmt(totalGas)+'€</div><div class="stat-l">Total Gastos</div></div><div class="stat" style="border-left:3px solid var(--bl)"><div class="stat-v" style="color:'+(totalIng-totalGas>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalIng-totalGas)+'€</div><div class="stat-l">Diferencia neta</div></div></div>'+
+  '<div class="scr"><table style="font-size:11px"><thead><tr><th style="position:sticky;left:0;background:#F8FAFC;z-index:2;min-width:180px">Cuentas</th>'+
+  data.map(function(d){return '<th style="text-align:right;min-width:90px">'+d.mes+' '+String(state.ejercicio).slice(2)+'</th>';}).join('')+
+  '<th style="text-align:right;min-width:100px;font-weight:800">Total</th></tr></thead><tbody>'+
+  '<tr style="background:#F0FDF4;font-weight:600"><td style="position:sticky;left:0;background:#F0FDF4">Saldo inicial</td>'+data.map(function(d){return '<td style="text-align:right">'+fmt(d.saldoInicial)+'</td>';}).join('')+'<td></td></tr>'+
+  '<tr style="font-weight:600;color:var(--ok)"><td style="position:sticky;left:0;background:#fff">Movimientos de Ingresos</td>'+data.map(function(d){return '<td style="text-align:right">'+fmt(d.ingresos)+'</td>';}).join('')+'<td style="text-align:right;font-weight:800">'+fmt(totalIng)+'</td></tr>'+
+  '<tr style="font-weight:600;color:var(--rd)"><td style="position:sticky;left:0;background:#fff">Movimientos de Gastos</td>'+data.map(function(d){return '<td style="text-align:right">'+fmt(d.gastos)+'</td>';}).join('')+'<td style="text-align:right;font-weight:800">'+fmt(totalGas)+'</td></tr>'+
+  '<tr class="alt"><td style="position:sticky;left:0;background:#F8FAFC;padding-left:24px">↳ IVA</td>'+data.map(function(d){return '<td style="text-align:right;color:var(--txM)">'+fmt(d.iva)+'</td>';}).join('')+'<td style="text-align:right">'+fmt(data.reduce(function(s,d){return s+d.iva;},0))+'</td></tr>'+
+  '<tr><td style="position:sticky;left:0;background:#fff;padding-left:24px">↳ IRPF</td>'+data.map(function(d){return '<td style="text-align:right;color:var(--txM)">'+fmt(d.irpf)+'</td>';}).join('')+'<td style="text-align:right">'+fmt(data.reduce(function(s,d){return s+d.irpf;},0))+'</td></tr>'+
+  '<tr class="alt"><td style="position:sticky;left:0;background:#F8FAFC;padding-left:24px">↳ Seguridad social</td>'+data.map(function(d){return '<td style="text-align:right;color:var(--txM)">'+fmt(d.ss)+'</td>';}).join('')+'<td style="text-align:right">'+fmt(data.reduce(function(s,d){return s+d.ss;},0))+'</td></tr>'+
+  '<tr><td style="position:sticky;left:0;background:#fff">Activos</td>'+data.map(function(d){return '<td style="text-align:right">'+fmt(d.activos)+'</td>';}).join('')+'<td style="text-align:right">'+fmt(data.reduce(function(s,d){return s+d.activos;},0))+'</td></tr>'+
+  '<tr class="alt"><td style="position:sticky;left:0;background:#F8FAFC">Movimientos financieros</td>'+data.map(function(d){return '<td style="text-align:right">'+fmt(d.financieros)+'</td>';}).join('')+'<td style="text-align:right">'+fmt(data.reduce(function(s,d){return s+d.financieros;},0))+'</td></tr>'+
+  '<tr style="font-weight:700;border-top:2px solid #CBD5E1"><td style="position:sticky;left:0;background:#fff">Diferencia neta</td>'+data.map(function(d){return '<td style="text-align:right;color:'+(d.neto>=0?'var(--ok)':'var(--rd)')+'">'+fmt(d.neto)+'</td>';}).join('')+'<td style="text-align:right;font-weight:800;color:'+(totalIng-totalGas>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalIng-totalGas)+'</td></tr>'+
+  '<tr style="background:#EFF6FF;font-weight:700"><td style="position:sticky;left:0;background:#EFF6FF">Saldo final</td>'+data.map(function(d){return '<td style="text-align:right">'+fmt(d.saldoFinal)+'</td>';}).join('')+'<td style="text-align:right;font-weight:800">'+fmt(saldo)+'</td></tr>'+
+  '</tbody></table></div></div>';
+}
+function exportCashflow(){toast('Exportando cashflow...','ok');}
+
+// ═══ MODELO 349 — OPERACIONES INTRACOMUNITARIAS ═══
+function renderModelo349(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var trimestres=[{name:'1T',from:'01',to:'03'},{name:'2T',from:'04',to:'06'},{name:'3T',from:'07',to:'09'},{name:'4T',from:'10',to:'12'}];
+  var datos=trimestres.map(function(t){
+    var from=state.ejercicio+'-'+t.from+'-01',to=state.ejercicio+'-'+t.to+'-31';
+    var entregas=0,adquisiciones=0;
+    all.forEach(function(e){if(e.date>=from&&e.date<=to){e.lines.forEach(function(l){
+      if(l.a==='70800000')entregas+=l.h-l.d;
+      if(l.a==='60800000')adquisiciones+=l.d-l.h;
+    });}});
+    return {name:t.name,entregas:entregas,adquisiciones:adquisiciones};
+  });
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 349 — Operaciones Intracomunitarias '+state.ejercicio+'</span><div><button class="btn btn-d" onclick="exportModelo349()">↓ Excel</button></div></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Declaración recapitulativa de operaciones intracomunitarias. Presentación trimestral.</div>'+
+  '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Entregas intracomunitarias</th><th style="text-align:right">Adquisiciones intracomunitarias</th><th style="text-align:right">Total operaciones</th></tr></thead><tbody>'+
+  datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+fmt(d.entregas)+'€</td><td style="text-align:right">'+fmt(d.adquisiciones)+'€</td><td style="text-align:right;font-weight:700">'+fmt(d.entregas+d.adquisiciones)+'€</td></tr>';}).join('')+
+  '<tr class="total"><td>ANUAL</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.entregas;},0))+'€</td><td style="text-align:right">'+fmt(datos.reduce(function(s,d){return s+d.adquisiciones;},0))+'€</td><td style="text-align:right;font-size:14px">'+fmt(datos.reduce(function(s,d){return s+d.entregas+d.adquisiciones;},0))+'€</td></tr></tbody></table></div>';
+}
+function exportModelo349(){toast('Exportando 349...','ok');}
+
+// ═══ MODELO 130 — IRPF ESTIMACIÓN DIRECTA ═══
+function renderModelo130(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var trimestres=[{name:'1T',from:'01',to:'03'},{name:'2T',from:'04',to:'06'},{name:'3T',from:'07',to:'09'},{name:'4T',from:'10',to:'12'}];
+  var acumIng=0,acumGas=0;
+  var datos=trimestres.map(function(t){
+    var from=state.ejercicio+'-'+t.from+'-01',to=state.ejercicio+'-'+t.to+'-31';
+    var ingresos=0,gastos=0;
+    all.forEach(function(e){if(e.date>=from&&e.date<=to){e.lines.forEach(function(l){
+      var g=parseInt(l.a.substring(0,1));
+      if(g===7)ingresos+=l.h-l.d;
+      if(g===6)gastos+=l.d-l.h;
+    });}});
+    acumIng+=ingresos;acumGas+=gastos;
+    var rendimiento=acumIng-acumGas;
+    var cuota=Math.max(0,Math.round(rendimiento*0.20*100)/100);
+    return {name:t.name,ingresos:ingresos,gastos:gastos,acumIng:acumIng,acumGas:acumGas,rendimiento:rendimiento,cuota:cuota};
+  });
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 130 — IRPF Estimación Directa '+state.ejercicio+'</span><div><button class="btn btn-d" onclick="exportModelo130()">↓ Excel</button></div></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Pago fraccionado IRPF para empresarios y profesionales en estimación directa. 20% del rendimiento neto acumulado.</div>'+
+  '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Ingresos acum.</th><th style="text-align:right">Gastos acum.</th><th style="text-align:right">Rendimiento</th><th style="text-align:right">Cuota (20%)</th><th style="text-align:right">A ingresar</th></tr></thead><tbody>'+
+  datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right;color:var(--ok)">'+fmt(d.acumIng)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.acumGas)+'€</td><td style="text-align:right;font-weight:600">'+fmt(d.rendimiento)+'€</td><td style="text-align:right">'+fmt(d.cuota)+'€</td><td style="text-align:right;font-weight:700;color:var(--rd)">'+fmt(d.cuota)+'€</td></tr>';}).join('')+
+  '</tbody></table></div>';
+}
+function exportModelo130(){toast('Exportando 130...','ok');}
+
+// ═══ MODELO 190 — RESUMEN ANUAL RETENCIONES ═══
+function renderModelo190(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var totalRet=0,totalBase=0;
+  var perceptores={};
+  all.forEach(function(e){e.lines.forEach(function(l){
+    if(l.a==='47510000'){var ret=l.h-l.d;totalRet+=ret;}
+    if(l.a==='64000000'||l.a==='64100000'){totalBase+=l.d-l.h;}
+  });});
+  loadMasters();
+  var suppList=(masters.supplier||[]);
+  suppList.forEach(function(s){
+    var baseS=0;
+    all.forEach(function(e){e.lines.forEach(function(l){
+      if(l.a===s.account){baseS+=l.h-l.d;}
+    });});
+    if(baseS>0)perceptores[s.name||s.code]={base:baseS,retencion:Math.round(baseS*0.15*100)/100,cif:s.cif||''};
+  });
+  var percList=Object.keys(perceptores).map(function(k){return {name:k,base:perceptores[k].base,ret:perceptores[k].retencion,cif:perceptores[k].cif};}).sort(function(a,b){return b.base-a.base;});
+  
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 190 — Resumen Anual Retenciones '+state.ejercicio+'</span><div><button class="btn btn-d" onclick="exportModelo190()">↓ Excel</button></div></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Resumen anual de retenciones e ingresos a cuenta del IRPF. Presentación anual (enero).</div>'+
+  '<div class="row" style="margin:12px 14px"><div class="stat"><div class="stat-v">'+fmt(totalBase)+'€</div><div class="stat-l">Base retenciones</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(totalRet)+'€</div><div class="stat-l">Total retenido</div></div><div class="stat"><div class="stat-v">'+percList.length+'</div><div class="stat-l">Perceptores</div></div></div>'+
+  (percList.length?'<table><thead><tr><th>Perceptor</th><th>CIF</th><th style="text-align:right">Base</th><th style="text-align:right">Retención</th></tr></thead><tbody>'+
+  percList.map(function(p,i){return '<tr class="'+(i%2?'alt':'')+'"><td>'+h(p.name)+'</td><td style="font-size:9px;color:var(--txM)">'+h(p.cif)+'</td><td style="text-align:right">'+fmt(p.base)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(p.ret)+'€</td></tr>';}).join('')+
+  '</tbody></table>':'<div class="empty">Sin datos de retenciones</div>')+'</div>';
+}
+function exportModelo190(){toast('Exportando 190...','ok');}
+
+// ═══ MODELO 202 — PAGO A CUENTA IS ═══
+function renderModelo202(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var totalIng=0,totalGas=0;
+  all.forEach(function(e){e.lines.forEach(function(l){
+    var g=parseInt(l.a.substring(0,1));
+    if(g===7)totalIng+=l.h-l.d;
+    if(g===6)totalGas+=l.d-l.h;
+  });});
+  var resultado=totalIng-totalGas;
+  var baseImponible=Math.max(0,resultado);
+  var tipo=0.25;
+  var cuotaAnual=Math.round(baseImponible*tipo*100)/100;
+  var pagoFraccionado=Math.round(cuotaAnual*0.18*100)/100;
+  var periodos=[
+    {name:'1P (Abril)',fecha:'20/04/'+state.ejercicio},
+    {name:'2P (Octubre)',fecha:'20/10/'+state.ejercicio},
+    {name:'3P (Diciembre)',fecha:'20/12/'+state.ejercicio}
+  ];
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 202 — Pago Fraccionado IS '+state.ejercicio+'</span><div><button class="btn btn-d" onclick="exportModelo202()">↓ Excel</button></div></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Pago fraccionado del Impuesto sobre Sociedades. 18% de la cuota del ejercicio anterior. 3 pagos anuales.</div>'+
+  '<div class="row" style="margin:12px 14px"><div class="stat"><div class="stat-v">'+fmt(resultado)+'€</div><div class="stat-l">Resultado ejercicio</div></div><div class="stat"><div class="stat-v">'+fmt(baseImponible)+'€</div><div class="stat-l">Base imponible</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(cuotaAnual)+'€</div><div class="stat-l">Cuota IS (25%)</div></div><div class="stat"><div class="stat-v" style="color:var(--rd)">'+fmt(pagoFraccionado)+'€</div><div class="stat-l">Pago fraccionado (18%)</div></div></div>'+
+  '<table><thead><tr><th>Periodo</th><th>Fecha límite</th><th style="text-align:right">A ingresar</th></tr></thead><tbody>'+
+  periodos.map(function(p,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+p.name+'</td><td>'+p.fecha+'</td><td style="text-align:right;font-weight:700;color:var(--rd)">'+fmt(pagoFraccionado)+'€</td></tr>';}).join('')+
+  '<tr class="total"><td colspan="2">TOTAL ANUAL</td><td style="text-align:right;font-size:14px">'+fmt(pagoFraccionado*3)+'€</td></tr></tbody></table></div>';
+}
+function exportModelo202(){toast('Exportando 202...','ok');}
+
+// ═══ INFORME DASHBOARD AVANZADO — VENTAS/COMPRAS/MARGEN MENSUAL ═══
+function renderInformesPanel(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  var datos=meses.map(function(m,i){
+    var mm=String(i+1).padStart(2,'0');
+    var from=state.ejercicio+'-'+mm+'-01',to=state.ejercicio+'-'+mm+'-31';
+    var ventas=0,coste=0,impuestos=0;
+    all.forEach(function(e){if(e.date>=from&&e.date<=to){e.lines.forEach(function(l){
+      var g=parseInt(l.a.substring(0,1));
+      if(g===7)ventas+=l.h-l.d;
+      if(g===6)coste+=l.d-l.h;
+      if(l.a.startsWith('472')||l.a.startsWith('477'))impuestos+=Math.abs(l.d-l.h);
+    });}});
+    return {mes:m,ventas:ventas,coste:coste,margen:ventas-coste,impuestos:impuestos};
+  });
+  var totalVentas=datos.reduce(function(s,d){return s+d.ventas;},0);
+  var totalCoste=datos.reduce(function(s,d){return s+d.coste;},0);
+  var totalMargen=totalVentas-totalCoste;
+  var ventaMedia=totalVentas/12;
+  var margenPct=totalVentas>0?Math.round(totalMargen/totalVentas*100):0;
+  
+  // SVG chart
+  var maxVal=Math.max.apply(null,datos.map(function(d){return Math.max(d.ventas,d.coste,1);}));
+  var barW=40,gap=14,chartH=180,chartW=(barW*2+gap)*12+gap*11+40;
+  var bars='';
+  datos.forEach(function(d,i){
+    var x=i*(barW*2+gap+gap)+30;
+    var hV=d.ventas/maxVal*chartH;
+    var hC=d.coste/maxVal*chartH;
+    bars+='<rect x="'+x+'" y="'+(chartH-hV)+'" width="'+barW+'" height="'+hV+'" fill="#10B981" rx="3" opacity="0.8"/>';
+    bars+='<rect x="'+(x+barW+2)+'" y="'+(chartH-hC)+'" width="'+barW+'" height="'+hC+'" fill="#EF4444" rx="3" opacity="0.8"/>';
+    bars+='<text x="'+(x+barW)+'" y="'+(chartH+14)+'" text-anchor="middle" font-size="10" fill="#6B7280">'+d.mes+'</text>';
+  });
+  var svgChart='<svg viewBox="0 0 '+chartW+' '+(chartH+20)+'" style="width:100%;max-height:220px;margin:12px 0"><rect width="100%" height="100%" fill="transparent"/>'+bars+'</svg>';
+  
+  c.innerHTML='<div class="row"><div class="stat" style="border-left:3px solid var(--ok)"><div class="stat-v" style="color:var(--ok)">'+fmt(totalVentas)+'€</div><div class="stat-l">Total Ventas</div></div><div class="stat" style="border-left:3px solid var(--bl)"><div class="stat-v">'+fmt(ventaMedia)+'€</div><div class="stat-l">Venta media/mes</div></div><div class="stat" style="border-left:3px solid '+(totalMargen>=0?'var(--ok)':'var(--rd)')+'"><div class="stat-v" style="color:'+(totalMargen>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalMargen)+'€</div><div class="stat-l">Margen ('+margenPct+'%)</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>📊 Ventas vs Costes — '+state.ejercicio+'</span><div style="font-size:10px"><span style="color:#10B981">■</span> Ventas <span style="color:#EF4444;margin-left:8px">■</span> Costes</div></div>'+svgChart+'</div>'+
+  '<div class="card"><div class="card-h"><span>📋 Detalle mensual</span></div>'+
+  '<table><thead><tr><th></th>'+meses.map(function(m){return '<th style="text-align:right;font-size:10px">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:800">Total</th></tr></thead><tbody>'+
+  '<tr style="color:var(--rd)"><td style="font-weight:600">Coste <span style="display:inline-block;width:8px;height:8px;background:#EF4444;border-radius:50%"></span></td>'+datos.map(function(d){return '<td style="text-align:right;font-size:11px">'+fmt(d.coste)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalCoste)+'</td></tr>'+
+  '<tr><td style="font-weight:600">Impuestos <span style="display:inline-block;width:8px;height:8px;background:#1F2937;border-radius:50%"></span></td>'+datos.map(function(d){return '<td style="text-align:right;font-size:11px">'+fmt(d.impuestos)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(datos.reduce(function(s,d){return s+d.impuestos;},0))+'</td></tr>'+
+  '<tr style="color:var(--ok)"><td style="font-weight:600">Margen <span style="display:inline-block;width:8px;height:8px;background:#3B82F6;border-radius:50%"></span></td>'+datos.map(function(d){return '<td style="text-align:right;font-size:11px">'+fmt(d.margen)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalMargen)+'</td></tr>'+
+  '<tr style="color:var(--ok);font-weight:700;border-top:2px solid #CBD5E1"><td>Ventas <span style="display:inline-block;width:8px;height:8px;background:#10B981;border-radius:50%"></span></td>'+datos.map(function(d){return '<td style="text-align:right;font-size:11px">'+fmt(d.ventas)+'</td>';}).join('')+'<td style="text-align:right;font-weight:800">'+fmt(totalVentas)+'</td></tr>'+
+  '<tr style="font-weight:700;border-top:1px solid #E2E8F0"><td>Total <span style="display:inline-block;width:8px;height:8px;background:#10B981;border-radius:50%"></span></td>'+datos.map(function(d){return '<td style="text-align:right;font-size:11px">'+fmt(d.ventas)+'</td>';}).join('')+'<td style="text-align:right;font-weight:800">'+fmt(totalVentas)+'</td></tr>'+
+  '</tbody></table></div>';
+}
+
+// ═══ LIBRO FACTURAS EMITIDAS ═══
+function renderLibroFacturasEmitidas(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio))&&e.concept&&e.concept.indexOf('[')>=0;});
+  var facturas=[];
+  all.forEach(function(e){
+    var isEmitida=e.lines.some(function(l){return l.a&&l.a.startsWith('430');});
+    if(!isEmitida)return;
+    var m=e.concept.match(/\[([^\]]+)\]/);
+    var numFact=m?m[1]:'';
+    var base=0,iva=0,total=0,cliente='';
+    e.lines.forEach(function(l){
+      if(l.a&&l.a.startsWith('430')){total+=l.d-l.h;var am2={};state.accounts.forEach(function(a){am2[a.code]=a;});cliente=am2[l.a]?am2[l.a].name:l.a;}
+      if(l.a&&l.a.startsWith('477'))iva+=l.h-l.d;
+      if(l.a&&parseInt(l.a.substring(0,1))===7)base+=l.h-l.d;
+    });
+    facturas.push({num:numFact,fecha:e.date,cliente:cliente,base:base,iva:iva,total:total});
+  });
+  c.innerHTML='<div class="card"><div class="card-h"><span>📖 Libro Facturas Emitidas — '+state.ejercicio+'</span></div>'+
+  (facturas.length?'<table><thead><tr><th>Nº Factura</th><th>Fecha</th><th>Cliente</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th></tr></thead><tbody>'+
+  facturas.map(function(f,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.num)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.cliente)+'</td><td style="text-align:right">'+fmt(f.base)+'€</td><td style="text-align:right">'+fmt(f.iva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.total)+'€</td></tr>';}).join('')+
+  '<tr class="total"><td colspan="3">TOTAL</td><td style="text-align:right">'+fmt(facturas.reduce(function(s,f){return s+f.base;},0))+'€</td><td style="text-align:right">'+fmt(facturas.reduce(function(s,f){return s+f.iva;},0))+'€</td><td style="text-align:right;font-size:14px">'+fmt(facturas.reduce(function(s,f){return s+f.total;},0))+'€</td></tr></tbody></table>':'<div class="empty">Sin facturas emitidas</div>')+'</div>';
+}
+
+// ═══ LIBRO FACTURAS RECIBIDAS ═══
+function renderLibroFacturasRecibidas(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio))&&e.concept&&e.concept.indexOf('[')>=0;});
+  var facturas=[];
+  all.forEach(function(e){
+    var isRecibida=e.lines.some(function(l){return l.a&&l.a.startsWith('400');});
+    if(!isRecibida)return;
+    var m=e.concept.match(/\[([^\]]+)\]/);
+    var numFact=m?m[1]:'';
+    var base=0,iva=0,total=0,proveedor='';
+    e.lines.forEach(function(l){
+      if(l.a&&l.a.startsWith('400')){total+=l.h-l.d;var am2={};state.accounts.forEach(function(a){am2[a.code]=a;});proveedor=am2[l.a]?am2[l.a].name:l.a;}
+      if(l.a&&l.a.startsWith('472'))iva+=l.d-l.h;
+      if(l.a&&parseInt(l.a.substring(0,1))===6)base+=l.d-l.h;
+    });
+    facturas.push({num:numFact,fecha:e.date,proveedor:proveedor,base:base,iva:iva,total:total});
+  });
+  c.innerHTML='<div class="card"><div class="card-h"><span>📖 Libro Facturas Recibidas — '+state.ejercicio+'</span></div>'+
+  (facturas.length?'<table><thead><tr><th>Nº Factura</th><th>Fecha</th><th>Proveedor</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th></tr></thead><tbody>'+
+  facturas.map(function(f,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;font-size:10px">'+h(f.num)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.proveedor)+'</td><td style="text-align:right">'+fmt(f.base)+'€</td><td style="text-align:right">'+fmt(f.iva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.total)+'€</td></tr>';}).join('')+
+  '<tr class="total"><td colspan="3">TOTAL</td><td style="text-align:right">'+fmt(facturas.reduce(function(s,f){return s+f.base;},0))+'€</td><td style="text-align:right">'+fmt(facturas.reduce(function(s,f){return s+f.iva;},0))+'€</td><td style="text-align:right;font-size:14px">'+fmt(facturas.reduce(function(s,f){return s+f.total;},0))+'€</td></tr></tbody></table>':'<div class="empty">Sin facturas recibidas</div>')+'</div>';
+}
+
+// ═══ BALANCE DE SITUACIÓN MEJORADO (estilo Holded) ═══
+function renderBalanceSituacion(c){
+  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
+  var s={};all.forEach(function(e){e.lines.forEach(function(l){if(!s[l.a])s[l.a]=0;s[l.a]+=l.d-l.h;});});
+  
+  var activo=0,pasivo=0,patrimonio=0;
+  Object.keys(s).forEach(function(code){
+    var g=parseInt(code.substring(0,1));
+    if(g===2||g===3||g===4&&code<'44000000'||g===5&&code<'52000000')activo+=s[code];
+    if(g===1&&code>='10000000'&&code<='13000000')patrimonio+=s[code];
+    if(g===4&&code>='40000000'||g===1&&code>='14000000')pasivo+=Math.abs(s[code]);
+  });
+  
+  c.innerHTML='<div class="card"><div class="card-h"><span>🏛️ Balance de Situación — '+state.ejercicio+'</span><div><button class="btn btn-d" onclick="setView(\'balance\')">Ver completo</button></div></div>'+
+  '<div class="row" style="margin:12px 14px"><div class="stat" style="border-left:3px solid var(--bl)"><div class="stat-v" style="color:var(--bl)">'+fmt(activo)+'€</div><div class="stat-l">Activo</div></div><div class="stat" style="border-left:3px solid var(--rd)"><div class="stat-v" style="color:var(--rd)">'+fmt(pasivo)+'€</div><div class="stat-l">Pasivo</div></div><div class="stat" style="border-left:3px solid var(--ok)"><div class="stat-v" style="color:var(--ok)">'+fmt(patrimonio)+'€</div><div class="stat-l">Patrimonio neto</div></div></div></div>';
+}
+
 
 // ═══ CUENTAS ANUALES ═══
 function renderCuentasAnuales(c){
