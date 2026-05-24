@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.5</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.6</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -3114,44 +3114,35 @@ async function contabilizarFacturas(){
         }
       }
 
-      // Find or create supplier with individual account
-      // IMPORTANT: If CIF matches our own company, extract real CIF from concepto
-      var realCif=f.cif;
+      // ═══ ASIGNACIÓN DE PROVEEDOR — REESCRITA v9.0.6 ═══
+      // 1. Determinar CIF real del proveedor (nunca usar CIF de la propia empresa)
       var ownCif=state.company.cif||'';
-      if(realCif===ownCif||realCif==='B22859755'){
-        // Try to get real CIF from concepto field
+      var provCif=f.cif;
+      if(!provCif||provCif===ownCif||provCif==='B22859755'){
         var cifEmMatch=(f.concepto||'').match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
-        if(cifEmMatch&&cifEmMatch[1]&&cifEmMatch[1]!==ownCif){
-          realCif=cifEmMatch[1];
-        }
+        if(cifEmMatch&&cifEmMatch[1]&&cifEmMatch[1]!==ownCif){provCif=cifEmMatch[1];}
+        else{provCif='';}
       }
-      var provRecord=masters.supplier.find(function(s){return s.cif===realCif||(s.name&&s.name===f.tercero);});
+      // 2. Buscar proveedor: PRIMERO por nombre (fiable), luego por CIF (si no es propio)
+      var provRecord=null;
+      if(f.tercero){provRecord=masters.supplier.find(function(s){return s.name&&s.name.toUpperCase()===f.tercero.toUpperCase();});}
+      if(!provRecord&&provCif){provRecord=masters.supplier.find(function(s){return s.cif&&s.cif===provCif;});}
+      // 3. Crear nuevo si no existe
       if(!provRecord&&f.tercero){
         var provCode='P'+String(masters.supplier.length+1).padStart(3,'0');
-        var formaPago='';
-        if(f.concepto){
-          var fpMatch=f.concepto.match(/Forma de pago:\s*([^|]+)/i);
-          if(fpMatch)formaPago=fpMatch[1].trim();
-        }
-        var diasPago='';
-        if(f.fecha&&f.vencimiento){
-          var d1=new Date(f.fecha),d2=new Date(f.vencimiento);
-          if(!isNaN(d1)&&!isNaN(d2)){diasPago=String(Math.round((d2-d1)/(1000*60*60*24)));}
-        }
+        var formaPago='';if(f.concepto){var fpMatch=f.concepto.match(/Forma de pago:\s*([^|]+)/i);if(fpMatch)formaPago=fpMatch[1].trim();}
+        var diasPago='';if(f.fecha&&f.vencimiento){var d1=new Date(f.fecha),d2=new Date(f.vencimiento);if(!isNaN(d1)&&!isNaN(d2)){diasPago=String(Math.round((d2-d1)/(1000*60*60*24)));}}
         var provAccount='4000'+String(masters.supplier.length+1).padStart(4,'0');
-        provRecord={code:provCode,name:f.tercero,cif:realCif,address:'',cp:'',city:'',province:'',country:'ES',account:provAccount,payment:formaPago,days:diasPago,contact:'',phone:'',email:'',notes:'Auto-importado desde gestor documental'};
-        masters.supplier.push(provRecord);
-        saveMasters('supplier');
+        provRecord={code:provCode,name:f.tercero,cif:provCif,address:'',cp:'',city:'',province:'',country:'ES',account:provAccount,payment:formaPago,days:diasPago,contact:'',phone:'',email:'',notes:'Auto-importado'};
+        masters.supplier.push(provRecord);saveMasters('supplier');
         if(!state.accounts.some(function(a){return a.code===provAccount;})){
           try{api('/api/accounts/'+state.company.id,{method:'POST',body:{code:provAccount,name:f.tercero,g:4,t:'P'}});}catch(e){}
           state.accounts.push({code:provAccount,name:f.tercero,g:4,t:'P'});
         }
         provsCreated++;
       }else if(provRecord&&(provRecord.account==='40000000'||!provRecord.account)){
-        // Upgrade existing supplier from generic to individual account
         var newProvAccount='4000'+String(masters.supplier.indexOf(provRecord)+1).padStart(4,'0');
-        provRecord.account=newProvAccount;
-        saveMasters('supplier');
+        provRecord.account=newProvAccount;saveMasters('supplier');
         if(!state.accounts.some(function(a){return a.code===newProvAccount;})){
           try{api('/api/accounts/'+state.company.id,{method:'POST',body:{code:newProvAccount,name:provRecord.name,g:4,t:'P'}});}catch(e){}
           state.accounts.push({code:newProvAccount,name:provRecord.name,g:4,t:'P'});
@@ -3259,7 +3250,7 @@ async function contabilizarFacturas(){
 
     var conceptStr=(f.isAbono?'Abono ':'Fra. ')+h(f.tercero)+' ['+f.numFact+']';
     // Add meta to first line with complete invoice data
-    var metaObj={numFactura:f.numFact,tercero:f.tercero,cif:realCif||f.cif,tipoFactura:f.tipo||'recibida',isAbono:!!f.isAbono,base21:f.base21||0,iva21:f.iva21||0,base10:f.base10||0,iva10:f.iva10||0,base4:f.base4||0,iva4:f.iva4||0,base0:f.base0||0,retencion:f.retencion||0,recargo:f.recargo||0,totalFactura:f.total||0};
+    var metaObj={numFactura:f.numFact,tercero:f.tercero,cif:provCif||f.cif,tipoFactura:f.tipo||'recibida',isAbono:!!f.isAbono,base21:f.base21||0,iva21:f.iva21||0,base10:f.base10||0,iva10:f.iva10||0,base4:f.base4||0,iva4:f.iva4||0,base0:f.base0||0,retencion:f.retencion||0,recargo:f.recargo||0,totalFactura:f.total||0};
     if(finalLines.length>0)finalLines[0].meta=JSON.stringify(metaObj);
     await api('/api/entries/'+state.company.id,{method:'POST',body:{
       id:(f.tipo==='recibida'?'fr_':'fe_')+uid(),
