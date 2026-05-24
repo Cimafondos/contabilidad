@@ -524,7 +524,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.0.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.0.1</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2674,6 +2674,9 @@ async function processFacturasRows(rows,tipo,resumenIVA){
       fact.total=fact.base21+fact.iva21+fact.base10+fact.iva10+fact.base4+fact.iva4+fact.base0-Math.abs(fact.retencion||0);
     }
     fact.total=Math.abs(fact.total);
+    // Skip facturas that don't match selected tipo
+    if(tipo==='emitida'&&!isEmitida)continue;
+    if(tipo==='recibida'&&isEmitida)continue;
     facturas.push(fact);
   }
 
@@ -5681,8 +5684,12 @@ function renderAnalisisProveedores(c){
       for(var mi=0;mi<half;mi++)sumFirst+=p.months[meses[mi]]||0;
       for(var mj=half;mj<meses.length;mj++)sumSecond+=p.months[meses[mj]]||0;
       var avgFirst=sumFirst/half;var avgSecond=sumSecond/(meses.length-half);
-      var cambio=avgFirst>0?Math.round((avgSecond-avgFirst)/avgFirst*100):0;
-      if(Math.abs(cambio)>999)cambio=cambio>0?999:-999;
+      var cambio=0;
+      if(avgFirst>0){cambio=Math.round((avgSecond-avgFirst)/avgFirst*100);}
+      else if(avgSecond>0){cambio=100;}
+      // Cap: max +999%, min -100%
+      if(cambio>999)cambio=999;
+      if(cambio<-100)cambio=-100;
       tendencia=cambio>10?'<span style="color:var(--rd)">↑ +'+cambio+'%</span>':cambio<-10?'<span style="color:var(--ok)">↓ '+cambio+'%</span>':'<span style="color:var(--txM)">= estable</span>';
     }
     return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;cursor:pointer;color:var(--pri)" onclick="showExtractoCuenta(\''+h(p.cuenta)+'\')">'+h(p.name)+'</td><td>'+acctLink(p.cuenta,'')+'</td><td style="text-align:right;font-weight:700;color:var(--rd)">'+fmt(p.total)+'€</td><td style="text-align:right"><div style="display:flex;align-items:center;gap:4px;justify-content:flex-end"><div style="width:'+Math.min(pct,100)+'px;height:8px;background:var(--rd);border-radius:4px;opacity:0.3"></div>'+pct+'%</div></td><td style="text-align:right">'+p.count+'</td><td style="text-align:right">'+fmt(media)+'€</td><td style="font-size:10px">'+fmtD(p.lastDate)+'</td><td style="font-size:10px">'+tendencia+'</td></tr>';
