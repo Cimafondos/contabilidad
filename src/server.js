@@ -118,6 +118,25 @@ db.exec(`
     name TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS excluded_invoices (
+    id TEXT PRIMARY KEY,
+    num_factura TEXT NOT NULL,
+    fecha TEXT,
+    tercero TEXT,
+    cif TEXT,
+    base REAL DEFAULT 0,
+    iva REAL DEFAULT 0,
+    total REAL DEFAULT 0,
+    tipo TEXT DEFAULT 'recibida',
+    motivo TEXT DEFAULT 'Desmarcada manualmente',
+    estado TEXT DEFAULT 'pendiente',
+    excluded_by TEXT,
+    excluded_at TEXT DEFAULT (datetime('now')),
+    resolved_by TEXT,
+    resolved_at TEXT,
+    company_id TEXT REFERENCES companies(id)
+  );
 `);
 
 // ── Migration: add group_id columns if not exist ──
@@ -1089,6 +1108,40 @@ app.post('/api/gestor-sync', authRequired, async (req, res) => {
     console.error('[Gestor Sync] Error:', e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── EXCLUDED INVOICES (Facturas pendientes de revisión) ──
+app.get('/api/excluded-invoices/:companyId', authRequired, (req, res) => {
+  const rows = db.prepare('SELECT * FROM excluded_invoices WHERE company_id = ? ORDER BY excluded_at DESC').all(req.params.companyId);
+  res.json(rows);
+});
+
+app.post('/api/excluded-invoices/:companyId', authRequired, (req, res) => {
+  const { invoices } = req.body;
+  if (!invoices || !Array.isArray(invoices)) return res.status(400).json({ error: 'invoices array required' });
+  const ins = db.prepare('INSERT OR REPLACE INTO excluded_invoices (id, num_factura, fecha, tercero, cif, base, iva, total, tipo, motivo, excluded_by, company_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  const tx = db.transaction(() => {
+    invoices.forEach(f => {
+      const id = 'exc_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+      ins.run(id, f.num_factura, f.fecha||'', f.tercero||'', f.cif||'', f.base||0, f.iva||0, f.total||0, f.tipo||'recibida', f.motivo||'Desmarcada manualmente', req.user.username, req.params.companyId);
+    });
+  });
+  tx();
+  auditLog(req, 'exclude-invoices', `${invoices.length} facturas excluidas`);
+  res.json({ ok: true, count: invoices.length });
+});
+
+app.put('/api/excluded-invoices/:companyId/:id', authRequired, (req, res) => {
+  const { estado } = req.body;
+  if (!['pendiente','contabilizada','descartada'].includes(estado)) return res.status(400).json({ error: 'Estado inválido' });
+  db.prepare('UPDATE excluded_invoices SET estado = ?, resolved_by = ?, resolved_at = datetime(\'now\') WHERE id = ? AND company_id = ?').run(estado, req.user.username, req.params.id, req.params.companyId);
+  auditLog(req, 'resolve-excluded', `${req.params.id} → ${estado}`);
+  res.json({ ok: true });
+});
+
+app.delete('/api/excluded-invoices/:companyId/:id', authRequired, (req, res) => {
+  db.prepare('DELETE FROM excluded_invoices WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
+  res.json({ ok: true });
 });
 
 // ── Start ──
