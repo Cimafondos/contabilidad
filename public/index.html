@@ -524,7 +524,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.0.3</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.0.4</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2638,6 +2638,8 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     
     // For emitidas: "Empresa Factura" is the CLIENT, "Proveedor" is US
     var isEmitida=tipoDoc.indexOf('EMITIDA')>=0||tipoDoc.indexOf('VENTA')>=0;
+    // If user explicitly selected emitida, trust that
+    if(tipo==='emitida')isEmitida=true;
     if(isEmitida&&empresaOrigen){
       terceroName=empresaOrigen;
     }
@@ -2693,9 +2695,11 @@ async function processFacturasRows(rows,tipo,resumenIVA){
       fact.total=fact.base21+fact.iva21+fact.base10+fact.iva10+fact.base4+fact.iva4+fact.base0-Math.abs(fact.retencion||0);
     }
     fact.total=Math.abs(fact.total);
-    // Skip facturas that don't match selected tipo
-    if(tipo==='emitida'&&!isEmitida)continue;
-    if(tipo==='recibida'&&isEmitida)continue;
+    // Skip facturas that don't match selected tipo - ONLY when tipo=auto
+    if(tipo==='auto'){
+      // In auto mode, skip based on tipoDoc column
+      // (no filtering needed - all are included with correct tipo assigned)
+    }
     facturas.push(fact);
   }
 
@@ -2802,7 +2806,7 @@ function showFacturasImportResult(nuevas,duplicadas,tipo,resumenIVA){
     '</tbody></table></div>';
   }
 
-  res.innerHTML='<div class="card" style="border:2px solid var(--pri)"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 Resultado importación — '+(tipo==='recibida'?'Facturas recibidas':'Facturas emitidas')+'</span><div style="display:flex;gap:6px">'+(nuevas.length?'<button class="btn btn-d" onclick="clearImpResult()">Cancelar</button><button class="btn btn-p" style="font-size:13px;padding:8px 20px" id="btnContabilizar" onclick="contabilizarFacturas()">✓ Contabilizar '+nuevas.length+' facturas</button>':'<button class="btn btn-d" onclick="clearImpResult()">Cerrar</button>')+'</div></div><div class="card-b">'+
+  res.innerHTML='<div class="card" style="border:2px solid var(--pri)"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 Resultado importación — '+(tipo==='recibida'?'Facturas recibidas':(tipo==='auto'?'Facturas':'Facturas emitidas'))+'</span><div style="display:flex;gap:6px">'+(nuevas.length?'<button class="btn btn-d" onclick="clearImpResult()">Cancelar</button><button class="btn btn-p" style="font-size:13px;padding:8px 20px" id="btnContabilizar" onclick="contabilizarFacturas()">✓ Contabilizar '+nuevas.length+' facturas</button>':'<button class="btn btn-d" onclick="clearImpResult()">Cerrar</button>')+'</div></div><div class="card-b">'+
   '<div class="row"><div class="stat"><div class="stat-v" style="color:var(--ok)">'+nuevas.length+'</div><div class="stat-l">Nuevas para importar</div></div><div class="stat"><div class="stat-v" style="color:var(--txM)">'+duplicadas.length+'</div><div class="stat-l">Duplicadas (saltadas)</div></div><div class="stat"><div class="stat-v" style="color:var(--bl)">'+fmt(totalNuevas)+'€</div><div class="stat-l">Importe total</div></div></div>'+
   cuadreHTML+
   (nuevas.length?'<div class="scr" style="max-height:400px"><table><thead><tr><th style="width:30px"><input type="checkbox" checked onchange="toggleAllFacturas(this.checked)"></th><th>Nº Factura</th><th>Fecha</th><th>'+(tipo==='recibida'?'Proveedor':'Cliente')+'</th><th>CIF</th><th style="text-align:right">Base</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Tipo</th></tr></thead><tbody>'+
@@ -2814,7 +2818,7 @@ function showFacturasImportResult(nuevas,duplicadas,tipo,resumenIVA){
     var retP=f.retencion||0;
     if(f.iva0&&f.iva0<0)retP=Math.abs(f.iva0);
     var realBase=Math.abs(f.total)-Math.abs(totalIva)-Math.abs(recargoP)+Math.abs(retP);
-    return '<tr class="'+(i%2?'alt':'')+'" style="'+(f.isAbono?'color:var(--rd)':'')+'"><td><input type="checkbox" class="fact-chk" data-idx="'+i+'" checked onchange="updateContabilizarCount()"></td><td style="font-weight:600;font-size:10px">'+h(f.numFact)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="font-size:9px;color:var(--txM)">'+h(f.cif)+'</td><td style="text-align:right">'+fmt(realBase)+'€</td><td style="text-align:right">'+fmt(totalIva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.total)+'€</td><td style="font-size:9px"><span class="badge '+(f.isAbono?'badge-r':'badge-g')+'">'+(f.isAbono?'Abono':'Factura')+'</span></td></tr>';
+    return '<tr class="'+(i%2?'alt':'')+'" style="'+(f.isAbono?'color:var(--rd)':'')+'"><td><input type="checkbox" class="fact-chk" data-idx="'+i+'" checked onchange="updateContabilizarCount()"></td><td style="font-weight:600;font-size:10px">'+h(f.numFact)+'</td><td style="font-size:10px">'+fmtD(f.fecha)+'</td><td style="font-size:11px">'+h(f.tercero)+'</td><td style="font-size:9px;color:var(--txM)">'+h(f.cif)+'</td><td style="text-align:right">'+fmt(realBase)+'€</td><td style="text-align:right">'+fmt(totalIva)+'€</td><td style="text-align:right;font-weight:700">'+fmt(f.total)+'€</td><td style="font-size:9px"><span class="badge '+(f.isAbono?'badge-r':(f.tipo==='emitida'?'badge-g':'badge-b'))+'">'+(f.isAbono?'Abono':(f.tipo==='emitida'?'Emitida':'Recibida'))+'</span></td></tr>';
   }).join('')+'</tbody></table></div>':'<div class="empty">No hay facturas nuevas para importar</div>')+
   (duplicadas.length?'<div style="margin-top:8px;padding:8px;background:#FFF8E1;border-radius:6px;font-size:11px;color:var(--am)">⚠ '+duplicadas.length+' facturas ya contabilizadas: '+duplicadas.map(function(f){return f.numFact;}).join(', ')+'</div>':'')+
   '</div></div>';
@@ -2906,7 +2910,7 @@ async function contabilizarFacturas(){
 
     var totalIva=f.iva21+f.iva10+f.iva4;
 
-    if(tipo==='recibida'){
+    if(f.tipo==='recibida'){
       // FACTURA RECIBIDA: Gasto(D) + IVA soportado(D) + Proveedor(H) - Retención
       var cuentaGasto='60000000'; // Por defecto compras
       // If it's services, use 62X
@@ -3083,7 +3087,7 @@ async function contabilizarFacturas(){
 
     var conceptStr=(f.isAbono?'Abono ':'Fra. ')+h(f.tercero)+' ['+f.numFact+']';
     await api('/api/entries/'+state.company.id,{method:'POST',body:{
-      id:(tipo==='recibida'?'fr_':'fe_')+uid(),
+      id:(f.tipo==='recibida'?'fr_':'fe_')+uid(),
       date:f.fecha,
       concept:conceptStr,
       type:'import_factura',
