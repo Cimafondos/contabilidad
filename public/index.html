@@ -524,7 +524,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.1.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v8.1.1</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2877,7 +2877,32 @@ function showFacturasImportResult(nuevas,duplicadas,tipo,resumenIVA){
   window._facturasSkipped=duplicadas.length;
 }
 
-function clearImpResult(){var el=$('impResult');if(el)el.innerHTML='';window._impResultHTML=null;}
+function clearImpResult(){
+  // Before clearing, save any unchecked invoices as excluded
+  saveUncheckedAsExcluded();
+  var el=$('impResult');if(el)el.innerHTML='';window._impResultHTML=null;
+}
+
+async function saveUncheckedAsExcluded(){
+  var allFacturas=window._facturasToImport;
+  var tipo=window._facturasType;
+  if(!allFacturas||!allFacturas.length)return;
+  var unchecked=[];
+  document.querySelectorAll('.fact-chk').forEach(function(cb){
+    if(!cb.checked){
+      var idx=parseInt(cb.getAttribute('data-idx'));
+      if(!isNaN(idx)&&allFacturas[idx])unchecked.push(allFacturas[idx]);
+    }
+  });
+  if(!unchecked.length)return;
+  var excData=unchecked.map(function(f){
+    return {num_factura:f.numFact,fecha:f.fecha||'',tercero:f.tercero||'',cif:f.cif||'',base:Math.abs(f.base21+f.base10+f.base4+(f.base0||0)),iva:Math.abs(f.iva21+f.iva10+f.iva4),total:Math.abs(f.total),tipo:tipo==='recibida'?'recibida':'emitida'};
+  });
+  try{
+    await api('/api/excluded-invoices/'+state.company.id,{method:'POST',body:{invoices:excData}});
+    toast(unchecked.length+' factura(s) guardada(s) en Revisión (Fiscal → Revisión fact.)','ok');
+  }catch(e){console.error('Error saving excluded:',e);}
+}
 
 // Persist import results
 function setImpResult(html){
@@ -3199,18 +3224,7 @@ async function contabilizarFacturas(){
   if(postTestMsg)msg+=postTestMsg;
   
   // Save excluded (unchecked) invoices for review
-  var uncheckedIdxs={};
-  allFacturas.forEach(function(f,i){if(!checkedIdxs[String(i)])uncheckedIdxs[String(i)]=true;});
-  var excluded=allFacturas.filter(function(f,i){return uncheckedIdxs[String(i)];});
-  if(excluded.length>0){
-    var excData=excluded.map(function(f){
-      return {num_factura:f.numFact,fecha:f.fecha||'',tercero:f.tercero||'',cif:f.cif||'',base:Math.abs(f.base21+f.base10+f.base4+(f.base0||0)),iva:Math.abs(f.iva21+f.iva10+f.iva4),total:Math.abs(f.total),tipo:tipo==='recibida'?'recibida':'emitida'};
-    });
-    try{
-      api('/api/excluded-invoices/'+state.company.id,{method:'POST',body:{invoices:excData}});
-      msg+=' · '+excluded.length+' excluidas (ver Fiscal → Revisión fact.)';
-    }catch(e){console.error('Error saving excluded:',e);}
-  }
+  await saveUncheckedAsExcluded();
   
   toast(msg,postTestMsg&&postTestMsg.indexOf('ALERTA')>=0?'error':'ok');
   render();
