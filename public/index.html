@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.6</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.7</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2691,6 +2691,9 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     var concepto=String(r[colMap.concepto]||'').trim();
     var tipoDoc=String(r[colMap.tipoDoc]||'').trim();
     var empresaOrigen=String(r[colMap.empresa]||'').trim();
+    
+    // DEBUG: log first 3 rows to see what's being parsed
+    if(i<=3)console.log('IMPORT ROW '+i+': tercero="'+terceroName+'" cif="'+cif+'" numFact="'+numFact+'" colMap.tercero='+colMap.tercero+' colMap.cif='+colMap.cif+' raw_tercero='+JSON.stringify(r[colMap.tercero])+' raw_cif='+JSON.stringify(r[colMap.cif]));
     
     // Extract CIF Emisor from concepto (the CIF column often has the receptor CIF)
     var cifEmisor=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
