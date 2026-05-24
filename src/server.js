@@ -1063,11 +1063,6 @@ app.post('/api/move-company-group', authRequired, superadminRequired, (req, res)
   res.json({ ok: true });
 });
 
-// ── SPA fallback ──
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
-});
-
 // ── Gestor Documental API Proxy ──
 app.post('/api/gestor-sync', authRequired, async (req, res) => {
   try {
@@ -1142,6 +1137,11 @@ app.put('/api/excluded-invoices/:companyId/:id', authRequired, (req, res) => {
 app.delete('/api/excluded-invoices/:companyId/:id', authRequired, (req, res) => {
   db.prepare('DELETE FROM excluded_invoices WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
   res.json({ ok: true });
+});
+
+// ── SPA fallback (MUST be last route) ──
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
 // ── Start ──
