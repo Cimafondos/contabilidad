@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.1</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -1342,8 +1342,18 @@ function getChart(id,config){
 
 // ═══ DASHBOARD PROFESIONAL ═══
 function renderDash(c){
+  // Run integrity tests silently
+  var testResults=runIntegrityTests();
+  var testBanner='';
+  if(!testResults.allOk){
+    testBanner='<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:#991B1B">⚠️ <b>Tests de integridad fallidos:</b>';
+    if(!testResults.cuadreGeneral.ok)testBanner+=' Cuadre D/H: diff '+fmt(testResults.cuadreGeneral.diff)+'€.';
+    if(!testResults.ivaSoportado.ok)testBanner+=' IVA Sop: facturas '+fmt(testResults.ivaSoportado.facturas)+'€ vs asientos '+fmt(testResults.ivaSoportado.asientos)+'€.';
+    if(!testResults.ivaRepercutido.ok)testBanner+=' IVA Rep: facturas '+fmt(testResults.ivaRepercutido.facturas)+'€ vs asientos '+fmt(testResults.ivaRepercutido.asientos)+'€.';
+    testBanner+='</div>';
+  }
   if(!state.company||state.company.id==='_none_'){
-    c.innerHTML='<div style="text-align:center;padding:60px 20px"><div style="font-size:48px;margin-bottom:16px">🏢</div><h2 style="margin:0 0 8px">Bienvenido a Muvail Conta</h2><p style="color:var(--txM);margin-bottom:24px">No tienes ninguna empresa asignada. Crea una empresa para empezar.</p><button class="btn btn-p" style="font-size:14px;padding:12px 24px" onclick="setView(\'migrupo\')">+ Crear mi primera empresa</button></div>';
+    c.innerHTML=testBanner+'<div style="text-align:center;padding:60px 20px"><div style="font-size:48px;margin-bottom:16px">🏢</div><h2 style="margin:0 0 8px">Bienvenido a Muvail Conta</h2><p style="color:var(--txM);margin-bottom:24px">No tienes ninguna empresa asignada. Crea una empresa para empezar.</p><button class="btn btn-p" style="font-size:14px;padding:12px 24px" onclick="setView(\'migrupo\')">+ Crear mi primera empresa</button></div>';
     return;
   }
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
@@ -6105,6 +6115,7 @@ function renderInformeVentas(c){
       if(l.a&&l.a.startsWith('477')){var iv=l.h-l.d;totalIva+=iv;monthIva[mo]+=iv;}
       if(l.a&&l.a.startsWith('430')){
         var cliName=am[l.a]?am[l.a].name:l.a;
+        if(cliName.match(/^[A-Z]\d{7,8}/i)){var invDataE=getInvoiceData({tipo:'emitida'});invDataE.forEach(function(inv){if(inv.tercero&&inv.cif&&cliName.indexOf(inv.cif)>=0)cliName=inv.tercero;});}
         if(!byClient[l.a])byClient[l.a]={name:cliName,total:0,count:0};
         byClient[l.a].total+=l.d-l.h;byClient[l.a].count++;
       }
@@ -6178,6 +6189,8 @@ function renderInformeCompras(c){
       if(l.a&&l.a.startsWith('472')){var iv=l.d-l.h;totalIva+=iv;monthIva[mo]+=iv;}
       if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))){
         var provName=am[l.a]?am[l.a].name:l.a;
+        // Enrich name from invoice data if name looks like a CIF
+        if(provName.match(/^[A-Z]\d{7,8}/i)){var invData=getInvoiceData({tipo:'recibida'});invData.forEach(function(inv){if(inv.tercero&&inv.cif&&provName.indexOf(inv.cif)>=0)provName=inv.tercero;});}
         if(!byProv[l.a])byProv[l.a]={name:provName,total:0,count:0};
         byProv[l.a].total+=l.h-l.d;byProv[l.a].count++;
       }
@@ -6253,6 +6266,7 @@ function renderAnalisisProveedores(c){
         var key=pl.a;
         var neto=pl.h-pl.d; // Positivo=factura, negativo=abono
         var provName=am[pl.a]?am[pl.a].name:pl.a;
+        if(provName.match(/^[A-Z]\d{7,8}/i)){var invD=getInvoiceData({tipo:'recibida'});invD.forEach(function(inv){if(inv.tercero&&inv.cif&&provName.indexOf(inv.cif)>=0)provName=inv.tercero;});}
         if(!provs[key])provs[key]={name:provName,total:0,count:0,months:{},lastDate:'',cuenta:pl.a};
         provs[key].total+=neto;provs[key].count++;
         var ym=e.date.slice(0,7);if(!provs[key].months[ym])provs[key].months[ym]=0;
