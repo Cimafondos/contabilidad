@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.7</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.7-debug</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -3121,15 +3121,19 @@ async function contabilizarFacturas(){
       // 1. Determinar CIF real del proveedor (nunca usar CIF de la propia empresa)
       var ownCif=state.company.cif||'';
       var provCif=f.cif;
+      console.log('PROV['+f.numFact+']: f.tercero="'+f.tercero+'" f.cif="'+f.cif+'" ownCif="'+ownCif+'" masters.supplier.length='+masters.supplier.length);
       if(!provCif||provCif===ownCif||provCif==='B22859755'){
         var cifEmMatch=(f.concepto||'').match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
         if(cifEmMatch&&cifEmMatch[1]&&cifEmMatch[1]!==ownCif){provCif=cifEmMatch[1];}
         else{provCif='';}
+        console.log('PROV['+f.numFact+']: CIF was own/empty, provCif now="'+provCif+'"');
       }
       // 2. Buscar proveedor: PRIMERO por nombre (fiable), luego por CIF (si no es propio)
       var provRecord=null;
       if(f.tercero){provRecord=masters.supplier.find(function(s){return s.name&&s.name.toUpperCase()===f.tercero.toUpperCase();});}
+      console.log('PROV['+f.numFact+']: byName='+(provRecord?provRecord.name+'/'+provRecord.account:'null'));
       if(!provRecord&&provCif){provRecord=masters.supplier.find(function(s){return s.cif&&s.cif===provCif;});}
+      console.log('PROV['+f.numFact+']: byCIF='+(provRecord?provRecord.name+'/'+provRecord.account:'null'));
       // 3. Crear nuevo si no existe
       if(!provRecord&&f.tercero){
         var provCode='P'+String(masters.supplier.length+1).padStart(3,'0');
@@ -3152,6 +3156,7 @@ async function contabilizarFacturas(){
         }
       }
       var cuentaProv=provRecord?provRecord.account:'40000000';
+      console.log('PROV['+f.numFact+']: FINAL cuentaProv='+cuentaProv+' provRecord='+(provRecord?provRecord.name:'null'));
 
       // Proveedor (haber = lo que debemos) — Total from Excel, using individual account
       if(f.isAbono){
