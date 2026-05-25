@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.0.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.0.1</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -1343,13 +1343,15 @@ function getChart(id,config){
 // ═══ DASHBOARD PROFESIONAL ═══
 function renderDash(c){
   // Run integrity tests silently
-  var testResults=runIntegrityTests();
+  var testResults=null;
+  try{testResults=runIntegrityTests();}catch(e){console.warn('Integrity test error:',e);}
   var testBanner='';
-  if(!testResults.allOk){
+  if(testResults&&!testResults.allOk){
     testBanner='<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:#991B1B">⚠️ <b>Tests de integridad fallidos:</b>';
-    if(!testResults.cuadreGeneral.ok)testBanner+=' Cuadre D/H: diff '+fmt(testResults.cuadreGeneral.diff)+'€.';
-    if(!testResults.ivaSoportado.ok)testBanner+=' IVA Sop: facturas '+fmt(testResults.ivaSoportado.facturas)+'€ vs asientos '+fmt(testResults.ivaSoportado.asientos)+'€.';
-    if(!testResults.ivaRepercutido.ok)testBanner+=' IVA Rep: facturas '+fmt(testResults.ivaRepercutido.facturas)+'€ vs asientos '+fmt(testResults.ivaRepercutido.asientos)+'€.';
+    if(testResults.cuadreGeneral&&!testResults.cuadreGeneral.ok)testBanner+=' Cuadre D/H: diff '+fmt(Math.abs(testResults.cuadreGeneral.debe-testResults.cuadreGeneral.haber))+'€.';
+    if(testResults.ivaSoportado&&!testResults.ivaSoportado.ok)testBanner+=' IVA Sop: facturas '+fmt(testResults.ivaSoportado.facturas)+'€ vs asientos '+fmt(testResults.ivaSoportado.asientos)+'€.';
+    if(testResults.compras&&!testResults.compras.ok)testBanner+=' Compras: facturas '+fmt(testResults.compras.facturas)+'€ vs asientos '+fmt(testResults.compras.asientos)+'€.';
+    if(testResults.conteo&&!testResults.conteo.ok)testBanner+=' Conteo: '+testResults.conteo.facturas+' facturas vs '+testResults.conteo.asientos+' asientos.';
     testBanner+='</div>';
   }
   if(!state.company||state.company.id==='_none_'){
