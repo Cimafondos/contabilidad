@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.0.1</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.0.2</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2661,6 +2661,9 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     if(hl==='total')colMap.total=i;
   });
   console.log('Column map:',colMap);
+  window._lastColMap=colMap;
+  window._lastHeaders=header.map(function(c){return c?c.toString().trim():'';});
+  console.log('Excel headers:', JSON.stringify(window._lastHeaders));
 
   // Parse each row into a factura
   var facturas=[];
@@ -2688,6 +2691,10 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     }
     if(!fecha||fecha==='undefined'||fecha.length<8)fecha=today();
 
+    if(i<=2){
+      var allCols={};for(var ci=0;ci<r.length;ci++){if(r[ci]!==null&&r[ci]!==undefined&&String(r[ci]).trim())allCols['col'+ci]=String(r[ci]).slice(0,80);}
+      console.log('RAW ROW '+i+':', JSON.stringify(allCols));
+    }
     var terceroName=String(r[colMap.tercero]||'').trim();
     var cif=colMap.cif!==undefined?String(r[colMap.cif]||'').trim():'';
     var concepto=colMap.concepto!==undefined?String(r[colMap.concepto]||'').trim():'';
