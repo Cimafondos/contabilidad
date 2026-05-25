@@ -375,12 +375,12 @@ function changeEmpresa(idOrName){
   EMPRESA_MAP[compId]=em.name||idOrName;
   try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:compId,name:em.name||idOrName,cif:em.cif||''}));}catch(e){}
   showProgress('Cambiando empresa','Cargando '+(em.name||idOrName)+'...');
-  loadData().then(function(){return loadInvoices();}).then(function(){checkIntegrity();render();}).catch(function(){
-    state.accounts=[];state.entries=[];state.rules=[];render();
+  state.invoices=[];loadData().then(function(){return loadInvoices();}).then(function(){checkIntegrity();render();}).catch(function(){
+    state.accounts=[];state.entries=[];state.invoices=[];state.rules=[];render();
     toast('Empresa '+(em.name||idOrName)+': sin datos en el servidor','ok');
   });
 }
-function changeEjercicio(y){state.ejercicio=parseInt(y);initDates();render();}
+function changeEjercicio(y){state.ejercicio=parseInt(y);initDathes();render();}
 
 // RENDER
 function render(){
