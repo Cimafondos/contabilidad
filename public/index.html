@@ -371,9 +371,9 @@ function changeEmpresa(idOrName){
   var em=empresas.find(function(e){return e.id===idOrName;})||empresas.find(function(e){return e.name===idOrName;});
   if(!em)return;
   var compId=em.id||idOrName;
-  state.company={id:compId,name:em.name||idOrName};
+  state.company={id:compId,name:em.name||idOrName,cif:em.cif||''};
   EMPRESA_MAP[compId]=em.name||idOrName;
-  try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:compId,name:em.name||idOrName}));}catch(e){}
+  try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:compId,name:em.name||idOrName,cif:em.cif||''}));}catch(e){}
   showProgress('Cambiando empresa','Cargando '+(em.name||idOrName)+'...');
   loadData().then(function(){checkIntegrity();render();}).catch(function(){
     state.accounts=[];state.entries=[];state.rules=[];render();
@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.8</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.9</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -694,9 +694,9 @@ async function selectCompany(companyId){
   var emps=state.serverEmpresas||[];
   var em=emps.find(function(e){return e.id===companyId;});
   if(!em)return;
-  state.company={id:em.id,name:em.name};
+  state.company={id:em.id,name:em.name,cif:em.cif||''};
   EMPRESA_MAP[em.id]=em.name;
-  try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:em.id,name:em.name}));}catch(e){}
+  try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:em.id,name:em.name,cif:em.cif||''}));}catch(e){}
   showProgress('Cargando empresa','Abriendo '+em.name+'...');
   initDates();
   try{
@@ -2695,6 +2695,7 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     // FIX: If tercero looks like a CIF (e.g. "B22859755"), swap it to cif and find real name
     if(terceroName.match(/^[A-Z]\d{7,8}[A-Z]?$/i)){
       if(!cif)cif=terceroName;
+      if(i<=2)console.log('CONCEPTO ROW '+i+':', concepto.slice(0,300));
       // Try to extract real provider name from concepto
       // Concepto format: "... → [CIF] ✅ PROVIDER NAME | ..." or "CIF Emisor: [CIF] ... Nombre: PROVIDER NAME"
       var nameFromConcepto='';
