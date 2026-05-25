@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.0.2</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.0.3</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2640,25 +2640,31 @@ async function processFacturasRows(rows,tipo,resumenIVA){
   var colMap={};
   header.forEach(function(h,i){
     var hl=h.toLowerCase();
-    if(hl.indexOf('nº factura')>=0||hl.indexOf('n factura')>=0||hl==='nº factura'||hl.indexOf('numero factura')>=0||hl.indexOf('núm')>=0)colMap.numFact=i;
-    if(hl.indexOf('fecha contable')>=0||hl.indexOf('fecha factura')>=0||(hl==='fecha'&&!colMap.fecha))colMap.fecha=i;
-    if(hl.indexOf('fecha vencimiento')>=0)colMap.vencimiento=i;
-    if(hl.indexOf('proveedor')>=0||hl.indexOf('cliente')>=0||hl.indexOf('emisor')>=0||hl.indexOf('receptor')>=0)colMap.tercero=i;
-    if(hl==='cif')colMap.cif=i;
-    if(hl.indexOf('concepto')>=0)colMap.concepto=i;
-    if(hl.indexOf('tipo documento')>=0)colMap.tipoDoc=i;
-    if(hl==='empresa factura')colMap.empresa=i;
+    if(hl.indexOf('nº factura')>=0||hl.indexOf('n factura')>=0||hl==='nº factura'||hl.indexOf('numero factura')>=0||hl.indexOf('núm')>=0||hl==='número'||hl==='numero')colMap.numFact=i;
+    if(hl.indexOf('fecha contable')>=0||hl.indexOf('fecha factura')>=0||hl.indexOf('fecha emisión')>=0||hl==='fecha emisión'||(hl==='fecha'&&!colMap.fecha))colMap.fecha=i;
+    if(hl.indexOf('fecha vencimiento')>=0||hl.indexOf('fecha vcto')>=0)colMap.vencimiento=i;
+    if(hl.indexOf('emisor')>=0&&hl.indexOf('proveedor')>=0)colMap.tercero=i; // "Emisor / Proveedor" — priority
+    else if(hl.indexOf('proveedor')>=0&&colMap.tercero===undefined)colMap.tercero=i;
+    else if(hl.indexOf('emisor')>=0&&hl.indexOf('cif')<0&&colMap.tercero===undefined)colMap.tercero=i;
+    else if((hl.indexOf('cliente')>=0||hl.indexOf('receptor')>=0)&&hl.indexOf('cif')<0&&colMap.tercero===undefined)colMap.tercero=i;
+    if(hl==='cif'||hl==='cif emisor')colMap.cif=i;
+    else if(hl.indexOf('cif emisor')>=0)colMap.cif=i;
+    else if(hl==='cif'||(hl.indexOf('cif')>=0&&hl.indexOf('receptor')<0&&colMap.cif===undefined))colMap.cif=i;
+    if(hl.indexOf('concepto')>=0||hl.indexOf('observaciones')>=0)colMap.concepto=i;
+    if(hl.indexOf('tipo documento')>=0||hl==='tipo')colMap.tipoDoc=i;
+    if(hl==='empresa factura'||hl==='empresa')colMap.empresa=i;
     if(hl.indexOf('base 21')>=0)colMap.base21=i;
     if(hl.indexOf('iva 21')>=0)colMap.iva21=i;
-    if(hl.indexOf('base 10')>=0)colMap.base10=i;
-    if(hl.indexOf('iva 10')>=0)colMap.iva10=i;
+    if(hl.indexOf('base 10')>=0&&hl.indexOf('base 100')<0)colMap.base10=i;
+    if(hl.indexOf('iva 10')>=0&&hl.indexOf('iva 100')<0)colMap.iva10=i;
     if(hl.indexOf('base 4')>=0)colMap.base4=i;
     if(hl.indexOf('iva 4')>=0)colMap.iva4=i;
     if(hl.indexOf('base 0')>=0)colMap.base0=i;
     if(hl.indexOf('iva 0')>=0&&hl.indexOf('iva 10')<0)colMap.iva0=i;
     if(hl.indexOf('retenc')>=0||hl.indexOf('retención')>=0)colMap.retencion=i;
     if(hl.indexOf('r. equiv')>=0||hl.indexOf('recargo')>=0)colMap.recargo=i;
-    if(hl==='total')colMap.total=i;
+    if(hl==='total'||hl==='total factura')colMap.total=i;
+    if(hl==='base imponible'&&colMap.totalBase===undefined)colMap.totalBase=i;
   });
   console.log('Column map:',colMap);
   window._lastColMap=colMap;
