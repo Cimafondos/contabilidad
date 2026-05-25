@@ -151,7 +151,7 @@ async function api(path,opts){
   if(!r.ok)throw new Error('Error '+r.status);return r.json();
 }
 
-var state={user:null,company:null,view:'dash',tab:'inicio',accounts:[],entries:[],rules:[],toast:null,
+var state={user:null,company:null,view:'dash',tab:'inicio',accounts:[],entries:[],rules:[],invoices:[],toast:null,
   ejercicio:new Date().getFullYear(),dateFrom:'',dateTo:'',integrity:null,closedPeriods:[]};
 var $=function(id){return document.getElementById(id);};
 
@@ -375,7 +375,7 @@ function changeEmpresa(idOrName){
   EMPRESA_MAP[compId]=em.name||idOrName;
   try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:compId,name:em.name||idOrName,cif:em.cif||''}));}catch(e){}
   showProgress('Cambiando empresa','Cargando '+(em.name||idOrName)+'...');
-  loadData().then(function(){checkIntegrity();render();}).catch(function(){
+  loadData().then(function(){return loadInvoices();}).then(function(){checkIntegrity();render();}).catch(function(){
     state.accounts=[];state.entries=[];state.rules=[];render();
     toast('Empresa '+(em.name||idOrName)+': sin datos en el servidor','ok');
   });
@@ -534,7 +534,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v9.0.9</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.0.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2692,39 +2692,66 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     var tipoDoc=colMap.tipoDoc!==undefined?String(r[colMap.tipoDoc]||'').trim():'';
     var empresaOrigen=colMap.empresa!==undefined?String(r[colMap.empresa]||'').trim():'';
     
-    // FIX: If tercero looks like a CIF (e.g. "B22859755"), swap it to cif and find real name
+    // FIX v10: If tercero looks like a CIF, find real name from accounts/masters/concepto
     if(terceroName.match(/^[A-Z]\d{7,8}[A-Z]?$/i)){
       if(!cif)cif=terceroName;
-      if(i<=2)console.log('CONCEPTO ROW '+i+':', concepto.slice(0,300));
-      // Try to extract real provider name from concepto
-      // Concepto format: "... → [CIF] ✅ PROVIDER NAME | ..." or "CIF Emisor: [CIF] ... Nombre: PROVIDER NAME"
-      var nameFromConcepto='';
-      // Pattern 1: "✅ NAME" or "🆕 NAME"
-      var nm1=concepto.match(/[✅🆕]\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\.,]+(?:S\.L\.?|S\.A\.?|S\.L\.P\.?|S\.L\.U\.?)?)/i);
-      if(nm1)nameFromConcepto=nm1[1].trim();
-      // Pattern 2: "Nombre traído de BDD por CIF" followed by the name
-      if(!nameFromConcepto){
-        var nm2=concepto.match(/Nombre traid[oa]?\s+de\s+BDD[^|]*?\|\s*([A-ZÁÉÍÓÚÑ][^|→\[\]]+)/i);
-        if(nm2)nameFromConcepto=nm2[1].trim();
+      
+      // Extract real CIF emisor from concepto
+      var ownCif=state.company.cif||'';
+      var realCif=cif;
+      if(realCif===ownCif){
+        var cifEm=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
+        if(cifEm&&cifEm[1]&&cifEm[1]!==ownCif)realCif=cifEm[1];
+        else realCif='';
       }
-      // Pattern 3: CIF Emisor: [CIF] followed by name
-      if(!nameFromConcepto){
-        var nm3=concepto.match(/CIF Emisor:\s*\[[A-Z0-9]+\]\s*[✅🆕]?\s*(?:Nombre traid[oa]?[^|]*?)?\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\.,]+(?:S\.L\.?|S\.A\.?))/i);
-        if(nm3)nameFromConcepto=nm3[1].trim();
+      if(!realCif){
+        var cifEm2=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
+        if(cifEm2&&cifEm2[1]&&cifEm2[1]!==ownCif)realCif=cifEm2[1];
       }
-      // Pattern 4: look for company name patterns in concepto (ending in S.L., S.A., etc)
-      if(!nameFromConcepto){
-        var nm4=concepto.match(/([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\.,&]+(?:S\.L\.?|S\.A\.?|S\.L\.P\.?|S\.L\.U\.?))/i);
-        if(nm4&&nm4[1].length>5)nameFromConcepto=nm4[1].trim();
+      cif=realCif||cif;
+      
+      // 1. Try to find name from existing accounts (most reliable)
+      var nameFound='';
+      if(realCif){
+        loadMasters();
+        var supp=(masters.supplier||[]).find(function(s){return s.cif===realCif;});
+        if(supp&&supp.name)nameFound=supp.name;
+        if(!nameFound){
+          // Search in account names - they have correct names from previous imports
+          var acct=state.accounts.find(function(a){return a.code.startsWith('4000')&&a.name&&a.name.length>3&&!a.name.match(/^[A-Z]\d{7}/i);});
+          // Match by looking up which account was assigned to this CIF before
+          // Check masters for CIF→account mapping
+          if(supp&&supp.account){
+            var acctByCode=state.accounts.find(function(a){return a.code===supp.account;});
+            if(acctByCode&&acctByCode.name)nameFound=acctByCode.name;
+          }
+        }
       }
-      if(nameFromConcepto){
-        terceroName=nameFromConcepto;
-        console.log('FIX tercero CIF→Name: '+cif+' → "'+terceroName+'"');
+      
+      // 2. Try concepto patterns
+      if(!nameFound){
+        // Look for S.L., S.A., S.L.P., S.L.U., S.COOP patterns
+        var matches=concepto.match(/([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\.,'&-]+(?:S\.L\.U?\.|S\.A\.|S\.L\.P\.|S\.COOP\.))/g);
+        if(matches){
+          for(var mi=0;mi<matches.length;mi++){
+            var candidate=matches[mi].trim();
+            if(candidate.length>8){nameFound=candidate;break;}
+          }
+        }
+      }
+      
+      // 3. Try personal name pattern
+      if(!nameFound){
+        var pn=concepto.match(/([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,})/);
+        if(pn)nameFound=pn[1];
+      }
+      
+      if(nameFound){
+        terceroName=nameFound;
       }
     }
     
-    // DEBUG: log first 3 rows to see what's being parsed
-    if(i<=3)console.log('IMPORT ROW '+i+': tercero="'+terceroName+'" cif="'+cif+'" numFact="'+numFact+'" colMap.tercero='+colMap.tercero+' colMap.cif='+colMap.cif);
+    // DEBUG: log first 3 rows
     
     // Extract CIF Emisor from concepto (the CIF column often has the receptor CIF)
     var cifEmisor=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
@@ -3039,11 +3066,11 @@ async function contabilizarFacturas(){
     diagDetails.push(f.numFact+': iva21='+f.iva21+' iva10='+f.iva10+' iva4='+f.iva4+' total_iva='+iva.toFixed(2));
     if(Math.abs(iva)<0.01&&Math.abs(f.total)>1)diagNoIva.push(f.numFact+' (total='+f.total+', iva21='+f.iva21+', iva10='+f.iva10+')');
   });
-  console.log('PRE-CONTABILIZACIÓN: '+facturas.length+' facturas, IVA total='+diagIva.toFixed(2)+', sin IVA: '+diagNoIva.join(', '));
-  console.log('DETALLE IVA POR FACTURA:', diagDetails);
   if(diagNoIva.length>5){
     console.warn('ALERTA: '+diagNoIva.length+' facturas sin IVA detectadas');
   }
+  
+  var invoicesToSave=[];
 
   // Show progress overlay
   var overlay=document.createElement('div');
@@ -3152,19 +3179,15 @@ async function contabilizarFacturas(){
       // 1. Determinar CIF real del proveedor (nunca usar CIF de la propia empresa)
       var ownCif=state.company.cif||'';
       var provCif=f.cif;
-      console.log('PROV['+f.numFact+']: f.tercero="'+f.tercero+'" f.cif="'+f.cif+'" ownCif="'+ownCif+'" masters.supplier.length='+masters.supplier.length);
       if(!provCif||provCif===ownCif||provCif==='B22859755'){
         var cifEmMatch=(f.concepto||'').match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
         if(cifEmMatch&&cifEmMatch[1]&&cifEmMatch[1]!==ownCif){provCif=cifEmMatch[1];}
         else{provCif='';}
-        console.log('PROV['+f.numFact+']: CIF was own/empty, provCif now="'+provCif+'"');
-      }
+        }
       // 2. Buscar proveedor: PRIMERO por nombre (fiable), luego por CIF (si no es propio)
       var provRecord=null;
       if(f.tercero){provRecord=masters.supplier.find(function(s){return s.name&&s.name.toUpperCase()===f.tercero.toUpperCase();});}
-      console.log('PROV['+f.numFact+']: byName='+(provRecord?provRecord.name+'/'+provRecord.account:'null'));
       if(!provRecord&&provCif){provRecord=masters.supplier.find(function(s){return s.cif&&s.cif===provCif;});}
-      console.log('PROV['+f.numFact+']: byCIF='+(provRecord?provRecord.name+'/'+provRecord.account:'null'));
       // 3. Crear nuevo si no existe
       if(!provRecord&&f.tercero){
         var provCode='P'+String(masters.supplier.length+1).padStart(3,'0');
@@ -3187,7 +3210,6 @@ async function contabilizarFacturas(){
         }
       }
       var cuentaProv=provRecord?provRecord.account:'40000000';
-      console.log('PROV['+f.numFact+']: FINAL cuentaProv='+cuentaProv+' provRecord='+(provRecord?provRecord.name:'null'));
 
       // Proveedor (haber = lo que debemos) — Total from Excel, using individual account
       if(f.isAbono){
@@ -3287,21 +3309,51 @@ async function contabilizarFacturas(){
       }
     }
 
+    var entryId=(f.tipo==='recibida'?'fr_':'fe_')+uid();
     var conceptStr=(f.isAbono?'Abono ':'Fra. ')+h(f.tercero)+' ['+f.numFact+']';
     // Add meta to first line with complete invoice data
     var metaObj={numFactura:f.numFact,tercero:f.tercero,cif:provCif||f.cif,tipoFactura:f.tipo||'recibida',isAbono:!!f.isAbono,base21:f.base21||0,iva21:f.iva21||0,base10:f.base10||0,iva10:f.iva10||0,base4:f.base4||0,iva4:f.iva4||0,base0:f.base0||0,retencion:f.retencion||0,recargo:f.recargo||0,totalFactura:f.total||0};
     if(finalLines.length>0)finalLines[0].meta=JSON.stringify(metaObj);
     await api('/api/entries/'+state.company.id,{method:'POST',body:{
-      id:(f.tipo==='recibida'?'fr_':'fe_')+uid(),
+      id:entryId,
       date:f.fecha,
       concept:conceptStr,
       type:'import_factura',
       lines:finalLines
     }});
+    
+    // ═══ GUARDAR EN TABLA INVOICES (fuente única de verdad) ═══
+    invoicesToSave.push({
+      id:'inv_'+uid(),
+      num_factura:f.numFact,
+      fecha:f.fecha,
+      tipo:f.tipo||'recibida',
+      is_abono:!!f.isAbono,
+      tercero_nombre:f.tercero,
+      tercero_cif:provCif||f.cif||'',
+      tercero_cuenta:cuentaProv||'',
+      base21:f.base21||0, iva21:f.iva21||0,
+      base10:f.base10||0, iva10:f.iva10||0,
+      base4:f.base4||0, iva4:f.iva4||0,
+      base0:f.base0||0,
+      retencion:f.retencion||0,
+      recargo:f.recargo||0,
+      total:f.total||0,
+      forma_pago:f.formaPago||'',
+      fecha_vencimiento:f.vencimiento||'',
+      concepto_gestor:f.concepto||'',
+      entry_id:entryId
+    });
     created++;
   }
 
-  await loadData();checkIntegrity();
+  // Save all invoices to DB in batch
+  if(invoicesToSave.length>0){
+    try{await api('/api/invoices/'+state.company.id,{method:'POST',body:{invoices:invoicesToSave}});}
+    catch(e){console.error('Error saving invoices:',e);}
+  }
+  
+  await loadData();await loadInvoices();checkIntegrity();
   // Remove progress overlay
   var ov=$('impProgress');if(ov)ov.remove();
   auditLog('importar_facturas',tipo+': '+created+' facturas');
@@ -3936,61 +3988,36 @@ function deleteCaptador(idx){if(!confirm('¿Eliminar?'))return;loadCaptadores();
 
 // ═══ MODELO 303 — IVA TRIMESTRAL ═══
 function renderModelo303(c){
-  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
-  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  var trimestres=[{name:'1T (Ene-Mar)',from:'01',to:'03'},{name:'2T (Abr-Jun)',from:'04',to:'06'},{name:'3T (Jul-Sep)',from:'07',to:'09'},{name:'4T (Oct-Dic)',from:'10',to:'12'}];
-  var datos=trimestres.map(function(t){
-    var fromD=state.ejercicio+'-'+t.from+'-01';var toD=state.ejercicio+'-'+t.to+'-31';
-    var rep=0,sop=0,baseRep=0,baseSop=0;
-    // Desglose by rate
+  // ═══ MODELO 303 v10 — usa getInvoiceData() como fuente única ═══
+  var trimLabels=['1T (Ene-Mar)','2T (Abr-Jun)','3T (Jul-Sep)','4T (Oct-Dic)'];
+  var trimKeys=['1T','2T','3T','4T'];
+  var datos=trimKeys.map(function(tk,idx){
+    var recibidas=getInvoiceData({tipo:'recibida',trimestre:tk});
+    var emitidas=getInvoiceData({tipo:'emitida',trimestre:tk});
     var rates={21:{baseR:0,cuotaR:0,baseS:0,cuotaS:0},10:{baseR:0,cuotaR:0,baseS:0,cuotaS:0},4:{baseR:0,cuotaR:0,baseS:0,cuotaS:0}};
-    all.forEach(function(e){
-      if(e.date>=fromD&&e.date<=toD){
-        var eIvaRep=0,eIvaSop=0,eBaseG6=0,eBaseG7=0;
-        e.lines.forEach(function(l){
-          var acct=l.a||l.account||'';
-          var debe=parseFloat(l.d||l.debe||0)||0;
-          var haber=parseFloat(l.h||l.haber||0)||0;
-          if(acct.startsWith('477')){rep+=haber-debe;eIvaRep+=haber-debe;}
-          if(acct==='47200000'){sop+=debe-haber;eIvaSop+=debe-haber;}
-          var g=parseInt(acct[0])||0;
-          if(g===7){baseRep+=haber-debe;eBaseG7+=haber-debe;}
-          if(g===6){baseSop+=debe-haber;eBaseG6+=debe-haber;}
-        });
-        // Classify by IVA rate — handle multiple IVA lines per entry
-        var ivaSopLines=[];var ivaRepLines=[];
-        e.lines.forEach(function(l){
-          var acct=l.a||l.account||'';
-          var debe=parseFloat(l.d||l.debe||0)||0;
-          var haber=parseFloat(l.h||l.haber||0)||0;
-          if(acct.startsWith('477'))ivaRepLines.push(haber-debe);
-          if(acct==='47200000')ivaSopLines.push(debe-haber);
-        });
-        if(ivaRepLines.length===1&&eIvaRep>0.001){
-          var rr=detectIvaRate(eBaseG7,eIvaRep);var rk=rates[rr]?rr:21;rates[rk].baseR+=eBaseG7;rates[rk].cuotaR+=eIvaRep;
-        }else if(ivaRepLines.length>1){
-          ivaRepLines.forEach(function(cuota){if(Math.abs(cuota)<0.001)return;var rate=detectIvaRateFromCuota(cuota,eBaseG7,eIvaRep);var base=rate>0?cuota/rate:0;var rk=rates[Math.round(rate*100)]?Math.round(rate*100):21;rates[rk].baseR+=base;rates[rk].cuotaR+=cuota;});
-        }
-        if(ivaSopLines.length===1&&eIvaSop>0.001){
-          var rs=detectIvaRate(eBaseG6,eIvaSop);var rk2=rates[rs]?rs:21;rates[rk2].baseS+=eBaseG6;rates[rk2].cuotaS+=eIvaSop;
-        }else if(ivaSopLines.length>1){
-          ivaSopLines.forEach(function(cuota){if(Math.abs(cuota)<0.001)return;var rate=detectIvaRateFromCuota(cuota,eBaseG6,eIvaSop);var base=rate>0?cuota/rate:0;var rk2=rates[Math.round(rate*100)]?Math.round(rate*100):21;rates[rk2].baseS+=base;rates[rk2].cuotaS+=cuota;});
-        }
-      }
+    var baseSop=0,sop=0,baseRep=0,rep=0;
+    recibidas.forEach(function(f){
+      var sign=f.isAbono?-1:1;
+      rates[21].baseS+=sign*Math.abs(f.base21);rates[21].cuotaS+=sign*Math.abs(f.iva21);
+      rates[10].baseS+=sign*Math.abs(f.base10);rates[10].cuotaS+=sign*Math.abs(f.iva10);
+      rates[4].baseS+=sign*Math.abs(f.base4);rates[4].cuotaS+=sign*Math.abs(f.iva4);
+      baseSop+=sign*f.totalBase;sop+=sign*f.totalIva;
     });
-    return {name:t.name,baseRep:baseRep,rep:rep,baseSop:baseSop,sop:sop,resultado:rep-sop,rates:rates};
+    emitidas.forEach(function(f){
+      var sign=f.isAbono?-1:1;
+      rates[21].baseR+=sign*Math.abs(f.base21);rates[21].cuotaR+=sign*Math.abs(f.iva21);
+      rates[10].baseR+=sign*Math.abs(f.base10);rates[10].cuotaR+=sign*Math.abs(f.iva10);
+      rates[4].baseR+=sign*Math.abs(f.base4);rates[4].cuotaR+=sign*Math.abs(f.iva4);
+      baseRep+=sign*f.totalBase;rep+=sign*f.totalIva;
+    });
+    return {name:trimLabels[idx],baseRep:baseRep,rep:rep,baseSop:baseSop,sop:sop,resultado:rep-sop,rates:rates};
   });
   var totalRep=datos.reduce(function(s,d){return s+d.rep;},0);
   var totalSop=datos.reduce(function(s,d){return s+d.sop;},0);
   var totalBaseRep=datos.reduce(function(s,d){return s+d.baseRep;},0);
   var totalBaseSop=datos.reduce(function(s,d){return s+d.baseSop;},0);
-  // Aggregate rates across all quarters
   var totalRates={21:{baseR:0,cuotaR:0,baseS:0,cuotaS:0},10:{baseR:0,cuotaR:0,baseS:0,cuotaS:0},4:{baseR:0,cuotaR:0,baseS:0,cuotaS:0}};
   datos.forEach(function(d){[21,10,4].forEach(function(r){totalRates[r].baseR+=d.rates[r].baseR;totalRates[r].cuotaR+=d.rates[r].cuotaR;totalRates[r].baseS+=d.rates[r].baseS;totalRates[r].cuotaS+=d.rates[r].cuotaS;});});
-  var verificacion='';
-  if(totalBaseRep>0&&totalRep===0)verificacion+='<div style="padding:10px 16px;background:#FEF2F2;border-bottom:1px solid #FECACA;font-size:11px;color:#991B1B">Ventas '+fmt(totalBaseRep)+'€ sin IVA repercutido (cuenta 477). Revisa los asientos de venta.</div>';
-  if(totalBaseSop>0&&totalSop===0)verificacion+='<div style="padding:10px 16px;background:#FEF2F2;border-bottom:1px solid #FECACA;font-size:11px;color:#991B1B">Compras '+fmt(totalBaseSop)+'€ sin IVA soportado (cuenta 472). Revisa los asientos de compra.</div>';
-  // Rate breakdown rows
   var rateDetail='';
   [21,10,4].forEach(function(r){
     var d=totalRates[r];
@@ -3998,15 +4025,13 @@ function renderModelo303(c){
       rateDetail+='<tr style="background:#F8F9FB;font-size:11px"><td style="padding-left:20px;color:var(--txM)">↳ IVA '+r+'%</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(Math.abs(d.cuotaR-d.cuotaS))+'€</td><td></td></tr>';
     }
   });
-  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 303 — IVA Trimestral '+state.ejercicio+'</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="exportModelo303()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Modelo 303")">↓ PDF</button><button class="btn btn-d" onclick="downloadModelo303TXT()">↓ TXT AEAT</button></div></div>'+
-  '<div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;border-bottom:1px solid #F3F4F6">'+
-  '<div style="background:#FEF2F2;border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:#991B1B;margin-bottom:4px">IVA Repercutido</div><div style="font-size:20px;font-weight:700;color:#DC2626">'+fmt(totalRep)+'€</div></div>'+
-  '<div style="background:#F0FDF4;border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:#166534;margin-bottom:4px">IVA Soportado</div><div style="font-size:20px;font-weight:700;color:#16A34A">'+fmt(totalSop)+'€</div></div>'+
-  '<div style="background:'+(totalRep-totalSop>=0?'#FEF2F2':'#F0FDF4')+';border-radius:8px;padding:12px 14px"><div style="font-size:11px;color:'+(totalRep-totalSop>=0?'#991B1B':'#166534')+';margin-bottom:4px">Resultado — '+(totalRep-totalSop>=0?'a pagar':'a devolver')+'</div><div style="font-size:20px;font-weight:700;color:'+(totalRep-totalSop>=0?'#DC2626':'#16A34A')+'">'+fmt(Math.abs(totalRep-totalSop))+'€</div></div>'+
-  '</div>'+verificacion+
-  '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Base ventas</th><th style="text-align:right">IVA repercutido</th><th style="text-align:right">Base compras</th><th style="text-align:right">IVA soportado</th><th style="text-align:right">Resultado</th><th>Acción</th></tr></thead><tbody>'+
-  datos.map(function(d,i){var currentQ=Math.floor(new Date().getMonth()/3);var isCurrentQ=i===currentQ&&state.ejercicio===new Date().getFullYear();return '<tr style="'+(isCurrentQ?'background:#F0FDF4;border-left:3px solid var(--ok)':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+fmt(d.baseRep)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.rep)+'€</td><td style="text-align:right">'+fmt(d.baseSop)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(d.sop)+'€</td><td style="text-align:right;font-weight:700;color:'+(d.resultado>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(d.resultado))+'€</td><td>'+(d.resultado>=0?'<span class="badge badge-r">A pagar</span>':'<span class="badge badge-g">A devolver</span>')+'</td></tr>';}).join('')+
-  '<tr class="total"><td>ANUAL</td><td style="text-align:right">'+fmt(totalBaseRep)+'€</td><td style="text-align:right">'+fmt(totalRep)+'€</td><td style="text-align:right">'+fmt(totalBaseSop)+'€</td><td style="text-align:right">'+fmt(totalSop)+'€</td><td style="text-align:right;font-size:14px">'+fmt(Math.abs(totalRep-totalSop))+'€</td><td></td></tr>'+rateDetail+'</tbody></table></div>';
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 303 — IVA Trimestral '+state.ejercicio+'</span><div><button class="btn btn-d" onclick="export303Excel()">↓ Excel</button> <button class="btn btn-d" onclick="export303PDF()">↓ PDF</button> <button class="btn btn-d" onclick="export303TXT()">↓ TXT AEAT</button></div></div>'+
+  '<div class="row" style="margin:12px 14px"><div class="stat" style="border-left:3px solid var(--rd)"><div class="stat-l">IVA Repercutido</div><div class="stat-v" style="color:var(--rd)">'+fmt(totalRep)+'€</div></div><div class="stat" style="border-left:3px solid var(--ok)"><div class="stat-l">IVA Soportado</div><div class="stat-v" style="color:var(--ok)">'+fmt(totalSop)+'€</div></div><div class="stat" style="border-left:3px solid var(--bl)"><div class="stat-l">Resultado — '+(totalRep-totalSop>=0?'a pagar':'a devolver')+'</div><div class="stat-v" style="color:'+(totalRep-totalSop>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(totalRep-totalSop))+'€</div></div></div>'+
+  '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Base ventas</th><th style="text-align:right;color:var(--rd)">IVA repercutido</th><th style="text-align:right">Base compras</th><th style="text-align:right;color:var(--ok)">IVA soportado</th><th style="text-align:right">Resultado</th><th>Acción</th></tr></thead><tbody>'+
+  datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+fmt(d.baseRep)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.rep)+'€</td><td style="text-align:right">'+fmt(d.baseSop)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(d.sop)+'€</td><td style="text-align:right;font-weight:700;color:'+(d.resultado>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(d.resultado))+'€</td><td style="font-size:10px;color:'+(d.resultado>=0?'var(--rd)':'var(--ok)')+'">'+( d.resultado>=0?'A pagar':'A devolver')+'</td></tr>';}).join('')+
+  '<tr class="total"><td>ANUAL</td><td style="text-align:right">'+fmt(totalBaseRep)+'€</td><td style="text-align:right">'+fmt(totalRep)+'€</td><td style="text-align:right">'+fmt(totalBaseSop)+'€</td><td style="text-align:right">'+fmt(totalSop)+'€</td><td style="text-align:right;font-size:14px">'+fmt(Math.abs(totalRep-totalSop))+'€</td><td></td></tr>'+
+  rateDetail+
+  '</tbody></table></div>';
 }
 
 
@@ -4137,64 +4162,26 @@ function renderModelo111(c){
 // ═══ MODELO 347 — TERCEROS (clientes y proveedores) ═══
 var m347Minimo=3005.06;
 function renderModelo347(c){
-  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
-  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  loadMasters();
-  
-  // Build terceros from entry concepts (Fra. NOMBRE [NUM]) and maestros
+  // ═══ MODELO 347 v10 — usa getInvoiceData() ═══
+  var invoices=getInvoiceData();
   var terceros={};
-  all.forEach(function(e){
-    var trimIdx=Math.floor((parseInt(e.date.slice(5,7))-1)/3);
-    // Extract tercero name from concept
-    var concepto=e.concept||'';
-    var terceroName='';var terceroCif='';var tipo='';
-    var mFra=concepto.match(/^(?:Fra\.|Abono)\s+(.+?)\s*\[/);
-    if(mFra)terceroName=mFra[1].trim();
-    
-    // Find total from proveedor/cliente line (400/430)
-    var totalIvaIncl=0;
-    var isCompra=false,isVenta=false;
-    e.lines.forEach(function(l){
-      if(!l.a)return;
-      if(l.a.startsWith('400')||l.a.startsWith('410')){
-        totalIvaIncl+=l.h-l.d; // haber = factura, debe = abono
-        isCompra=true;
-      }
-      if(l.a.startsWith('430')||l.a.startsWith('431')){
-        totalIvaIncl+=l.d-l.h; // debe = factura, haber = cobro
-        isVenta=true;
-      }
-    });
-    
-    if(!terceroName&&totalIvaIncl===0)return;
-    
-    // Try to find CIF from maestros
-    if(!terceroCif){
-      var prov=masters.supplier.find(function(s){return s.name===terceroName;});
-      if(prov)terceroCif=prov.cif||'';
-      if(!terceroCif){
-        var cli=masters.client.find(function(s){return s.name===terceroName;});
-        if(cli)terceroCif=cli.cif||'';
-      }
-    }
-    
-    var key=terceroName||concepto;
-    if(!terceros[key])terceros[key]={nombre:terceroName||concepto,cif:terceroCif,compras:0,ventas:0,trim:[0,0,0,0]};
-    if(terceroCif&&!terceros[key].cif)terceros[key].cif=terceroCif;
-    if(isCompra){terceros[key].compras+=totalIvaIncl;terceros[key].trim[trimIdx]+=totalIvaIncl;}
-    if(isVenta){terceros[key].ventas+=totalIvaIncl;terceros[key].trim[trimIdx]+=totalIvaIncl;}
+  invoices.forEach(function(f){
+    var key=f.cif||f.tercero;
+    if(!key)return;
+    if(!terceros[key])terceros[key]={nombre:f.tercero,cif:f.cif,compras:0,ventas:0,t1:0,t2:0,t3:0,t4:0};
+    var importe=f.isAbono?-f.totalFactura:f.totalFactura;
+    var m=f.fecha?parseInt(f.fecha.substring(5,7)):0;
+    var trim=m<=3?'t1':m<=6?'t2':m<=9?'t3':'t4';
+    if(f.tipo==='recibida'){terceros[key].compras+=importe;terceros[key][trim]+=importe;}
+    else{terceros[key].ventas+=importe;terceros[key][trim]+=importe;}
   });
-  
-  var lista=Object.values(terceros).filter(function(x){var t=x.compras+x.ventas;return t>m347Minimo;}).sort(function(a,b){return (b.compras+b.ventas)-(a.compras+a.ventas);});
-  var totalCompras=lista.reduce(function(s,x){return s+x.compras;},0);
-  var totalVentas=lista.reduce(function(s,x){return s+x.ventas;},0);
-  
-  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 347 — Terceros >'+fmt(m347Minimo)+'€ — '+state.ejercicio+'</span><span class="badge badge-b">'+lista.length+' declarables</span><div style="display:flex;gap:6px"><button class="btn btn-d" onclick="exportModelo347()">↓ Excel</button></div></div>'+
-  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4;display:flex;justify-content:space-between;align-items:center"><span>Operaciones con clientes y proveedores (IVA incluido). Presentación: febrero año siguiente.</span><div style="display:flex;gap:6px;align-items:center"><span style="font-size:10px;font-weight:600">Mínimo €:</span><input class="inp" style="width:90px;font-size:10px;padding:3px 6px;text-align:right" id="m347min" value="'+fmt(m347Minimo)+'" onfocus="selectAll(this)"><button class="btn btn-p" style="font-size:9px;padding:3px 8px" onclick="var raw=$(\'m347min\').value.replace(/\\./g,\'\').replace(\',\',\'.\');m347Minimo=parseFloat(raw)||3005.06;render();">Aplicar</button></div></div>'+
-  (lista.length?'<table><thead><tr><th>Tercero</th><th>CIF/NIF</th><th style="text-align:right">Compras (IVA incl.)</th><th style="text-align:right">Ventas (IVA incl.)</th><th style="text-align:right">Total</th><th style="text-align:right">1T</th><th style="text-align:right">2T</th><th style="text-align:right">3T</th><th style="text-align:right">4T</th></tr></thead><tbody>'+
-  lista.map(function(x,i){var t=x.compras+x.ventas;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis">'+h(x.nombre)+'</td><td style="font-size:10px">'+h(x.cif||'—')+'</td><td style="text-align:right;color:var(--rd)">'+fmt(x.compras)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(x.ventas)+'€</td><td style="text-align:right;font-weight:700">'+fmt(t)+'€</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[0])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[1])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[2])+'</td><td style="text-align:right;font-size:10px">'+fmt(x.trim[3])+'</td></tr>';}).join('')+
-  '<tr class="total"><td colspan="2">TOTALES ('+lista.length+' terceros)</td><td style="text-align:right">'+fmt(totalCompras)+'€</td><td style="text-align:right">'+fmt(totalVentas)+'€</td><td style="text-align:right;font-size:14px">'+fmt(totalCompras+totalVentas)+'€</td><td colspan="4"></td></tr>'+
-  '</tbody></table>':'<div class="empty">Ningún tercero supera '+fmt(m347Minimo)+'€</div>')+'</div>';
+  var minimo=parseFloat($('min347')?$('min347').value:3005.06)||3005.06;
+  var lista=Object.values(terceros).filter(function(t){return Math.abs(t.compras+t.ventas)>minimo;}).sort(function(a,b){return Math.abs(b.compras+b.ventas)-Math.abs(a.compras+a.ventas);});
+  c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 347 — Terceros >'+fmt(minimo)+'€ — '+state.ejercicio+'</span><div style="display:flex;align-items:center;gap:6px"><span class="badge badge-b">'+lista.length+' declarables</span><button class="btn btn-d" onclick="export347Excel()">↓ Excel</button></div></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Operaciones con clientes y proveedores (IVA incluido). Presentación: febrero año siguiente.<div style="margin-top:6px;text-align:right">Mínimo €: <input id="min347" value="'+minimo+'" style="width:70px;padding:2px 6px;border:1px solid #CBD5E1;border-radius:4px"> <button class="btn btn-p" style="padding:3px 10px;font-size:11px" onclick="renderModelo347($(\'content\'))">Aplicar</button></div></div>'+
+  '<table><thead><tr><th>Tercero</th><th>CIF/NIF</th><th style="text-align:right">Compras (IVA incl.)</th><th style="text-align:right">Ventas (IVA incl.)</th><th style="text-align:right">Total</th><th style="text-align:right">1T</th><th style="text-align:right">2T</th><th style="text-align:right">3T</th><th style="text-align:right">4T</th></tr></thead><tbody>'+
+  lista.map(function(t,i){return '<tr class="'+(i%2?'alt':'')+'"><td>'+h(t.nombre)+'</td><td style="font-size:9px;color:var(--txM)">'+h(t.cif)+'</td><td style="text-align:right;color:var(--rd)">'+fmt(t.compras)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(t.ventas)+'€</td><td style="text-align:right;font-weight:700">'+fmt(t.compras+t.ventas)+'€</td><td style="text-align:right;font-size:10px">'+fmt(t.t1)+'</td><td style="text-align:right;font-size:10px">'+fmt(t.t2)+'</td><td style="text-align:right;font-size:10px">'+fmt(t.t3)+'</td><td style="text-align:right;font-size:10px">'+fmt(t.t4)+'</td></tr>';}).join('')+
+  (lista.length?'<tr class="total"><td colspan="2">TOTALES ('+lista.length+' terceros)</td><td style="text-align:right">'+fmt(lista.reduce(function(s,t){return s+t.compras;},0))+'€</td><td style="text-align:right">'+fmt(lista.reduce(function(s,t){return s+t.ventas;},0))+'€</td><td style="text-align:right;font-size:14px">'+fmt(lista.reduce(function(s,t){return s+t.compras+t.ventas;},0))+'€</td><td colspan="4"></td></tr>':'')+'</tbody></table></div>';
 }
 
 
@@ -5520,182 +5507,276 @@ async function resolveExcluded(id,estado){
 
 
 
-// ═══ FUNCIÓN CENTRAL: getInvoiceData() ═══
-// Única fuente de verdad para datos de facturas.
-// Todas las pantallas (Libro IVA, 303, Compras, Ventas, Libro FR, Libro FE, Tesorería) usan esta función.
+
+// ═══════════════════════════════════════════════════════════
+// SISTEMA DE FACTURAS v10 — FUENTE ÚNICA DE VERDAD
+// Todas las pantallas usan state.invoices
+// ═══════════════════════════════════════════════════════════
+
+// ── Cargar facturas del servidor ──
+async function loadInvoices(){
+  if(!state.company||!state.company.id)return;
+  try{
+    state.invoices=await api('/api/invoices/'+state.company.id);
+  }catch(e){state.invoices=[];console.warn('No se pudieron cargar facturas:',e.message);}
+}
+
+// ── getInvoiceData() — ahora lee de state.invoices (la BD) ──
 function getInvoiceData(opts){
   opts=opts||{};
   var year=opts.year||state.ejercicio;
-  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(year))&&!e.del;});
-  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  loadMasters();
-  var suppByCif={};(masters.supplier||[]).forEach(function(s){if(s.cif)suppByCif[s.cif]=s;});
-  var cliByCif={};(masters.client||[]).forEach(function(cl){if(cl.cif)cliByCif[cl.cif]=cl;});
-  
-  var facturas=[];
-  all.forEach(function(e){
-    if(!e.concept||e.concept.indexOf('[')<0)return;
-    var m=e.concept.match(/\[([^\]]+)\]/);
-    if(!m)return;
-    var numFact=m[1];
-    
-    // Check if first line has meta
-    var meta=null;
-    if(e.lines&&e.lines[0]&&e.lines[0].meta){
-      try{meta=JSON.parse(e.lines[0].meta);}catch(ex){}
-    }
-    
-    if(meta&&meta.numFactura){
-      // Use stored meta data — this is the reliable path
-      var f={
-        numFactura:meta.numFactura,
-        fecha:e.date,
-        tercero:meta.tercero||'',
-        cif:meta.cif||'',
-        tipoFactura:meta.tipoFactura||'recibida',
-        isAbono:!!meta.isAbono,
-        base21:meta.base21||0, iva21:meta.iva21||0,
-        base10:meta.base10||0, iva10:meta.iva10||0,
-        base4:meta.base4||0, iva4:meta.iva4||0,
-        base0:meta.base0||0,
-        retencion:meta.retencion||0,
-        recargo:meta.recargo||0,
-        totalFactura:meta.totalFactura||0,
-        totalBase:(meta.base21||0)+(meta.base10||0)+(meta.base4||0),
-        totalIva:(meta.iva21||0)+(meta.iva10||0)+(meta.iva4||0),
-        entryId:e.id,
-        lines:e.lines
-      };
-      facturas.push(f);
-    } else {
-      // Fallback: extract from entry lines (legacy entries without meta)
-      var isRecibida=e.lines.some(function(l){return l.a&&l.a.startsWith('400');});
-      var isEmitida=e.lines.some(function(l){return l.a&&l.a.startsWith('430');});
-      var isAbono=numFact.match(/^AB-|^R-/i)||e.concept.indexOf('Abono')>=0;
-      
-      // Extract CIF from concept
-      var cifM=e.concept.match(/([A-Z]\d{7,8}[A-Z]?)/i);
-      var cif=cifM?cifM[1]:'';
-      
-      // Get tercero name
-      var tercero='';
-      if(isRecibida){
-        e.lines.forEach(function(l){if(l.a&&l.a.startsWith('400')&&am[l.a])tercero=am[l.a].name;});
-        if(!tercero&&cif&&suppByCif[cif])tercero=suppByCif[cif].name;
-      } else if(isEmitida){
-        e.lines.forEach(function(l){if(l.a&&l.a.startsWith('430')&&am[l.a])tercero=am[l.a].name;});
-        if(!tercero&&cif&&cliByCif[cif])tercero=cliByCif[cif].name;
-      }
-      if(!tercero)tercero=cif||'Desconocido';
-      
-      // Calculate bases and IVA from lines
-      var totalBase=0,totalIva=0,totalG6=0,totalG7=0;
-      e.lines.forEach(function(l){
-        var g=parseInt((l.a||'')[0])||0;
-        if(g===6)totalG6+=l.d-l.h;
-        if(g===7)totalG7+=l.h-l.d;
-        if(l.a==='47200000')totalIva+=l.d-l.h;
-        if(l.a&&l.a.startsWith('477'))totalIva+=l.h-l.d;
-      });
-      totalBase=isRecibida?totalG6:totalG7;
-      
-      // Try to detect IVA rates from cuota amounts
-      var iva21=0,iva10=0,iva4=0,base21=0,base10=0,base4=0;
-      var ivaCuotas=[];
-      e.lines.forEach(function(l){
-        if(l.a==='47200000'){ivaCuotas.push(l.d-l.h);}
-        if(l.a&&l.a.startsWith('477')){ivaCuotas.push(l.h-l.d);}
-      });
-      if(ivaCuotas.length===1){
-        var rate=detectIvaRateFromCuota(ivaCuotas[0],Math.abs(totalBase),Math.abs(totalIva));
-        var rateInt=Math.round(rate*100);
-        if(rateInt===21){iva21=ivaCuotas[0];base21=iva21/0.21;}
-        else if(rateInt===10){iva10=ivaCuotas[0];base10=iva10/0.10;}
-        else if(rateInt===4){iva4=ivaCuotas[0];base4=iva4/0.04;}
-        else{iva21=ivaCuotas[0];base21=totalBase;}
-      } else {
-        ivaCuotas.forEach(function(cuota){
-          var rate=detectIvaRateFromCuota(cuota,Math.abs(totalBase),Math.abs(totalIva));
-          var rateInt=Math.round(rate*100);
-          if(rateInt===21){iva21+=cuota;base21+=cuota/0.21;}
-          else if(rateInt===10){iva10+=cuota;base10+=cuota/0.10;}
-          else if(rateInt===4){iva4+=cuota;base4+=cuota/0.04;}
-          else{iva21+=cuota;base21+=cuota/0.21;}
-        });
-      }
-      
-      var totalFactTotal=Math.abs(totalBase)+Math.abs(totalIva);
-      e.lines.forEach(function(l){
-        if(l.a&&(l.a.startsWith('400')||l.a.startsWith('430'))){
-          totalFactTotal=Math.abs(l.d-l.h)||totalFactTotal;
-        }
-      });
-      
-      facturas.push({
-        numFactura:numFact,
-        fecha:e.date,
-        tercero:tercero,
-        cif:cif,
-        tipoFactura:isRecibida?'recibida':(isEmitida?'emitida':'otro'),
-        isAbono:!!isAbono,
-        base21:Math.round(base21*100)/100, iva21:Math.round(iva21*100)/100,
-        base10:Math.round(base10*100)/100, iva10:Math.round(iva10*100)/100,
-        base4:Math.round(base4*100)/100, iva4:Math.round(iva4*100)/100,
-        base0:0,
-        retencion:0,
-        recargo:0,
-        totalFactura:Math.round(totalFactTotal*100)/100,
-        totalBase:Math.round((Math.abs(base21)+Math.abs(base10)+Math.abs(base4))*100)/100,
-        totalIva:Math.round((Math.abs(iva21)+Math.abs(iva10)+Math.abs(iva4))*100)/100,
-        entryId:e.id,
-        lines:e.lines
-      });
-    }
+  var data=(state.invoices||[]).filter(function(f){
+    return f.fecha&&f.fecha.startsWith(String(year));
   });
-  
-  // Filter by tipo if requested
-  if(opts.tipo)facturas=facturas.filter(function(f){return f.tipoFactura===opts.tipo;});
-  
-  return facturas;
+  if(opts.tipo)data=data.filter(function(f){return f.tipo===opts.tipo;});
+  if(opts.trimestre){
+    var tMap={'1T':['01','02','03'],'2T':['04','05','06'],'3T':['07','08','09'],'4T':['10','11','12']};
+    var meses=tMap[opts.trimestre]||[];
+    data=data.filter(function(f){var m=f.fecha.substring(5,7);return meses.indexOf(m)>=0;});
+  }
+  // Normalize fields for compatibility
+  return data.map(function(f){
+    var totalBase=Math.abs(f.base21||0)+Math.abs(f.base10||0)+Math.abs(f.base4||0);
+    var totalIva=Math.abs(f.iva21||0)+Math.abs(f.iva10||0)+Math.abs(f.iva4||0);
+    return {
+      id:f.id,
+      numFactura:f.num_factura,
+      fecha:f.fecha,
+      tipo:f.tipo,
+      tipoFactura:f.tipo,
+      isAbono:!!f.is_abono,
+      tercero:f.tercero_nombre,
+      cif:f.tercero_cif,
+      cuenta:f.tercero_cuenta,
+      base21:f.base21||0, iva21:f.iva21||0,
+      base10:f.base10||0, iva10:f.iva10||0,
+      base4:f.base4||0, iva4:f.iva4||0,
+      base0:f.base0||0,
+      retencion:f.retencion||0,
+      recargo:f.recargo||0,
+      total:f.total||0,
+      totalBase:totalBase,
+      totalIva:totalIva,
+      totalFactura:Math.abs(f.total||0),
+      formaPago:f.forma_pago||'',
+      entryId:f.entry_id||''
+    };
+  });
 }
 
-// ═══ TESTS DE CUADRE AUTOMÁTICOS ═══
+// ── Parsear factura desde fila de Excel ──
+function parseInvoiceFromExcelRow(r, colMap, ownCif){
+  var numFact=String(r[colMap.numFact]||'').trim();
+  if(!numFact)return null;
+  
+  var terceroRaw=String(r[colMap.tercero]||'').trim();
+  var cifRaw=colMap.cif!==undefined?String(r[colMap.cif]||'').trim():'';
+  var concepto=colMap.concepto!==undefined?String(r[colMap.concepto]||'').trim():'';
+  
+  // Determine real provider name and CIF
+  var terceroName=terceroRaw;
+  var terceroCif=cifRaw;
+  
+  // If tercero looks like a CIF, extract real name from concepto
+  if(terceroName.match(/^[A-Z]\d{7,8}[A-Z]?$/i)){
+    terceroCif=terceroName; // This IS the CIF
+    terceroName=''; // Need to find real name
+  }
+  
+  // If CIF is own company, look for real emisor CIF in concepto
+  if(terceroCif===ownCif||terceroCif==='B22859755'){
+    var cifEmMatch=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
+    if(cifEmMatch&&cifEmMatch[1]&&cifEmMatch[1]!==ownCif){
+      terceroCif=cifEmMatch[1];
+    }else{
+      terceroCif=''; // Can't determine
+    }
+  }
+  
+  // If no CIF yet, try from concepto
+  if(!terceroCif){
+    var cifEmMatch2=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
+    if(cifEmMatch2&&cifEmMatch2[1]&&cifEmMatch2[1]!==ownCif){
+      terceroCif=cifEmMatch2[1];
+    }
+  }
+  
+  // If no name, try to extract from concepto
+  if(!terceroName){
+    // Pattern: CIF Emisor: [CIF] → [CIF] ✅ Nombre traído ... | next section
+    // The name is in the "Proveedor" column of manual Excel, but in API Excel it's the CIF
+    // Look for known name patterns in concepto
+    // Pattern 1: "Nombre traído de BDD" doesn't give us the name directly
+    // Pattern 2: Look for S.L., S.A. etc in concepto
+    var namePatterns=[
+      /([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\.,'&-]+(?:S\.L\.U?\.|S\.A\.|S\.L\.P\.|S\.COOP\.))/g
+    ];
+    for(var p=0;p<namePatterns.length;p++){
+      var matches=concepto.match(namePatterns[p]);
+      if(matches){
+        // Filter out matches that are just CIFs or too short
+        for(var m=0;m<matches.length;m++){
+          var candidate=matches[m].trim();
+          if(candidate.length>8&&candidate!==terceroCif){
+            terceroName=candidate;
+            break;
+          }
+        }
+        if(terceroName)break;
+      }
+    }
+    // If still no name, try personal names (JOAO MESSIAS DA CRUZ DOMINGUES)
+    if(!terceroName){
+      var nm=concepto.match(/([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,})/);
+      if(nm)terceroName=nm[1];
+    }
+    // Last resort: use CIF as name
+    if(!terceroName)terceroName=terceroCif||'DESCONOCIDO';
+  }
+  
+  // Parse amounts
+  var base21=parseFloat(r[colMap.base21])||0;
+  var iva21=parseFloat(r[colMap.iva21])||0;
+  var base10=parseFloat(r[colMap.base10])||0;
+  var iva10=parseFloat(r[colMap.iva10])||0;
+  var base4=parseFloat(r[colMap.base4])||0;
+  var iva4=parseFloat(r[colMap.iva4])||0;
+  var base0=parseFloat(r[colMap.base0])||0;
+  var iva0=parseFloat(r[colMap.iva0])||0;
+  var retencion=parseFloat(r[colMap.retencion])||0;
+  var recargo=parseFloat(r[colMap.recargo])||0;
+  var total=parseFloat(r[colMap.total])||0;
+  
+  // Detect if abono
+  var isAbono=numFact.match(/^AB-|^R-/i)||concepto.indexOf('ABONO')>=0||concepto.indexOf('DOCUMENTO ES ABONO')>=0||total<0;
+  
+  // Calculate total if not present
+  if(!total){
+    total=Math.abs(base21)+Math.abs(iva21)+Math.abs(base10)+Math.abs(iva10)+Math.abs(base4)+Math.abs(iva4)+Math.abs(base0)-Math.abs(retencion)+Math.abs(recargo);
+  }
+  
+  // Parse forma de pago from concepto
+  var formaPago='';
+  var fpMatch=concepto.match(/Forma de pago:\s*([^|]+)/i);
+  if(fpMatch)formaPago=fpMatch[1].trim();
+  
+  // Parse fecha vencimiento
+  var fechaVenc='';
+  if(colMap.fechaVenc!==undefined){
+    var fv=r[colMap.fechaVenc];
+    if(fv instanceof Date)fechaVenc=fv.toISOString().slice(0,10);
+    else if(fv)fechaVenc=String(fv);
+  }
+  
+  // Parse fecha
+  var fecha='';
+  var fechaRaw=r[colMap.fecha];
+  if(fechaRaw instanceof Date){fecha=fechaRaw.toISOString().slice(0,10);}
+  else if(fechaRaw){
+    var fd=String(fechaRaw);
+    if(fd.match(/^\d{4}-\d{2}-\d{2}/))fecha=fd.slice(0,10);
+    else if(fd.match(/^\d{2}\/\d{2}\/\d{4}/))fecha=fd.slice(6,10)+'-'+fd.slice(3,5)+'-'+fd.slice(0,2);
+  }
+  
+  // Tipo documento
+  var tipoDoc='recibida';
+  if(colMap.tipoDoc!==undefined){
+    var td=String(r[colMap.tipoDoc]||'').toLowerCase();
+    if(td.indexOf('emitid')>=0||td.indexOf('venta')>=0)tipoDoc='emitida';
+  }
+  
+  return {
+    num_factura:numFact,
+    fecha:fecha,
+    tipo:tipoDoc,
+    is_abono:isAbono,
+    tercero_nombre:terceroName,
+    tercero_cif:terceroCif,
+    base21:base21, iva21:iva21,
+    base10:base10, iva10:iva10,
+    base4:base4, iva4:iva4,
+    base0:base0,
+    retencion:retencion,
+    recargo:recargo,
+    total:total,
+    forma_pago:formaPago,
+    fecha_vencimiento:fechaVenc,
+    concepto_gestor:concepto
+  };
+}
+
+// ── Generar asiento contable desde factura ──
+function generateEntryFromInvoice(inv, cuentaTercero){
+  var lines=[];
+  var isAbono=inv.is_abono;
+  var sign=isAbono?-1:1;
+  
+  if(inv.tipo==='recibida'){
+    // Proveedor (400x) al Haber
+    var totalProv=Math.abs(inv.total)*sign;
+    lines.push({a:cuentaTercero,d:isAbono?Math.abs(inv.total):0,h:isAbono?0:Math.abs(inv.total)});
+    // IVA soportado (472) al Debe
+    var totalIva=Math.abs(inv.iva21||0)+Math.abs(inv.iva10||0)+Math.abs(inv.iva4||0);
+    if(totalIva>0.001)lines.push({a:'47200000',d:isAbono?0:totalIva,h:isAbono?totalIva:0});
+    // Retenciones (4751) al Haber
+    if(Math.abs(inv.retencion||0)>0.001)lines.push({a:'47510000',d:0,h:isAbono?0:Math.abs(inv.retencion)});
+    // Compras (600) al Debe
+    var totalBase=Math.abs(inv.base21||0)+Math.abs(inv.base10||0)+Math.abs(inv.base4||0)+Math.abs(inv.base0||0);
+    if(totalBase>0.001)lines.push({a:'60000000',d:isAbono?0:totalBase,h:isAbono?totalBase:0});
+  }else{
+    // Cliente (430x) al Debe
+    lines.push({a:cuentaTercero,d:isAbono?0:Math.abs(inv.total),h:isAbono?Math.abs(inv.total):0});
+    // IVA repercutido (477) al Haber
+    var totalIvaE=Math.abs(inv.iva21||0)+Math.abs(inv.iva10||0)+Math.abs(inv.iva4||0);
+    if(totalIvaE>0.001)lines.push({a:'47700000',d:isAbono?totalIvaE:0,h:isAbono?0:totalIvaE});
+    // Ventas (700) al Haber
+    var totalBaseE=Math.abs(inv.base21||0)+Math.abs(inv.base10||0)+Math.abs(inv.base4||0)+Math.abs(inv.base0||0);
+    if(totalBaseE>0.001)lines.push({a:'70000000',d:isAbono?totalBaseE:0,h:isAbono?0:totalBaseE});
+  }
+  
+  return {
+    date:inv.fecha,
+    concept:(inv.is_abono?'Abono ':'Fra. ')+inv.tercero_nombre+' ['+inv.num_factura+']',
+    type:'import_factura',
+    lines:lines
+  };
+}
+
+// ── Tests de integridad automáticos ──
 function runIntegrityTests(){
   var invoices=getInvoiceData();
-  var recibidas=invoices.filter(function(f){return f.tipoFactura==='recibida';});
-  var emitidas=invoices.filter(function(f){return f.tipoFactura==='emitida';});
+  var recibidas=invoices.filter(function(f){return f.tipo==='recibida';});
+  var emitidas=invoices.filter(function(f){return f.tipo==='emitida';});
   
   // Test 1: Cuadre general Debe = Haber
   var totalD=0,totalH=0;
   state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){totalD+=l.d;totalH+=l.h;});});
   var cuadre=Math.abs(totalD-totalH)<0.02;
   
-  // Test 2: IVA Soportado desde facturas vs desde asientos
-  var ivaSopFacturas=recibidas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*(Math.abs(f.iva21)+Math.abs(f.iva10)+Math.abs(f.iva4));},0);
+  // Test 2: IVA Soportado = sum facturas recibidas
+  var ivaSopFact=recibidas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*(Math.abs(f.iva21)+Math.abs(f.iva10)+Math.abs(f.iva4));},0);
   var ivaSopAsientos=0;
   state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){if(l.a==='47200000')ivaSopAsientos+=l.d-l.h;});});
-  var ivaMatch=Math.abs(ivaSopFacturas-ivaSopAsientos)<1;
+  var ivaMatch=Math.abs(ivaSopFact-ivaSopAsientos)<1;
   
-  // Test 3: IVA Repercutido
-  var ivaRepFacturas=emitidas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*(Math.abs(f.iva21)+Math.abs(f.iva10)+Math.abs(f.iva4));},0);
-  var ivaRepAsientos=0;
-  state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){if(l.a&&l.a.startsWith('477'))ivaRepAsientos+=l.h-l.d;});});
-  var ivaRepMatch=Math.abs(ivaRepFacturas-ivaRepAsientos)<1;
+  // Test 3: Total compras facturas = Total asientos grupo 6
+  var comprasFact=recibidas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalBase;},0);
+  var comprasAsientos=0;
+  state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){if(l.a&&l.a[0]==='6')comprasAsientos+=l.d-l.h;});});
+  var comprasMatch=Math.abs(comprasFact-comprasAsientos)<1;
+  
+  // Test 4: Nº facturas = Nº asientos tipo factura
+  var nFacturas=invoices.length;
+  var nAsientos=state.entries.filter(function(e){return !e.del&&e.type==='import_factura';}).length;
+  var countMatch=nFacturas===nAsientos;
   
   var results={
-    cuadreGeneral:{ok:cuadre,debe:Math.round(totalD*100)/100,haber:Math.round(totalH*100)/100,diff:Math.round(Math.abs(totalD-totalH)*100)/100},
-    ivaSoportado:{ok:ivaMatch,facturas:Math.round(ivaSopFacturas*100)/100,asientos:Math.round(ivaSopAsientos*100)/100,diff:Math.round(Math.abs(ivaSopFacturas-ivaSopAsientos)*100)/100},
-    ivaRepercutido:{ok:ivaRepMatch,facturas:Math.round(ivaRepFacturas*100)/100,asientos:Math.round(ivaRepAsientos*100)/100,diff:Math.round(Math.abs(ivaRepFacturas-ivaRepAsientos)*100)/100},
-    totalFacturas:invoices.length,
-    totalRecibidas:recibidas.length,
-    totalEmitidas:emitidas.length,
-    allOk:cuadre&&ivaMatch&&ivaRepMatch
+    cuadreGeneral:{ok:cuadre,debe:Math.round(totalD*100)/100,haber:Math.round(totalH*100)/100},
+    ivaSoportado:{ok:ivaMatch,facturas:Math.round(ivaSopFact*100)/100,asientos:Math.round(ivaSopAsientos*100)/100},
+    compras:{ok:comprasMatch,facturas:Math.round(comprasFact*100)/100,asientos:Math.round(comprasAsientos*100)/100},
+    conteo:{ok:countMatch,facturas:nFacturas,asientos:nAsientos},
+    allOk:cuadre&&ivaMatch&&comprasMatch&&countMatch
   };
-  
-  if(!results.allOk){
-    console.warn('⚠ TESTS DE CUADRE FALLIDOS:',JSON.stringify(results));
-  }
-  
   return results;
 }
 
@@ -5856,49 +5937,41 @@ function exportModelo202(){toast('Exportando 202...','ok');}
 
 // ═══ INFORME DASHBOARD AVANZADO — VENTAS/COMPRAS/MARGEN MENSUAL ═══
 function renderInformesPanel(c){
-  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
+  // ═══ PANEL INFORMES v10 — usa getInvoiceData() ═══
+  var recibidas=getInvoiceData({tipo:'recibida'});
+  var emitidas=getInvoiceData({tipo:'emitida'});
   var meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  var datos=meses.map(function(m,i){
-    var mm=String(i+1).padStart(2,'0');
-    var from=state.ejercicio+'-'+mm+'-01',to=state.ejercicio+'-'+mm+'-31';
-    var ventas=0,coste=0,impuestos=0;
-    all.forEach(function(e){if(e.date>=from&&e.date<=to){e.lines.forEach(function(l){
-      var g=parseInt(l.a.substring(0,1));
-      if(g===7)ventas+=l.h-l.d;
-      if(g===6)coste+=l.d-l.h;
-      if(l.a.startsWith('472')||l.a.startsWith('477'))impuestos+=Math.abs(l.d-l.h);
-    });}});
+  var datos=meses.map(function(m,idx){
+    var mm=String(idx+1).padStart(2,'0');
+    var ventas=emitidas.filter(function(f){return f.fecha&&f.fecha.substring(5,7)===mm;}).reduce(function(s,f){return s+(f.isAbono?-f.totalBase:f.totalBase);},0);
+    var coste=recibidas.filter(function(f){return f.fecha&&f.fecha.substring(5,7)===mm;}).reduce(function(s,f){return s+(f.isAbono?-f.totalBase:f.totalBase);},0);
+    var impuestos=recibidas.filter(function(f){return f.fecha&&f.fecha.substring(5,7)===mm;}).reduce(function(s,f){return s+(f.isAbono?-f.totalIva:f.totalIva);},0);
     return {mes:m,ventas:ventas,coste:coste,margen:ventas-coste,impuestos:impuestos};
   });
   var totalVentas=datos.reduce(function(s,d){return s+d.ventas;},0);
   var totalCoste=datos.reduce(function(s,d){return s+d.coste;},0);
   var totalMargen=totalVentas-totalCoste;
-  var ventaMedia=totalVentas/12;
   var margenPct=totalVentas>0?Math.round(totalMargen/totalVentas*100):0;
-  
-  // SVG chart
   var maxVal=Math.max.apply(null,datos.map(function(d){return Math.max(d.ventas,d.coste,1);}));
-  var barW=40,gap=14,chartH=180,chartW=(barW*2+gap)*12+gap*11+40;
+  var barW=40,gap=14,chartH=180;
   var bars='';
   datos.forEach(function(d,i){
     var x=i*(barW*2+gap+gap)+30;
-    var hV=d.ventas/maxVal*chartH;
-    var hC=d.coste/maxVal*chartH;
-    bars+='<rect x="'+x+'" y="'+(chartH-hV)+'" width="'+barW+'" height="'+hV+'" fill="#10B981" rx="3" opacity="0.8"/>';
-    bars+='<rect x="'+(x+barW+2)+'" y="'+(chartH-hC)+'" width="'+barW+'" height="'+hC+'" fill="#EF4444" rx="3" opacity="0.8"/>';
+    var hV=maxVal>0?d.ventas/maxVal*chartH:0;
+    var hC=maxVal>0?d.coste/maxVal*chartH:0;
+    bars+='<rect x="'+x+'" y="'+(chartH-hV)+'" width="'+barW+'" height="'+Math.max(hV,0)+'" fill="#10B981" rx="3" opacity="0.8"/>';
+    bars+='<rect x="'+(x+barW+2)+'" y="'+(chartH-hC)+'" width="'+barW+'" height="'+Math.max(hC,0)+'" fill="#EF4444" rx="3" opacity="0.8"/>';
     bars+='<text x="'+(x+barW)+'" y="'+(chartH+14)+'" text-anchor="middle" font-size="10" fill="#6B7280">'+d.mes+'</text>';
   });
-  var svgChart='<svg viewBox="0 0 '+chartW+' '+(chartH+20)+'" style="width:100%;max-height:220px;margin:12px 0"><rect width="100%" height="100%" fill="transparent"/>'+bars+'</svg>';
-  
-  c.innerHTML='<div class="row"><div class="stat" style="border-left:3px solid var(--ok)"><div class="stat-v" style="color:var(--ok)">'+fmt(totalVentas)+'€</div><div class="stat-l">Total Ventas</div></div><div class="stat" style="border-left:3px solid var(--bl)"><div class="stat-v">'+fmt(ventaMedia)+'€</div><div class="stat-l">Venta media/mes</div></div><div class="stat" style="border-left:3px solid '+(totalMargen>=0?'var(--ok)':'var(--rd)')+'"><div class="stat-v" style="color:'+(totalMargen>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalMargen)+'€</div><div class="stat-l">Margen ('+margenPct+'%)</div></div></div>'+
+  var svgChart='<svg viewBox="0 0 1100 '+(chartH+20)+'" style="width:100%;max-height:220px;margin:12px 0">'+bars+'</svg>';
+  c.innerHTML='<div class="row"><div class="stat" style="border-left:3px solid var(--ok)"><div class="stat-v" style="color:var(--ok)">'+fmt(totalVentas)+'€</div><div class="stat-l">Total Ventas</div></div><div class="stat" style="border-left:3px solid var(--bl)"><div class="stat-v">'+fmt(totalVentas/12)+'€</div><div class="stat-l">Venta media/mes</div></div><div class="stat" style="border-left:3px solid '+(totalMargen>=0?'var(--ok)':'var(--rd)')+'"><div class="stat-v" style="color:'+(totalMargen>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalMargen)+'€</div><div class="stat-l">Margen ('+margenPct+'%)</div></div></div>'+
   '<div class="card"><div class="card-h"><span>📊 Ventas vs Costes — '+state.ejercicio+'</span><div style="font-size:10px"><span style="color:#10B981">■</span> Ventas <span style="color:#EF4444;margin-left:8px">■</span> Costes</div></div>'+svgChart+'</div>'+
   '<div class="card"><div class="card-h"><span>📋 Detalle mensual</span></div>'+
-  '<table><thead><tr><th></th>'+meses.map(function(m){return '<th style="text-align:right;font-size:10px">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:800">Total</th></tr></thead><tbody>'+
-  '<tr style="color:var(--rd)"><td style="font-weight:600">Coste <span style="display:inline-block;width:8px;height:8px;background:#EF4444;border-radius:50%"></span></td>'+datos.map(function(d){return '<td style="text-align:right;font-size:11px">'+fmt(d.coste)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalCoste)+'</td></tr>'+
-  '<tr><td style="font-weight:600">Impuestos <span style="display:inline-block;width:8px;height:8px;background:#1F2937;border-radius:50%"></span></td>'+datos.map(function(d){return '<td style="text-align:right;font-size:11px">'+fmt(d.impuestos)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(datos.reduce(function(s,d){return s+d.impuestos;},0))+'</td></tr>'+
-  '<tr style="color:var(--ok)"><td style="font-weight:600">Margen <span style="display:inline-block;width:8px;height:8px;background:#3B82F6;border-radius:50%"></span></td>'+datos.map(function(d){return '<td style="text-align:right;font-size:11px">'+fmt(d.margen)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalMargen)+'</td></tr>'+
-  '<tr style="color:var(--ok);font-weight:700;border-top:2px solid #CBD5E1"><td>Ventas <span style="display:inline-block;width:8px;height:8px;background:#10B981;border-radius:50%"></span></td>'+datos.map(function(d){return '<td style="text-align:right;font-size:11px">'+fmt(d.ventas)+'</td>';}).join('')+'<td style="text-align:right;font-weight:800">'+fmt(totalVentas)+'</td></tr>'+
-  '<tr style="font-weight:700;border-top:1px solid #E2E8F0"><td>Total <span style="display:inline-block;width:8px;height:8px;background:#10B981;border-radius:50%"></span></td>'+datos.map(function(d){return '<td style="text-align:right;font-size:11px">'+fmt(d.ventas)+'</td>';}).join('')+'<td style="text-align:right;font-weight:800">'+fmt(totalVentas)+'</td></tr>'+
+  '<table style="font-size:11px"><thead><tr><th></th>'+meses.map(function(m){return '<th style="text-align:right">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:800">Total</th></tr></thead><tbody>'+
+  '<tr style="color:var(--rd)"><td style="font-weight:600">Coste</td>'+datos.map(function(d){return '<td style="text-align:right">'+fmt(d.coste)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalCoste)+'</td></tr>'+
+  '<tr><td style="font-weight:600">Impuestos</td>'+datos.map(function(d){return '<td style="text-align:right">'+fmt(d.impuestos)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(datos.reduce(function(s,d){return s+d.impuestos;},0))+'</td></tr>'+
+  '<tr style="color:var(--ok)"><td style="font-weight:600">Ventas</td>'+datos.map(function(d){return '<td style="text-align:right">'+fmt(d.ventas)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalVentas)+'</td></tr>'+
+  '<tr style="font-weight:700;border-top:2px solid #CBD5E1"><td>Margen</td>'+datos.map(function(d){return '<td style="text-align:right;color:'+(d.margen>=0?'var(--ok)':'var(--rd)')+'">'+fmt(d.margen)+'</td>';}).join('')+'<td style="text-align:right;font-weight:800;color:'+(totalMargen>=0?'var(--ok)':'var(--rd)')+'">'+fmt(totalMargen)+'</td></tr>'+
   '</tbody></table></div>';
 }
 
@@ -6180,68 +6253,45 @@ document.addEventListener('keydown',function(e){
 
 // ═══ INFORME DE VENTAS (tipo Holded) ═══
 function renderInformeVentas(c){
-  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  var monthData=[0,0,0,0,0,0,0,0,0,0,0,0];
-  var monthIva=[0,0,0,0,0,0,0,0,0,0,0,0];
-  var byClient={},byAccount={};
-  var totalVentas=0,totalIva=0;
-  
-  all.forEach(function(e){
-    var mo=parseInt(e.date.slice(5,7))-1;
-    e.lines.forEach(function(l){
-      var g=parseInt((l.a||'')[0])||0;
-      if(g===7){var v=l.h-l.d;totalVentas+=v;monthData[mo]+=v;
-        var key=l.a;if(!byAccount[key])byAccount[key]={name:am[l.a]?am[l.a].name:l.a,total:0};byAccount[key].total+=v;
-      }
-      if(l.a&&l.a.startsWith('477')){var iv=l.h-l.d;totalIva+=iv;monthIva[mo]+=iv;}
-      if(l.a&&l.a.startsWith('430')){
-        var cliName=am[l.a]?am[l.a].name:l.a;
-        if(cliName.match(/^[A-Z]\d{7,8}/i)){var invDataE=getInvoiceData({tipo:'emitida'});invDataE.forEach(function(inv){if(inv.tercero&&inv.cif&&cliName.indexOf(inv.cif)>=0)cliName=inv.tercero;});}
-        if(!byClient[l.a])byClient[l.a]={name:cliName,total:0,count:0};
-        byClient[l.a].total+=l.d-l.h;byClient[l.a].count++;
-      }
-    });
+  // ═══ VENTAS v10 — usa getInvoiceData() ═══
+  var facturas=getInvoiceData({tipo:'emitida'});
+  var meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  var mensual=meses.map(function(m,idx){
+    var mm=String(idx+1).padStart(2,'0');
+    var del=facturas.filter(function(f){return f.fecha&&f.fecha.substring(5,7)===mm;});
+    var ventas=del.reduce(function(s,f){return s+(f.isAbono?-f.totalBase:f.totalBase);},0);
+    var iva=del.reduce(function(s,f){return s+(f.isAbono?-f.totalIva:f.totalIva);},0);
+    return {mes:m,ventas:ventas,iva:iva};
   });
-  
-  var clientList=Object.values(byClient).sort(function(a,b){return b.total-a.total;});
-  var accountList=Object.entries(byAccount).sort(function(a,b){return b[1].total-a[1].total;});
-  var curMonth=new Date().getMonth();
-  var chartType=window._ventasChart||'bar';
-  
-  c.innerHTML=dateFilterHTML()+
-  '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">'+
-  '<select class="sel" style="font-size:11px;padding:4px 8px" onchange="window._ventasSubTipo=this.value;renderView()">'+
-  '<option value="general">Ventas</option><option value="cliente"'+(window._ventasSubTipo==='cliente'?' selected':'')+'>Por cliente</option><option value="cuenta"'+(window._ventasSubTipo==='cuenta'?' selected':'')+'>Por cuenta</option></select>'+
-  '<input class="inp" style="max-width:160px;font-size:11px" placeholder="Filtrar por tag...">'+
-  '<div style="margin-left:auto;display:flex;gap:4px"><button class="btn btn-d" style="font-size:10px;padding:4px 8px;'+(chartType==='bar'?'background:var(--priLt);color:var(--pri)':'')+'" onclick="window._ventasChart=\'bar\';renderView()">▐</button><button class="btn btn-d" style="font-size:10px;padding:4px 8px;'+(chartType==='line'?'background:var(--priLt);color:var(--pri)':'')+'" onclick="window._ventasChart=\'line\';renderView()">∕</button></div></div>'+
-  '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total ventas</div><div style="font-size:22px;font-weight:700;color:var(--ok)">'+fmt(totalVentas)+'€</div></div>'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Venta media mensual</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+fmt(totalVentas/12)+'€</div></div>'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">IVA repercutido</div><div style="font-size:22px;font-weight:700;color:var(--am)">'+fmt(totalIva)+'€</div></div></div>'+
-  
-  '<div class="card" style="margin-bottom:16px"><div class="card-h"><span>Evolución mensual de ventas</span><button class="btn btn-d" onclick="exportInformeVentasExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Informe Ventas")">↓ PDF</button></div>'+
-  '<div style="padding:16px"><canvas id="chartVentas" height="200"></canvas></div>'+
-  '<div style="overflow-x:auto"><table><thead><tr><th></th>'+MONTHS.map(function(m,i){return '<th style="text-align:right;'+(i===curMonth?'border-bottom:3px solid var(--bl);color:var(--bl)':'')+'">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:700">Total</th></tr></thead><tbody>'+
-  '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px"></span>Ventas</td>'+monthData.map(function(v,i){return '<td style="text-align:right;'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalVentas)+'</td></tr>'+
-  '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--am);margin-right:6px"></span>IVA</td>'+monthIva.map(function(v,i){return '<td style="text-align:right;color:var(--txM);'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700;color:var(--txM)">'+fmt(totalIva)+'</td></tr>'+
-  '<tr class="total"><td style="font-weight:700"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--bl);margin-right:6px"></span>Total</td>'+monthData.map(function(v,i){return '<td style="text-align:right;font-weight:700;'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v+monthIva[i])+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalVentas+totalIva)+'</td></tr>'+
-  '</tbody></table></div></div>'+
-  
-  '<div class="grid-2">'+
-  '<div class="card"><div class="card-h">Ventas por cliente</div>'+
-  (function(){var totalClientes=clientList.reduce(function(s,cl){return s+Math.abs(cl.total);},0);return (clientList.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Cliente</th><th style="text-align:right">Importe</th><th style="text-align:right">%</th></tr></thead><tbody>'+
-  clientList.map(function(cl,i){var pct=totalClientes>0?Math.round(Math.abs(cl.total)/totalClientes*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;cursor:pointer;color:var(--pri)" onclick="showExtractoCuenta(\''+Object.keys(byClient).find(function(k){return byClient[k]===cl;})+'\')">'+h(cl.name)+'</td><td style="text-align:right;color:var(--ok)">'+fmt(Math.abs(cl.total))+'€</td><td style="text-align:right;font-size:11px;color:var(--txM)">'+pct+'%</td></tr>';}).join('')+
-  '</tbody></table></div>':'<div class="empty" style="padding:20px">Sin clientes</div>');})()+'</div>'+
-  
-  '<div class="card"><div class="card-h">Ventas por cuenta contable</div>'+
-  (accountList.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
-  accountList.map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td>'+acctLink(x[0],'')+'</td><td>'+h(x[1].name)+'</td><td style="text-align:right;color:var(--ok)">'+fmt(x[1].total)+'€</td></tr>';}).join('')+
-  '</tbody></table>':'<div class="empty" style="padding:20px">Sin datos</div>')+'</div></div>';
-  
-  setTimeout(function(){
-    var ctx=$('chartVentas');if(!ctx)return;
-    new Chart(ctx,{type:chartType,data:{labels:MONTHS,datasets:[{label:'Ventas',data:monthData,backgroundColor:'rgba(16,185,129,0.7)',borderColor:'#10B981',borderRadius:chartType==='bar'?4:0,fill:chartType==='line',tension:0.3,pointRadius:3},{label:'IVA',data:monthIva,backgroundColor:'rgba(245,158,11,0.5)',borderColor:'#F59E0B',borderRadius:chartType==='bar'?4:0,fill:chartType==='line',tension:0.3,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},usePointStyle:true,pointStyle:'circle'}},tooltip:{callbacks:{label:function(c2){return c2.dataset.label+': '+fmt(c2.parsed.y)+'€';}}}},scales:{y:{ticks:{callback:function(v){return fmt(v);},font:{size:10}},grid:{color:'#F3F4F6'}},x:{grid:{display:false}}}}});
-  },100);
+  var totalVentas=mensual.reduce(function(s,m){return s+m.ventas;},0);
+  var totalIva=mensual.reduce(function(s,m){return s+m.iva;},0);
+  var byClient={};
+  facturas.forEach(function(f){
+    var key=f.tercero||f.cif||'Desconocido';
+    if(!byClient[key])byClient[key]={name:key,total:0,count:0};
+    byClient[key].total+=f.isAbono?-f.totalFactura:f.totalFactura;
+    byClient[key].count++;
+  });
+  var cliList=Object.values(byClient).sort(function(a,b){return Math.abs(b.total)-Math.abs(a.total);});
+  var maxM=Math.max.apply(null,mensual.map(function(m){return Math.max(m.ventas,1);}));
+  var barSvg='<svg viewBox="0 0 700 200" style="width:100%;max-height:200px"><defs><linearGradient id="gV" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#10B981"/><stop offset="1" stop-color="#34D399"/></linearGradient></defs>';
+  mensual.forEach(function(m,i){
+    var x=i*56+30;var hV=maxM>0?m.ventas/maxM*160:0;var hI=maxM>0?m.iva/maxM*160:0;
+    barSvg+='<rect x="'+x+'" y="'+(170-hV)+'" width="22" height="'+Math.max(hV,0)+'" fill="url(#gV)" rx="2"/>';
+    barSvg+='<rect x="'+(x+24)+'" y="'+(170-hI)+'" width="22" height="'+Math.max(hI,0)+'" fill="#F59E0B" rx="2"/>';
+    barSvg+='<text x="'+(x+22)+'" y="190" text-anchor="middle" font-size="9" fill="#6B7280">'+m.mes+'</text>';
+  });
+  barSvg+='</svg><div style="text-align:center;font-size:10px;padding:4px"><span style="color:#10B981">● Ventas</span> <span style="color:#F59E0B;margin-left:12px">● IVA</span></div>';
+  c.innerHTML='<div class="row"><div class="stat"><div class="stat-l">Total ventas</div><div class="stat-v" style="color:var(--ok)">'+fmt(totalVentas)+'€</div></div><div class="stat"><div class="stat-l">Venta media mensual</div><div class="stat-v" style="color:var(--bl)">'+fmt(totalVentas/12)+'€</div></div><div class="stat"><div class="stat-l">IVA repercutido</div><div class="stat-v" style="color:var(--rd)">'+fmt(totalIva)+'€</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>Evolución mensual de ventas</span></div>'+barSvg+
+  '<table style="font-size:11px"><thead><tr><th></th>'+meses.map(function(m){return '<th style="text-align:right">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:800">Total</th></tr></thead><tbody>'+
+  '<tr style="color:var(--ok)"><td>● Ventas</td>'+mensual.map(function(m){return '<td style="text-align:right">'+fmt(m.ventas)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalVentas)+'</td></tr>'+
+  '<tr><td>● IVA</td>'+mensual.map(function(m){return '<td style="text-align:right">'+fmt(m.iva)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalIva)+'</td></tr>'+
+  '</tbody></table></div>'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="card"><div class="card-h"><span>Ventas por cliente</span></div>'+
+  (cliList.length?'<table style="font-size:11px"><thead><tr><th>Cliente</th><th style="text-align:right">Importe</th><th style="text-align:right">Nº</th></tr></thead><tbody>'+
+  cliList.map(function(cl,i){return '<tr class="'+(i%2?'alt':'')+'"><td>'+h(cl.name)+'</td><td style="text-align:right;color:var(--ok);font-weight:600">'+fmt(cl.total)+'€</td><td style="text-align:right">'+cl.count+'</td></tr>';}).join('')+'</tbody></table>':'<div class="empty">Sin clientes</div>')+'</div>'+
+  '<div class="card"><div class="card-h"><span>Ventas por cuenta contable</span></div><div class="empty">Sin datos</div></div></div>';
 }
 function exportInformeVentasExcel(){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
@@ -6254,68 +6304,57 @@ function exportInformeVentasExcel(){
 
 // ═══ INFORME DE COMPRAS (tipo Holded) ═══
 function renderInformeCompras(c){
-  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  var monthData=[0,0,0,0,0,0,0,0,0,0,0,0];
-  var monthIva=[0,0,0,0,0,0,0,0,0,0,0,0];
-  var byProv={},byAccount={};
-  var totalCompras=0,totalIva=0;
-  
-  all.forEach(function(e){
-    var mo=parseInt(e.date.slice(5,7))-1;
-    e.lines.forEach(function(l){
-      var g=parseInt((l.a||'')[0])||0;
-      if(g===6){var v=l.d-l.h;totalCompras+=v;monthData[mo]+=v;
-        var key=l.a;if(!byAccount[key])byAccount[key]={name:am[l.a]?am[l.a].name:l.a,total:0};byAccount[key].total+=v;
-      }
-      if(l.a&&l.a.startsWith('472')){var iv=l.d-l.h;totalIva+=iv;monthIva[mo]+=iv;}
-      if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))){
-        var provName=am[l.a]?am[l.a].name:l.a;
-        // Enrich name from invoice data if name looks like a CIF
-        if(provName.match(/^[A-Z]\d{7,8}/i)){var invData=getInvoiceData({tipo:'recibida'});invData.forEach(function(inv){if(inv.tercero&&inv.cif&&provName.indexOf(inv.cif)>=0)provName=inv.tercero;});}
-        if(!byProv[l.a])byProv[l.a]={name:provName,total:0,count:0};
-        byProv[l.a].total+=l.h-l.d;byProv[l.a].count++;
-      }
+  // ═══ COMPRAS v10 — usa getInvoiceData() ═══
+  var facturas=getInvoiceData({tipo:'recibida'});
+  var meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  var mensual=meses.map(function(m,idx){
+    var mm=String(idx+1).padStart(2,'0');
+    var del=facturas.filter(function(f){return f.fecha&&f.fecha.substring(5,7)===mm;});
+    var compras=del.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalBase;},0);
+    var iva=del.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalIva;},0);
+    return {mes:m,compras:compras,iva:iva};
+  });
+  var totalCompras=mensual.reduce(function(s,m){return s+m.compras;},0);
+  var totalIva=mensual.reduce(function(s,m){return s+m.iva;},0);
+  var byProv={};
+  facturas.forEach(function(f){
+    var key=f.tercero||f.cif||'Desconocido';
+    if(!byProv[key])byProv[key]={name:key,total:0,count:0};
+    byProv[key].total+=f.isAbono?-f.totalFactura:f.totalFactura;
+    byProv[key].count++;
+  });
+  var provList=Object.values(byProv).sort(function(a,b){return Math.abs(b.total)-Math.abs(a.total);});
+  var byCuenta={};
+  facturas.forEach(function(f){
+    var bases=[{name:'Compras de mercaderías',code:'60000000',val:f.totalBase}];
+    bases.forEach(function(b){
+      if(!byCuenta[b.code])byCuenta[b.code]={name:b.name,total:0};
+      byCuenta[b.code].total+=f.isAbono?-b.val:b.val;
     });
   });
-  
-  var provList=Object.values(byProv).sort(function(a,b){return b.total-a.total;});
-  var accountList=Object.entries(byAccount).sort(function(a,b){return b[1].total-a[1].total;});
-  var curMonth=new Date().getMonth();
-  var chartTypeC=window._comprasChart||'bar';
-  
-  c.innerHTML=dateFilterHTML()+
-  '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">'+
-  '<select class="sel" style="font-size:11px;padding:4px 8px" onchange="window._comprasSubTipo=this.value;renderView()">'+
-  '<option value="general">Compras</option><option value="proveedor"'+(window._comprasSubTipo==='proveedor'?' selected':'')+'>Por proveedor</option><option value="cuenta"'+(window._comprasSubTipo==='cuenta'?' selected':'')+'>Por cuenta</option></select>'+
-  '<input class="inp" style="max-width:160px;font-size:11px" placeholder="Filtrar por tag...">'+
-  '<div style="margin-left:auto;display:flex;gap:4px"><button class="btn btn-d" style="font-size:10px;padding:4px 8px;'+(chartTypeC==='bar'?'background:var(--priLt);color:var(--pri)':'')+'" onclick="window._comprasChart=\'bar\';renderView()">▐</button><button class="btn btn-d" style="font-size:10px;padding:4px 8px;'+(chartTypeC==='line'?'background:var(--priLt);color:var(--pri)':'')+'" onclick="window._comprasChart=\'line\';renderView()">∕</button></div></div>'+
-  '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total compras</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(totalCompras)+'€</div></div>'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Media mensual</div><div style="font-size:22px;font-weight:700;color:var(--bl)">'+fmt(totalCompras/12)+'€</div></div>'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">IVA soportado</div><div style="font-size:22px;font-weight:700;color:var(--am)">'+fmt(totalIva)+'€</div></div></div>'+
-  
-  '<div class="card" style="margin-bottom:16px"><div class="card-h"><span>Evolución mensual de compras</span><button class="btn btn-d" onclick="exportInformeComprasExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Informe Compras")">↓ PDF</button></div>'+
-  '<div style="padding:16px"><canvas id="chartCompras" height="200"></canvas></div>'+
-  '<div style="overflow-x:auto"><table><thead><tr><th></th>'+MONTHS.map(function(m,i){return '<th style="text-align:right;'+(i===curMonth?'border-bottom:3px solid var(--bl);color:var(--bl)':'')+'">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:700">Total</th></tr></thead><tbody>'+
-  '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rd);margin-right:6px"></span>Compras</td>'+monthData.map(function(v,i){return '<td style="text-align:right;'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalCompras)+'</td></tr>'+
-  '<tr><td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--am);margin-right:6px"></span>IVA</td>'+monthIva.map(function(v,i){return '<td style="text-align:right;color:var(--txM);'+(i===curMonth?'background:#F0F9FF':'')+'">'+fmt(v)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700;color:var(--txM)">'+fmt(totalIva)+'</td></tr>'+
-  '</tbody></table></div></div>'+
-  
-  '<div class="grid-2">'+
-  '<div class="card"><div class="card-h">Compras por proveedor</div>'+
-  (provList.length?'<div class="scr" style="max-height:300px"><table><thead><tr><th>Proveedor</th><th style="text-align:right">Importe</th><th style="text-align:right">Nº</th></tr></thead><tbody>'+
-  provList.map(function(p,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;cursor:pointer;color:var(--pri)" onclick="showExtractoCuenta(\''+Object.keys(byProv).find(function(k){return byProv[k]===p;})+'\')">'+h(p.name)+'</td><td style="text-align:right;color:var(--rd)">'+fmt(p.total)+'€</td><td style="text-align:right;font-size:11px;color:var(--txM)">'+p.count+'</td></tr>';}).join('')+
-  '</tbody></table></div>':'<div class="empty" style="padding:20px">Sin proveedores</div>')+'</div>'+
-  
-  '<div class="card"><div class="card-h">Compras por cuenta contable</div>'+
-  (accountList.length?'<table><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
-  accountList.map(function(x,i){return '<tr class="'+(i%2?'alt':'')+'"><td>'+acctLink(x[0],'')+'</td><td>'+h(x[1].name)+'</td><td style="text-align:right;color:var(--rd)">'+fmt(x[1].total)+'€</td></tr>';}).join('')+
-  '</tbody></table>':'<div class="empty" style="padding:20px">Sin datos</div>')+'</div></div>';
-  
-  setTimeout(function(){
-    var ctx=$('chartCompras');if(!ctx)return;
-    new Chart(ctx,{type:chartTypeC,data:{labels:MONTHS,datasets:[{label:'Compras',data:monthData,backgroundColor:'rgba(239,68,68,0.7)',borderColor:'#EF4444',borderRadius:chartTypeC==='bar'?4:0,fill:chartTypeC==='line',tension:0.3,pointRadius:3},{label:'IVA',data:monthIva,backgroundColor:'rgba(245,158,11,0.5)',borderColor:'#F59E0B',borderRadius:chartTypeC==='bar'?4:0,fill:chartTypeC==='line',tension:0.3,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},usePointStyle:true,pointStyle:'circle'}},tooltip:{callbacks:{label:function(c2){return c2.dataset.label+': '+fmt(c2.parsed.y)+'€';}}}},scales:{y:{ticks:{callback:function(v){return fmt(v);},font:{size:10}},grid:{color:'#F3F4F6'}},x:{grid:{display:false}}}}});
-  },100);
+  var maxM=Math.max.apply(null,mensual.map(function(m){return Math.max(m.compras,1);}));
+  var barSvg='<svg viewBox="0 0 700 200" style="width:100%;max-height:200px"><defs><linearGradient id="gC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EF4444"/><stop offset="1" stop-color="#F87171"/></linearGradient><linearGradient id="gI" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F59E0B"/><stop offset="1" stop-color="#FBBF24"/></linearGradient></defs>';
+  mensual.forEach(function(m,i){
+    var x=i*56+30;var hC=m.compras/maxM*160;var hI=m.iva/maxM*160;
+    barSvg+='<rect x="'+x+'" y="'+(170-hC)+'" width="22" height="'+hC+'" fill="url(#gC)" rx="2"/>';
+    barSvg+='<rect x="'+(x+24)+'" y="'+(170-hI)+'" width="22" height="'+hI+'" fill="url(#gI)" rx="2"/>';
+    barSvg+='<text x="'+(x+22)+'" y="190" text-anchor="middle" font-size="9" fill="#6B7280">'+m.mes+'</text>';
+  });
+  barSvg+='</svg><div style="text-align:center;font-size:10px;padding:4px"><span style="color:#EF4444">● Compras</span> <span style="color:#F59E0B;margin-left:12px">● IVA</span></div>';
+  c.innerHTML='<div class="row"><div class="stat"><div class="stat-l">Total compras</div><div class="stat-v" style="color:var(--rd)">'+fmt(totalCompras)+'€</div></div><div class="stat"><div class="stat-l">Media mensual</div><div class="stat-v" style="color:var(--bl)">'+fmt(totalCompras/12)+'€</div></div><div class="stat"><div class="stat-l">IVA soportado</div><div class="stat-v" style="color:var(--rd)">'+fmt(totalIva)+'€</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>Evolución mensual de compras</span></div>'+barSvg+
+  '<table style="font-size:11px"><thead><tr><th></th>'+meses.map(function(m){return '<th style="text-align:right">'+m+'</th>';}).join('')+'<th style="text-align:right;font-weight:800">Total</th></tr></thead><tbody>'+
+  '<tr style="color:var(--rd)"><td>● Compras</td>'+mensual.map(function(m){return '<td style="text-align:right">'+fmt(m.compras)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalCompras)+'</td></tr>'+
+  '<tr><td>● IVA</td>'+mensual.map(function(m){return '<td style="text-align:right">'+fmt(m.iva)+'</td>';}).join('')+'<td style="text-align:right;font-weight:700">'+fmt(totalIva)+'</td></tr>'+
+  '</tbody></table></div>'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="card"><div class="card-h"><span>Compras por proveedor</span></div>'+
+  '<table style="font-size:11px"><thead><tr><th>Proveedor</th><th style="text-align:right">Importe</th><th style="text-align:right">Nº</th></tr></thead><tbody>'+
+  provList.map(function(p,i){return '<tr class="'+(i%2?'alt':'')+'"><td>'+h(p.name)+'</td><td style="text-align:right;color:var(--rd);font-weight:600">'+fmt(p.total)+'€</td><td style="text-align:right">'+p.count+'</td></tr>';}).join('')+
+  '</tbody></table></div>'+
+  '<div class="card"><div class="card-h"><span>Compras por cuenta contable</span></div>'+
+  '<table style="font-size:11px"><thead><tr><th>Cuenta</th><th>Nombre</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+
+  Object.entries(byCuenta).map(function(e,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;color:var(--pri)">'+e[0]+'</td><td>'+h(e[1].name)+'</td><td style="text-align:right;font-weight:600">'+fmt(e[1].total)+'€</td></tr>';}).join('')+
+  '</tbody></table></div></div>';
 }
 function exportInformeComprasExcel(){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
@@ -6328,73 +6367,23 @@ function exportInformeComprasExcel(){
 
 // ═══ ANÁLISIS PROVEEDORES ═══
 function renderAnalisisProveedores(c){
-  var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  // Agrupar por proveedor real: cuentas 400xxxx (proveedores) y 410xxxx (acreedores)
+  // ═══ PROVEEDORES v10 — usa getInvoiceData() ═══
+  var facturas=getInvoiceData({tipo:'recibida'});
   var provs={};
-  all.forEach(function(e){
-    // Buscar líneas con cuentas de proveedor/acreedor (400, 410)
-    var provAccts=[];var gastoNeto=0;
-    e.lines.forEach(function(l){
-      if(l.a&&(l.a.startsWith('400')||l.a.startsWith('410'))&&(l.h>0||l.d>0)){
-        provAccts.push(l);
-      }
-      var g=parseInt((l.a||'')[0])||0;
-      if(g===6){gastoNeto+=l.d-l.h;}
-    });
-    // Si hay cuenta de proveedor, agrupar por ella
-    if(provAccts.length>0){
-      provAccts.forEach(function(pl){
-        var key=pl.a;
-        var neto=pl.h-pl.d; // Positivo=factura, negativo=abono
-        var provName=am[pl.a]?am[pl.a].name:pl.a;
-        if(provName.match(/^[A-Z]\d{7,8}/i)){var invD=getInvoiceData({tipo:'recibida'});invD.forEach(function(inv){if(inv.tercero&&inv.cif&&provName.indexOf(inv.cif)>=0)provName=inv.tercero;});}
-        if(!provs[key])provs[key]={name:provName,total:0,count:0,months:{},lastDate:'',cuenta:pl.a};
-        provs[key].total+=neto;provs[key].count++;
-        var ym=e.date.slice(0,7);if(!provs[key].months[ym])provs[key].months[ym]=0;
-        provs[key].months[ym]+=neto;
-        if(e.date>provs[key].lastDate)provs[key].lastDate=e.date;
-      });
-    } else if(gastoNeto>0){
-      // Fallback: si no hay cuenta proveedor, usar concepto
-      var key='_'+((e.concept||'Otros').split(/\s+/)[0]);
-      if(!provs[key])provs[key]={name:(e.concept||'Otros').split(/\s+/)[0],total:0,count:0,months:{},lastDate:'',cuenta:'Directo'};
-      provs[key].total+=gastoNeto;provs[key].count++;
-      var ym2=e.date.slice(0,7);if(!provs[key].months[ym2])provs[key].months[ym2]=0;
-      provs[key].months[ym2]+=gastoNeto;
-      if(e.date>provs[key].lastDate)provs[key].lastDate=e.date;
-    }
+  facturas.forEach(function(f){
+    var key=f.tercero||f.cif||'Desconocido';
+    if(!provs[key])provs[key]={name:key,cuenta:f.cuenta||'',total:0,count:0,lastDate:''};
+    provs[key].total+=f.isAbono?-f.totalFactura:f.totalFactura;
+    provs[key].count++;
+    if(f.fecha>provs[key].lastDate)provs[key].lastDate=f.fecha;
   });
-  var lista=Object.values(provs).sort(function(a,b){return b.total-a.total;});
-  var totalGasto=lista.reduce(function(s,p){return s+p.total;},0);
-
-  c.innerHTML=dateFilterHTML()+
-  '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px">'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Proveedores</div><div style="font-size:22px;font-weight:700;color:var(--tx)">'+lista.length+'</div></div>'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Total facturado</div><div style="font-size:22px;font-weight:700;color:var(--rd)">'+fmt(totalGasto)+'€</div></div>'+
-  '<div style="background:#fff;border-radius:10px;padding:16px 18px;border:1px solid var(--bd)"><div style="font-size:12px;color:var(--txS);margin-bottom:4px">Media por proveedor</div><div style="font-size:22px;font-weight:700;color:var(--am)">'+fmt(lista.length?totalGasto/lista.length:0)+'€</div></div></div>'+
-  '<div class="card"><div class="card-h"><span>Análisis de proveedores</span><button class="btn btn-d" onclick="exportAnalisisExcel()">↓ Excel</button><button class="btn btn-d" onclick="exportPDF("Análisis Proveedores")">↓ PDF</button></div>'+
-  (lista.length?'<div class="scr"><table><thead><tr><th>Proveedor</th><th>Cuenta</th><th style="text-align:right">Total</th><th style="text-align:right">% del total</th><th style="text-align:right">Nº facturas</th><th style="text-align:right">Media/fra</th><th>Última fra</th><th>Tendencia</th></tr></thead><tbody>'+
-  lista.map(function(p,i){
-    var pct=totalGasto>0?Math.round(p.total/totalGasto*100):0;
-    var media=p.count>0?p.total/p.count:0;
-    var meses=Object.keys(p.months).sort();
-    var tendencia='—';
-    if(meses.length>=2){
-      var half=Math.floor(meses.length/2);
-      var sumFirst=0,sumSecond=0;
-      for(var mi=0;mi<half;mi++)sumFirst+=p.months[meses[mi]]||0;
-      for(var mj=half;mj<meses.length;mj++)sumSecond+=p.months[meses[mj]]||0;
-      var avgFirst=sumFirst/half;var avgSecond=sumSecond/(meses.length-half);
-      var cambio=0;
-      if(avgFirst>0){cambio=Math.round((avgSecond-avgFirst)/avgFirst*100);}
-      else if(avgSecond>0){cambio=100;}
-      // Cap: max +999%, min -100%
-      if(cambio>999)cambio=999;
-      if(cambio<-100)cambio=-100;
-      tendencia=cambio>10?'<span style="color:var(--rd)">↑ +'+cambio+'%</span>':cambio<-10?'<span style="color:var(--ok)">↓ '+cambio+'%</span>':'<span style="color:var(--txM)">= estable</span>';
-    }
-    return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600;cursor:pointer;color:var(--pri)" onclick="showExtractoCuenta(\''+h(p.cuenta)+'\')">'+h(p.name)+'</td><td>'+acctLink(p.cuenta,'')+'</td><td style="text-align:right;font-weight:700;color:var(--rd)">'+fmt(p.total)+'€</td><td style="text-align:right"><div style="display:flex;align-items:center;gap:4px;justify-content:flex-end"><div style="width:'+Math.min(pct,100)+'px;height:8px;background:var(--rd);border-radius:4px;opacity:0.3"></div>'+pct+'%</div></td><td style="text-align:right">'+p.count+'</td><td style="text-align:right">'+fmt(media)+'€</td><td style="font-size:10px">'+fmtD(p.lastDate)+'</td><td style="font-size:10px">'+tendencia+'</td></tr>';
-  }).join('')+'</tbody></table></div>':'<div class="empty">Sin datos de proveedores</div>')+'</div>';
+  var lista=Object.values(provs).sort(function(a,b){return Math.abs(b.total)-Math.abs(a.total);});
+  var grandTotal=lista.reduce(function(s,p){return s+Math.abs(p.total);},0);
+  c.innerHTML='<div class="row"><div class="stat"><div class="stat-l">Proveedores</div><div class="stat-v">'+lista.length+'</div></div><div class="stat"><div class="stat-l">Total facturado</div><div class="stat-v" style="color:var(--rd)">'+fmt(grandTotal)+'€</div></div><div class="stat"><div class="stat-l">Media por proveedor</div><div class="stat-v" style="color:var(--rd)">'+fmt(lista.length?grandTotal/lista.length:0)+'€</div></div></div>'+
+  '<div class="card"><div class="card-h"><span>Análisis de proveedores</span></div>'+
+  '<table><thead><tr><th>Proveedor</th><th>Cuenta</th><th style="text-align:right">Total</th><th style="text-align:right">% del total</th><th style="text-align:right">Nº facturas</th><th style="text-align:right">Media/fra</th><th>Última fra</th></tr></thead><tbody>'+
+  lista.map(function(p,i){var pct=grandTotal>0?Math.round(Math.abs(p.total)/grandTotal*100):0;return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+h(p.name)+'</td><td style="font-size:10px;color:var(--pri)">'+h(p.cuenta)+'</td><td style="text-align:right;color:var(--rd);font-weight:600">'+fmt(p.total)+'€</td><td style="text-align:right"><div style="display:flex;align-items:center;justify-content:flex-end;gap:4px"><div style="width:60px;height:8px;background:#FEE2E2;border-radius:4px"><div style="width:'+pct+'%;height:100%;background:#EF4444;border-radius:4px"></div></div>'+pct+'%</div></td><td style="text-align:right">'+p.count+'</td><td style="text-align:right">'+fmt(p.count?p.total/p.count:0)+'€</td><td style="font-size:10px">'+fmtD(p.lastDate)+'</td></tr>';}).join('')+
+  '</tbody></table></div>';
 }
 function exportAnalisisExcel(){
   var all=filteredEntries();var am={};state.accounts.forEach(function(a){am[a.code]=a;});

@@ -70,6 +70,34 @@ db.exec(`
     meta TEXT DEFAULT ''
   );
 
+  CREATE TABLE IF NOT EXISTS invoices (
+    id TEXT PRIMARY KEY,
+    num_factura TEXT NOT NULL,
+    fecha TEXT NOT NULL,
+    tipo TEXT DEFAULT 'recibida',
+    is_abono INTEGER DEFAULT 0,
+    tercero_nombre TEXT DEFAULT '',
+    tercero_cif TEXT DEFAULT '',
+    tercero_cuenta TEXT DEFAULT '',
+    base21 REAL DEFAULT 0,
+    iva21 REAL DEFAULT 0,
+    base10 REAL DEFAULT 0,
+    iva10 REAL DEFAULT 0,
+    base4 REAL DEFAULT 0,
+    iva4 REAL DEFAULT 0,
+    base0 REAL DEFAULT 0,
+    retencion REAL DEFAULT 0,
+    recargo REAL DEFAULT 0,
+    total REAL DEFAULT 0,
+    forma_pago TEXT DEFAULT '',
+    fecha_vencimiento TEXT DEFAULT '',
+    concepto_gestor TEXT DEFAULT '',
+    entry_id TEXT DEFAULT '',
+    company_id TEXT REFERENCES companies(id),
+    created_by TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     date TEXT,
@@ -1157,6 +1185,42 @@ app.post('/api/gestor-sync', authRequired, async (req, res) => {
     console.error('[Gestor Sync] Error:', e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── INVOICES (Facturas — fuente única de verdad) ──
+app.get('/api/invoices/:companyId', authRequired, (req, res) => {
+  const rows = db.prepare('SELECT * FROM invoices WHERE company_id = ? ORDER BY fecha DESC, num_factura').all(req.params.companyId);
+  res.json(rows);
+});
+
+app.post('/api/invoices/:companyId', authRequired, (req, res) => {
+  const { invoices } = req.body;
+  if (!invoices || !Array.isArray(invoices)) return res.status(400).json({ error: 'invoices array required' });
+  const ins = db.prepare(`INSERT OR REPLACE INTO invoices 
+    (id, num_factura, fecha, tipo, is_abono, tercero_nombre, tercero_cif, tercero_cuenta, 
+     base21, iva21, base10, iva10, base4, iva4, base0, retencion, recargo, total,
+     forma_pago, fecha_vencimiento, concepto_gestor, entry_id, company_id, created_by) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const tx = db.transaction(() => {
+    invoices.forEach(f => {
+      ins.run(f.id, f.num_factura, f.fecha, f.tipo||'recibida', f.is_abono?1:0,
+        f.tercero_nombre||'', f.tercero_cif||'', f.tercero_cuenta||'',
+        f.base21||0, f.iva21||0, f.base10||0, f.iva10||0, f.base4||0, f.iva4||0,
+        f.base0||0, f.retencion||0, f.recargo||0, f.total||0,
+        f.forma_pago||'', f.fecha_vencimiento||'', f.concepto_gestor||'',
+        f.entry_id||'', req.params.companyId, req.user.username);
+    });
+  });
+  tx();
+  auditLog(req, 'save-invoices', `${invoices.length} facturas guardadas`);
+  res.json({ ok: true, count: invoices.length });
+});
+
+app.delete('/api/invoices/:companyId', authRequired, adminRequired, (req, res) => {
+  const count = db.prepare('SELECT COUNT(*) as c FROM invoices WHERE company_id = ?').get(req.params.companyId);
+  db.prepare('DELETE FROM invoices WHERE company_id = ?').run(req.params.companyId);
+  auditLog(req, 'delete-all-invoices', `${count.c} facturas borradas`);
+  res.json({ ok: true, deleted: count.c });
 });
 
 // ── EXCLUDED INVOICES (Facturas pendientes de revisión) ──
