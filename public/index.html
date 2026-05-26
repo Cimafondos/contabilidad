@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2300854D'/><text x='50%25' y='55%25' text-anchor='middle' dominant-baseline='middle' font-size='16' font-weight='800' fill='white' font-family='sans-serif'>MC</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<style>
+<style>h
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--pri:#00854D;--priLt:#E8F5EE;--bg:#F5F6F8;--wh:#FFF;--bd:#E5E7EB;--tx:#1F2937;--txS:#6B7280;--txM:#9CA3AF;--rd:#EF4444;--ok:#10B981;--bl:#3B82F6;--am:#F59E0B;--vi:#8B5CF6;--or:#F97316;--tabBg:#2E7D52;--sh:0 1px 2px rgba(0,0,0,0.05);--sideW:220px;--sideCollW:56px}
 body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--tx);font-size:13px;line-height:1.5}
@@ -300,6 +300,10 @@ function checkIntegrity(){
   // Run daily full integrity check
   runDailyIntegrityCheck();
   state.integrity={ok:errors.length===0,errors:errors,checked:new Date().toLocaleTimeString()};
+    // Cross-check: Libro facturas vs Diario
+  var factEntries=(state.entries||[]).filter(function(e){return e.type&&e.type.indexOf("factura")>=0;}).length;
+  var invoiceCount=(state.invoices||[]).length;
+  if(factEntries>0&&invoiceCount===0)errors.push({id:"libro",date:"",concept:"Libro vacio: "+factEntries+" asientos factura en Diario pero 0 en libro",diff:factEntries});
   return errors;
 }
 
@@ -375,8 +379,8 @@ function changeEmpresa(idOrName){
   EMPRESA_MAP[compId]=em.name||idOrName;
   try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:compId,name:em.name||idOrName,cif:em.cif||''}));}catch(e){}
   showProgress('Cambiando empresa','Cargando '+(em.name||idOrName)+'...');
-  state.invoices=[];loadData().then(function(){return loadInvoices();}).then(function(){checkIntegrity();render();}).catch(function(){
-    state.accounts=[];state.entries=[];state.invoices=[];state.rules=[];render();
+  state.accounts=[];state.entries=[];state.invoices=[];state.transactions=[];state.rules=[];render();loadData().then(function(){return loadInvoices();}).then(function(){checkIntegrity();render();}).catch(function(){
+    state.accounts=[];state.entries=[];state.invoices=[];state.transactions=[];state.rules=[];render();;
     toast('Empresa '+(em.name||idOrName)+': sin datos en el servidor','ok');
   });
 }
@@ -534,7 +538,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.1.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.2.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2783,7 +2787,7 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     var isEmitida=tipoDoc.indexOf('EMITIDA')>=0||tipoDoc.indexOf('VENTA')>=0;
     // If user explicitly selected emitida, trust that
     if(tipo==='emitida')isEmitida=true;
-    if(isEmitida&&empresaOrigen){
+    if(isEmitida){
       terceroName=empresaOrigen;
     }
 
@@ -3301,7 +3305,7 @@ async function contabilizarFacturas(){
     var finalLines=Object.values(consolidated).filter(function(l){return l.d>0.001||l.h>0.001;});
 
     // Verify IVA in final lines
-    var ivaInFinal=finalLines.filter(function(l){return l.a==='47200000';});
+    var ivaInFinal=finalLines.filter(function(l){return l.a==='47200000'||l.a.startsWith('477');});
     var ivaDebe=0,ivaHaber=0;
     ivaInFinal.forEach(function(l){ivaDebe+=l.d;ivaHaber+=l.h;});
     if(Math.abs(f.iva21+f.iva10+f.iva4)>0.01&&ivaInFinal.length===0){
@@ -5508,7 +5512,7 @@ async function resolveExcluded(id,estado){
 async function loadInvoices(){
   if(!state.company||!state.company.id)return;
   try{
-    state.invoices=await api('/api/invoices/'+state.company.id);
+    state.invoices=await api('/api/invoices/'+state.company.id)||[];console.log('[loadInvoices]',state.company&&state.company.id,':',state.invoices.length,'facturas');
   }catch(e){state.invoices=[];console.warn('No se pudieron cargar facturas:',e.message);}
 }
 
