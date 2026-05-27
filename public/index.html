@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.2.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.3.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -5254,6 +5254,38 @@ function runTestCuadre(){
   // Test 10: Modelo 303 cuadra (IVA repercutido - IVA soportado)
   var m303=iva477-iva472;
   results.push({name:'Modelo 303 (IVA rep - IVA sop)',ok:true,detail:'Resultado 303: '+fmt(m303)+'€ '+(m303>0?'(a pagar)':'(a devolver)')});
+
+  // Test 11: Ventas cruzado (Libro Fact Emitidas vs base ventas en asientos G7)
+  var invoicesTC=getInvoiceData();
+  var emitidasTC=invoicesTC.filter(function(f){return f.tipo==='emitida';});
+  var ventasFactTC=emitidasTC.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalBase;},0);
+  var ventasAsientosTC=0;
+  all.forEach(function(e){e.lines.forEach(function(l){if(l.a&&l.a[0]==='7')ventasAsientosTC+=l.h-l.d;});});
+  var ventasDiffTC=Math.round((ventasFactTC-ventasAsientosTC)*100)/100;
+  results.push({name:'Ventas cruzado (Fact Emitidas vs Asientos G7)',ok:Math.abs(ventasDiffTC)<1,detail:'Facturas: '+fmt(ventasFactTC)+'€ · Asientos: '+fmt(ventasAsientosTC)+'€ · Diff: '+fmt(ventasDiffTC)+'€'});
+
+  // Test 12: Facturas huérfanas (entry_id apunta a asiento eliminado o inexistente)
+  var entryIdsTC={};
+  state.entries.forEach(function(e){if(!e.del)entryIdsTC[e.id]=true;});
+  var huerfanasTC=invoicesTC.filter(function(f){return f.entryId&&!entryIdsTC[f.entryId];});
+  results.push({name:'Facturas huérfanas (con asiento vivo)',ok:huerfanasTC.length===0,detail:huerfanasTC.length===0?'Todas las facturas referencian un asiento existente':huerfanasTC.length+' facturas huérfanas: '+huerfanasTC.slice(0,5).map(function(f){return f.numFactura;}).join(', ')});
+
+  // Test 13: Duplicados por nº factura + tipo
+  var seenDupTC={},dupCountTC=0;
+  invoicesTC.forEach(function(f){
+    var k=(f.numFactura||'').toUpperCase()+'__'+f.tipo;
+    if(seenDupTC[k])dupCountTC++; else seenDupTC[k]=true;
+  });
+  results.push({name:'Duplicados por nº factura',ok:dupCountTC===0,detail:dupCountTC===0?'Sin duplicados en '+invoicesTC.length+' facturas':dupCountTC+' facturas con nº repetido'});
+
+  // Test 14: Tesorería — saldo clientes (430x) ≤ total facturado emitido
+  var saldoClientesTC=0;
+  state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){
+    if(l.a&&l.a.indexOf('430')===0)saldoClientesTC+=l.d-l.h;
+  });});
+  var totalEmitidoCobrableTC=emitidasTC.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*Math.abs(f.totalFactura||0);},0);
+  var tesoreriaOkTC=saldoClientesTC<=totalEmitidoCobrableTC+1;
+  results.push({name:'Tesorería (saldo 430x ≤ facturado emitido)',ok:tesoreriaOkTC,detail:'Pendiente cobro: '+fmt(saldoClientesTC)+'€ · Facturado: '+fmt(totalEmitidoCobrableTC)+'€'});
 
   // Show results
   var passed=results.filter(function(r){return r.ok;}).length;
