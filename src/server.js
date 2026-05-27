@@ -179,6 +179,40 @@ try { db.exec('ALTER TABLE entry_lines ADD COLUMN meta TEXT DEFAULT \'\''); } ca
 try { db.exec('ALTER TABLE entries ADD COLUMN tags TEXT DEFAULT \'\''); } catch(e) {}
 try { db.exec('ALTER TABLE entries ADD COLUMN punteado INTEGER DEFAULT 0'); } catch(e) {}
 
+// ── Migration: add deleted column to invoices ──
+try { db.exec('ALTER TABLE invoices ADD COLUMN deleted INTEGER DEFAULT 0'); } catch(e) {}
+
+// ── Migration: dedupe invoices and enforce UNIQUE(company_id, tipo, num_factura) ──
+try {
+  const dupes = db.prepare(`
+    SELECT company_id, tipo, num_factura, COUNT(*) AS n
+    FROM invoices
+    GROUP BY company_id, tipo, num_factura
+    HAVING n > 1
+  `).all();
+  if (dupes.length > 0) {
+    const findKeepStmt = db.prepare(`
+      SELECT id FROM invoices
+      WHERE company_id = ? AND tipo = ? AND num_factura = ?
+      ORDER BY (created_at IS NULL), created_at DESC, id DESC
+      LIMIT 1
+    `);
+    const delStmt = db.prepare(`
+      DELETE FROM invoices
+      WHERE company_id = ? AND tipo = ? AND num_factura = ? AND id != ?
+    `);
+    const tx = db.transaction(() => {
+      dupes.forEach(d => {
+        const keep = findKeepStmt.get(d.company_id, d.tipo, d.num_factura);
+        if (keep) delStmt.run(d.company_id, d.tipo, d.num_factura, keep.id);
+      });
+    });
+    tx();
+    console.log(`✓ Migration: deduped invoices, ${dupes.length} grupos limpiados`);
+  }
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS ux_invoices_unique ON invoices(company_id, tipo, num_factura)');
+} catch(e) { console.error('Migration invoices dedupe/unique error:', e.message); }
+
 // ── Migration: fix provider accounts type A → P ──
 function migrateProviderAccounts() {
   try {
@@ -610,7 +644,11 @@ app.put('/api/entries/:companyId/:id/puntear', authRequired, (req, res) => {
 });
 
 app.delete('/api/entries/:companyId/:id', authRequired, (req, res) => {
-  db.prepare('UPDATE entries SET deleted = 1 WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE entries SET deleted = 1 WHERE id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
+    db.prepare('UPDATE invoices SET deleted = 1 WHERE entry_id = ? AND company_id = ?').run(req.params.id, req.params.companyId);
+  });
+  tx();
   res.json({ ok: true });
 });
 
@@ -621,15 +659,23 @@ app.delete('/api/entries-all/:companyId', authRequired, adminRequired, (req, res
   const cid = req.params.companyId;
   if (cid === '_all_') {
     const count = db.prepare('SELECT COUNT(*) as c FROM entries').get().c;
-    db.prepare('DELETE FROM entry_lines').run();
-    db.prepare('DELETE FROM entries').run();
-    db.prepare('DELETE FROM transactions').run();
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM entry_lines').run();
+      db.prepare('DELETE FROM entries').run();
+      db.prepare('DELETE FROM transactions').run();
+      db.prepare('DELETE FROM invoices').run();
+    });
+    tx();
     res.json({ ok: true, deleted: count });
   } else {
     const count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ?').get(cid).c;
-    db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ?)').run(cid);
-    db.prepare('DELETE FROM entries WHERE company_id = ?').run(cid);
-    db.prepare('DELETE FROM transactions WHERE company_id = ?').run(cid);
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ?)').run(cid);
+      db.prepare('DELETE FROM entries WHERE company_id = ?').run(cid);
+      db.prepare('DELETE FROM transactions WHERE company_id = ?').run(cid);
+      db.prepare('DELETE FROM invoices WHERE company_id = ?').run(cid);
+    });
+    tx();
     res.json({ ok: true, deleted: count });
   }
 });
@@ -648,10 +694,18 @@ app.post('/api/soft-delete-entries/:companyId', authRequired, adminRequired, (re
   let count;
   if (cid === '_all_') {
     count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE deleted = 0').get().c;
-    db.prepare('UPDATE entries SET deleted = 1 WHERE deleted = 0').run();
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE entries SET deleted = 1 WHERE deleted = 0').run();
+      db.prepare('UPDATE invoices SET deleted = 1 WHERE deleted = 0').run();
+    });
+    tx();
   } else {
     count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ? AND deleted = 0').get(cid).c;
-    db.prepare('UPDATE entries SET deleted = 1 WHERE company_id = ? AND deleted = 0').run(cid);
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE entries SET deleted = 1 WHERE company_id = ? AND deleted = 0').run(cid);
+      db.prepare('UPDATE invoices SET deleted = 1 WHERE company_id = ? AND deleted = 0').run(cid);
+    });
+    tx();
   }
   res.json({ ok: true, count });
 });
@@ -662,10 +716,18 @@ app.post('/api/recover-entries/:companyId', authRequired, adminRequired, (req, r
   let count;
   if (cid === '_all_') {
     count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE deleted = 1').get().c;
-    db.prepare('UPDATE entries SET deleted = 0 WHERE deleted = 1').run();
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE entries SET deleted = 0 WHERE deleted = 1').run();
+      db.prepare('UPDATE invoices SET deleted = 0 WHERE deleted = 1').run();
+    });
+    tx();
   } else {
     count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ? AND deleted = 1').get(cid).c;
-    db.prepare('UPDATE entries SET deleted = 0 WHERE company_id = ? AND deleted = 1').run(cid);
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE entries SET deleted = 0 WHERE company_id = ? AND deleted = 1').run(cid);
+      db.prepare('UPDATE invoices SET deleted = 0 WHERE company_id = ? AND deleted = 1').run(cid);
+    });
+    tx();
   }
   res.json({ ok: true, count });
 });
@@ -678,12 +740,20 @@ app.post('/api/purge-entries/:companyId', authRequired, adminRequired, (req, res
   let count;
   if (cid === '_all_') {
     count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE deleted = 1').get().c;
-    db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE deleted = 1)').run();
-    db.prepare('DELETE FROM entries WHERE deleted = 1').run();
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM invoices WHERE entry_id IN (SELECT id FROM entries WHERE deleted = 1)').run();
+      db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE deleted = 1)').run();
+      db.prepare('DELETE FROM entries WHERE deleted = 1').run();
+    });
+    tx();
   } else {
     count = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ? AND deleted = 1').get(cid).c;
-    db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ? AND deleted = 1)').run(cid);
-    db.prepare('DELETE FROM entries WHERE company_id = ? AND deleted = 1').run(cid);
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM invoices WHERE company_id = ? AND entry_id IN (SELECT id FROM entries WHERE company_id = ? AND deleted = 1)').run(cid, cid);
+      db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ? AND deleted = 1)').run(cid);
+      db.prepare('DELETE FROM entries WHERE company_id = ? AND deleted = 1').run(cid);
+    });
+    tx();
   }
   res.json({ ok: true, count });
 });
@@ -1189,7 +1259,11 @@ app.post('/api/gestor-sync', authRequired, async (req, res) => {
 
 // ── INVOICES (Facturas — fuente única de verdad) ──
 app.get('/api/invoices/:companyId', authRequired, (req, res) => {
-  const rows = db.prepare('SELECT * FROM invoices WHERE company_id = ? ORDER BY fecha DESC, num_factura').all(req.params.companyId);
+  const includeDeleted = req.query.deleted === '1';
+  const sql = includeDeleted
+    ? 'SELECT * FROM invoices WHERE company_id = ? ORDER BY fecha DESC, num_factura'
+    : 'SELECT * FROM invoices WHERE company_id = ? AND COALESCE(deleted, 0) = 0 ORDER BY fecha DESC, num_factura';
+  const rows = db.prepare(sql).all(req.params.companyId);
   res.json(rows);
 });
 
@@ -1217,10 +1291,35 @@ app.post('/api/invoices/:companyId', authRequired, (req, res) => {
 });
 
 app.delete('/api/invoices/:companyId', authRequired, adminRequired, (req, res) => {
-  const count = db.prepare('SELECT COUNT(*) as c FROM invoices WHERE company_id = ?').get(req.params.companyId);
-  db.prepare('DELETE FROM invoices WHERE company_id = ?').run(req.params.companyId);
+  const cid = req.params.companyId;
+  const count = db.prepare('SELECT COUNT(*) as c FROM invoices WHERE company_id = ?').get(cid);
+  const tx = db.transaction(() => {
+    // Cascade: borrar entries vinculados a estas facturas
+    db.prepare(`DELETE FROM entry_lines WHERE entry_id IN
+      (SELECT entry_id FROM invoices WHERE company_id = ? AND entry_id IS NOT NULL AND entry_id != '')`).run(cid);
+    db.prepare(`DELETE FROM entries WHERE company_id = ? AND id IN
+      (SELECT entry_id FROM invoices WHERE company_id = ? AND entry_id IS NOT NULL AND entry_id != '')`).run(cid, cid);
+    db.prepare('DELETE FROM invoices WHERE company_id = ?').run(cid);
+  });
+  tx();
   auditLog(req, 'delete-all-invoices', `${count.c} facturas borradas`);
   res.json({ ok: true, deleted: count.c });
+});
+
+// Delete individual invoice (with cascade to vinculated entry)
+app.delete('/api/invoices/:companyId/:id', authRequired, (req, res) => {
+  const cid = req.params.companyId;
+  const inv = db.prepare('SELECT entry_id FROM invoices WHERE id = ? AND company_id = ?').get(req.params.id, cid);
+  const tx = db.transaction(() => {
+    if (inv && inv.entry_id) {
+      db.prepare('DELETE FROM entry_lines WHERE entry_id = ?').run(inv.entry_id);
+      db.prepare('DELETE FROM entries WHERE id = ? AND company_id = ?').run(inv.entry_id, cid);
+    }
+    db.prepare('DELETE FROM invoices WHERE id = ? AND company_id = ?').run(req.params.id, cid);
+  });
+  tx();
+  auditLog(req, 'delete-invoice', req.params.id);
+  res.json({ ok: true });
 });
 
 // ── EXCLUDED INVOICES (Facturas pendientes de revisión) ──

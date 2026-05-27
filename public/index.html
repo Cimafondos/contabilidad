@@ -135,6 +135,10 @@ function getRawAmt(id){var el=$(id);if(!el)return 0;var raw=el.value.replace(/\.
 var fmtD=function(d){if(!d)return'';var p=d.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:d;};
 var today=function(){return new Date().toISOString().slice(0,10);};
 var uid=function(){return Date.now()+'_'+Math.random().toString(36).slice(2,7);};
+function invoiceKey(companyId,tipo,numFactura){
+  var slug=String(numFactura||'').toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  return String(companyId||'')+'_'+(tipo||'recibida')+'_'+slug;
+}
 var GROUPS={1:'Financiación básica',2:'Activo no corriente',3:'Existencias',4:'Acreedores y deudores',5:'Cuentas financieras',6:'Compras y gastos',7:'Ventas e ingresos'};
 var SOCIOS=[{id:'s1',n:'Pepe',a:'55100001',pct:20},{id:'s2',n:'Fernanda',a:'55100002',pct:20},{id:'s3',n:'Sergio',a:'55100003',pct:20},{id:'s4',n:'Santi',a:'55100004',pct:20},{id:'s5',n:'Salva',a:'55100005',pct:20}];
 var IVA=[{id:'general',l:'21%',r:0.21},{id:'reducido',l:'10%',r:0.10},{id:'super',l:'4%',r:0.04},{id:'exento',l:'Exento',r:0},{id:'nodeducible',l:'No deducible',r:0},{id:'na',l:'N/A',r:null}];
@@ -703,11 +707,13 @@ async function selectCompany(companyId){
   try{localStorage.setItem('cf_lastCompany',JSON.stringify({id:em.id,name:em.name,cif:em.cif||''}));}catch(e){}
   showProgress('Cargando empresa','Abriendo '+em.name+'...');
   initDates();
+  state.invoices=[];
   try{
     await loadData();
+    await loadInvoices();
     checkIntegrity();
   }catch(e){
-    state.accounts=[];state.entries=[];state.rules=[];
+    state.accounts=[];state.entries=[];state.invoices=[];state.rules=[];
   }
   render();
   // Auto-sync con Gestor Documental si hay API Key guardada
@@ -755,6 +761,7 @@ async function recalcularDatos(){
   initDates();
   try{
     await loadData();
+    await loadInvoices();
     // Fix entries without valid date
     var fixed=0;
     for(var i=0;i<state.entries.length;i++){
@@ -1356,6 +1363,11 @@ function renderDash(c){
     if(testResults.ivaSoportado&&!testResults.ivaSoportado.ok)testBanner+=' IVA Sop: facturas '+fmt(testResults.ivaSoportado.facturas)+'€ vs asientos '+fmt(testResults.ivaSoportado.asientos)+'€.';
     if(testResults.compras&&!testResults.compras.ok)testBanner+=' Compras: facturas '+fmt(testResults.compras.facturas)+'€ vs asientos '+fmt(testResults.compras.asientos)+'€.';
     if(testResults.conteo&&!testResults.conteo.ok)testBanner+=' Conteo: '+testResults.conteo.facturas+' facturas vs '+testResults.conteo.asientos+' asientos.';
+    if(testResults.ventas&&!testResults.ventas.ok)testBanner+=' Ventas: facturas '+fmt(testResults.ventas.facturas)+'€ vs asientos '+fmt(testResults.ventas.asientos)+'€.';
+    if(testResults.ivaRepercutido&&!testResults.ivaRepercutido.ok)testBanner+=' IVA Rep: facturas '+fmt(testResults.ivaRepercutido.facturas)+'€ vs asientos '+fmt(testResults.ivaRepercutido.asientos)+'€.';
+    if(testResults.huerfanas&&!testResults.huerfanas.ok)testBanner+=' Huérfanas: '+testResults.huerfanas.count+' facturas sin asiento ('+(testResults.huerfanas.ids||[]).join(', ')+').';
+    if(testResults.duplicados&&!testResults.duplicados.ok)testBanner+=' Duplicados: '+testResults.duplicados.count+' facturas con nº repetido.';
+    if(testResults.tesoreria&&!testResults.tesoreria.ok)testBanner+=' Tesorería: pendiente '+fmt(testResults.tesoreria.saldoClientes)+'€ > facturado '+fmt(testResults.tesoreria.facturas)+'€.';
     testBanner+='</div>';
   }
   if(!state.company||state.company.id==='_none_'){
@@ -2394,14 +2406,32 @@ var MASTER_FIELDS=[
   {k:'notes',l:'Notas',w:120}
 ];
 
+function _masterKey(type,cid){
+  var base=type==='client'?'cf_clients':type==='supplier'?'cf_suppliers':'cf_banks';
+  return cid?(base+'_'+cid):base;
+}
 function loadMasters(){
-  try{masters.client=JSON.parse(localStorage.getItem('cf_clients')||'[]');}catch(e){masters.client=[];}
-  try{masters.supplier=JSON.parse(localStorage.getItem('cf_suppliers')||'[]');}catch(e){masters.supplier=[];}
-  try{masters.bank=JSON.parse(localStorage.getItem('cf_banks')||'[]');}catch(e){masters.bank=[];}
+  var cid=state.company&&state.company.id;
+  if(!cid){masters.client=[];masters.supplier=[];masters.bank=[];return;}
+  ['client','supplier','bank'].forEach(function(t){
+    try{
+      var v=localStorage.getItem(_masterKey(t,cid));
+      if(v===null){
+        var legacyKey=t==='client'?'cf_clients':t==='supplier'?'cf_suppliers':'cf_banks';
+        var legacy=localStorage.getItem(legacyKey);
+        if(legacy!==null&&state.user&&state.user.company_id===cid){
+          localStorage.setItem(_masterKey(t,cid),legacy);
+          v=legacy;
+        }
+      }
+      masters[t]=JSON.parse(v||'[]');
+    }catch(e){masters[t]=[];}
+  });
 }
 function saveMasters(type){
-  var key=type==='client'?'cf_clients':type==='supplier'?'cf_suppliers':'cf_banks';
-  try{localStorage.setItem(key,JSON.stringify(masters[type]));}catch(e){}
+  var cid=state.company&&state.company.id;
+  if(!cid)return;
+  try{localStorage.setItem(_masterKey(type,cid),JSON.stringify(masters[type]));}catch(e){}
 }
 
 function renderMaster(c,type,title,icon){
@@ -2651,9 +2681,12 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     else if(hl.indexOf('proveedor')>=0&&colMap.tercero===undefined)colMap.tercero=i;
     else if(hl.indexOf('emisor')>=0&&hl.indexOf('cif')<0&&colMap.tercero===undefined)colMap.tercero=i;
     else if((hl.indexOf('cliente')>=0||hl.indexOf('receptor')>=0)&&hl.indexOf('cif')<0&&colMap.tercero===undefined)colMap.tercero=i;
+    // Receptor/Cliente: usado para EMITIDAS (el cliente)
+    if((hl.indexOf('receptor')>=0||hl.indexOf('cliente')>=0||hl.indexOf('destinatario')>=0)&&hl.indexOf('cif')<0)colMap.receptorNombre=i;
+    if(hl==='cif receptor'||hl.indexOf('cif receptor')>=0||hl.indexOf('cif cliente')>=0||hl.indexOf('cif destinatario')>=0)colMap.cifReceptor=i;
     if(hl==='cif'||hl==='cif emisor')colMap.cif=i;
     else if(hl.indexOf('cif emisor')>=0)colMap.cif=i;
-    else if(hl==='cif'||(hl.indexOf('cif')>=0&&hl.indexOf('receptor')<0&&colMap.cif===undefined))colMap.cif=i;
+    else if(hl==='cif'||(hl.indexOf('cif')>=0&&hl.indexOf('receptor')<0&&hl.indexOf('cliente')<0&&colMap.cif===undefined))colMap.cif=i;
     if(hl.indexOf('concepto')>=0||hl.indexOf('observaciones')>=0)colMap.concepto=i;
     if(hl.indexOf('tipo documento')>=0||hl==='tipo')colMap.tipoDoc=i;
     if(hl==='empresa factura'||hl==='empresa')colMap.empresa=i;
@@ -2705,91 +2738,105 @@ async function processFacturasRows(rows,tipo,resumenIVA){
       var allCols={};for(var ci=0;ci<r.length;ci++){if(r[ci]!==null&&r[ci]!==undefined&&String(r[ci]).trim())allCols['col'+ci]=String(r[ci]).slice(0,80);}
       console.log('RAW ROW '+i+':', JSON.stringify(allCols));
     }
-    var terceroName=String(r[colMap.tercero]||'').trim();
-    var cif=colMap.cif!==undefined?String(r[colMap.cif]||'').trim():'';
     var concepto=colMap.concepto!==undefined?String(r[colMap.concepto]||'').trim():'';
     var tipoDoc=colMap.tipoDoc!==undefined?String(r[colMap.tipoDoc]||'').trim():'';
     var empresaOrigen=colMap.empresa!==undefined?String(r[colMap.empresa]||'').trim():'';
-    
+    var ownCif=(state.company&&state.company.cif)||'';
+
+    // Determinar tipo de documento ANTES de extraer el tercero
+    var isEmitida=tipoDoc.indexOf('EMITIDA')>=0||tipoDoc.indexOf('VENTA')>=0;
+    if(tipo==='emitida')isEmitida=true;
+    if(tipo==='recibida')isEmitida=false;
+
+    var terceroName='',cif='';
+    if(isEmitida){
+      // EMITIDAS: el tercero es el RECEPTOR (cliente). El CIF propio aparece como emisor.
+      if(colMap.receptorNombre!==undefined)terceroName=String(r[colMap.receptorNombre]||'').trim();
+      if(colMap.cifReceptor!==undefined)cif=String(r[colMap.cifReceptor]||'').trim();
+      // Fallback: si no hay columna receptor explícita, usar "Empresa Factura"
+      if(!terceroName&&empresaOrigen&&empresaOrigen.toLowerCase()!==(state.company&&state.company.name||'').toLowerCase())terceroName=empresaOrigen;
+      // Fallback: extraer del concepto "CIF Receptor: [XXX]"
+      if(!cif){
+        var cifRm=concepto.match(/CIF\s*Receptor:\s*\[([A-Z0-9]+)\]/i);
+        if(cifRm&&cifRm[1]&&cifRm[1]!==ownCif)cif=cifRm[1];
+      }
+      // Fallback de seguridad: si el tercero "habitual" (columna tercero) NO es el propio CIF, usarlo
+      if(!terceroName){
+        var tFallback=String(r[colMap.tercero]||'').trim();
+        if(tFallback&&tFallback!==ownCif&&!tFallback.match(/^[A-Z]\d{7,8}[A-Z]?$/i))terceroName=tFallback;
+      }
+    }else{
+      // RECIBIDAS: el tercero es el EMISOR (proveedor)
+      terceroName=String(r[colMap.tercero]||'').trim();
+      cif=colMap.cif!==undefined?String(r[colMap.cif]||'').trim():'';
+    }
+
     // FIX v10: If tercero looks like a CIF, find real name from accounts/masters/concepto
     if(terceroName.match(/^[A-Z]\d{7,8}[A-Z]?$/i)){
       if(!cif)cif=terceroName;
-      
-      // Extract real CIF emisor from concepto
-      var ownCif=state.company.cif||'';
+
+      // Extract real CIF from concepto — buscamos receptor o emisor según el tipo
       var realCif=cif;
       if(realCif===ownCif){
-        var cifEm=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
+        var pattern=isEmitida?/CIF\s*Receptor:\s*\[([A-Z0-9]+)\]/i:/CIF\s*Emisor:\s*\[([A-Z0-9]+)\]/i;
+        var cifEm=concepto.match(pattern);
         if(cifEm&&cifEm[1]&&cifEm[1]!==ownCif)realCif=cifEm[1];
         else realCif='';
       }
       if(!realCif){
-        var cifEm2=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
+        var pattern2=isEmitida?/CIF\s*Receptor:\s*\[([A-Z0-9]+)\]/i:/CIF\s*Emisor:\s*\[([A-Z0-9]+)\]/i;
+        var cifEm2=concepto.match(pattern2);
         if(cifEm2&&cifEm2[1]&&cifEm2[1]!==ownCif)realCif=cifEm2[1];
       }
       cif=realCif||cif;
-      
-      // 1. Try to find name from existing accounts (most reliable)
+
+      // 1. Try to find name from existing masters (más fiable)
       var nameFound='';
       if(realCif){
         loadMasters();
-        var supp=(masters.supplier||[]).find(function(s){return s.cif===realCif;});
-        if(supp&&supp.name)nameFound=supp.name;
-        if(!nameFound){
-          // Search in account names - they have correct names from previous imports
-          var acct=state.accounts.find(function(a){return a.code.startsWith('4000')&&a.name&&a.name.length>3&&!a.name.match(/^[A-Z]\d{7}/i);});
-          // Match by looking up which account was assigned to this CIF before
-          // Check masters for CIF→account mapping
-          if(supp&&supp.account){
-            var acctByCode=state.accounts.find(function(a){return a.code===supp.account;});
-            if(acctByCode&&acctByCode.name)nameFound=acctByCode.name;
-          }
+        var pool=isEmitida?(masters.client||[]):(masters.supplier||[]);
+        var m=pool.find(function(s){return s.cif===realCif;});
+        if(m&&m.name)nameFound=m.name;
+        if(!nameFound&&m&&m.account){
+          var acctByCode=state.accounts.find(function(a){return a.code===m.account;});
+          if(acctByCode&&acctByCode.name)nameFound=acctByCode.name;
         }
       }
-      
-      // 2. Try concepto patterns
+
+      // 2. Try concepto patterns (S.L., S.A., etc.)
       if(!nameFound){
-        // Look for S.L., S.A., S.L.P., S.L.U., S.COOP patterns
         var matches=concepto.match(/([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s\.,'&-]+(?:S\.L\.U?\.|S\.A\.|S\.L\.P\.|S\.COOP\.))/g);
         if(matches){
           for(var mi=0;mi<matches.length;mi++){
             var candidate=matches[mi].trim();
-            if(candidate.length>8){nameFound=candidate;break;}
+            if(candidate.length>8&&candidate.toLowerCase()!==(state.company&&state.company.name||'').toLowerCase()){nameFound=candidate;break;}
           }
         }
       }
-      
+
       // 3. Try personal name pattern
       if(!nameFound){
         var pn=concepto.match(/([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,})/);
         if(pn)nameFound=pn[1];
       }
-      
-      if(nameFound){
-        terceroName=nameFound;
+
+      if(nameFound)terceroName=nameFound;
+    }
+
+    // Si el CIF (recibidas) coincide con el propio, intentar extraer el emisor real del concepto
+    if(!isEmitida){
+      var cifEmisor=concepto.match(/CIF\s*Emisor:\s*\[([A-Z0-9]+)\]/i);
+      if(cifEmisor&&cifEmisor[1]&&cifEmisor[1]!==cif&&cifEmisor[1]!==ownCif)cif=cifEmisor[1];
+      if(ownCif&&cif===ownCif){
+        var altCif=concepto.match(/CIF\s*Emisor:\s*\[([A-Z0-9]+)\]/i);
+        if(altCif&&altCif[1]&&altCif[1]!==ownCif)cif=altCif[1];
       }
     }
-    
-    // DEBUG: log first 3 rows
-    
-    // Extract CIF Emisor from concepto (the CIF column often has the receptor CIF)
-    var cifEmisor=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
-    if(cifEmisor&&cifEmisor[1]&&cifEmisor[1]!==cif){
-      cif=cifEmisor[1]; // Use emisor CIF for provider matching
-    }
-    // If CIF matches our own company CIF, try to find the real provider CIF
-    if(cif===state.company.cif||cif==='B22859755'){
-      var altCif=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
-      if(altCif&&altCif[1])cif=altCif[1];
-    }
-    
-    // For emitidas: "Empresa Factura" is the CLIENT, "Proveedor" is US
-    var isEmitida=tipoDoc.indexOf('EMITIDA')>=0||tipoDoc.indexOf('VENTA')>=0;
-    // If user explicitly selected emitida, trust that
-    if(tipo==='emitida')isEmitida=true;
-    if(isEmitida){
-      terceroName=empresaOrigen;
-    }
+
+    // Seguridad: si tras toda la lógica el tercero es la propia empresa, marcar para revisión
+    var needsReview=false;
+    if(ownCif&&cif===ownCif)needsReview=true;
+    if(state.company&&state.company.name&&terceroName&&terceroName.toLowerCase()===String(state.company.name).toLowerCase())needsReview=true;
 
     // Parse amounts - handle string numbers with comma/dot
     function parseAmt(v){
@@ -2824,6 +2871,7 @@ async function processFacturasRows(rows,tipo,resumenIVA){
 
     var fact={
       numFact:numFact, fecha:fecha, tercero:terceroName, cif:cif,
+      _needsReview:needsReview,
       concepto:concepto, tipoDoc:tipoDoc, empresa:empresaOrigen,
       vencimiento:colMap.vencimiento!==undefined?parseDate(r[colMap.vencimiento]):'',
       base21:Math.abs(parseAmt(r[colMap.base21])), iva21:Math.abs(parseAmt(r[colMap.iva21])),
@@ -2886,17 +2934,28 @@ async function processFacturasRows(rows,tipo,resumenIVA){
     }
   }catch(e){}
   
+  // Capa 4: existentes en state.invoices (la propia tabla invoices, fuente única)
+  var existingInInvoices={};
+  (state.invoices||[]).forEach(function(inv){
+    if(!inv||!inv.num_factura)return;
+    var k=(inv.num_factura||'').toUpperCase()+'__'+(inv.tipo||'recibida');
+    existingInInvoices[k]=true;
+  });
+
   var nuevas=[],duplicadas=[];
   facturas.forEach(function(f){
     var numUpper=(f.numFact||'').toUpperCase();
     var key=numUpper+'_'+f.cif;
-    
+    var invKeyForCheck=numUpper+'__'+(f.tipo||'recibida');
+
     var isDup=false;
     var reason='';
     // Check Capa 1: servidor (nº factura exacto)
     if(existingNums[f.numFact]||existingNums[numUpper]){isDup=true;reason='ya contabilizada';}
     // Check Capa 2: mismo lote (nº factura exacto)
     if(!isDup&&(seenInBatch[f.numFact]||seenInBatch[numUpper])){isDup=true;reason='duplicada en lote';}
+    // Check Capa 4: ya existe en tabla invoices (mismo num+tipo en empresa actual)
+    if(!isDup&&existingInInvoices[invKeyForCheck]){isDup=true;reason='ya en tabla invoices';}
     // Check Capa 3: previamente excluida → marcar para aviso
     if(!isDup&&(excludedNums[f.numFact]||excludedNums[numUpper])){
       var exInfo=excludedNums[f.numFact]||excludedNums[numUpper];
@@ -3198,7 +3257,7 @@ async function contabilizarFacturas(){
       // 1. Determinar CIF real del proveedor (nunca usar CIF de la propia empresa)
       var ownCif=state.company.cif||'';
       var provCif=f.cif;
-      if(!provCif||provCif===ownCif||provCif==='B22859755'){
+      if(!provCif||(ownCif&&provCif===ownCif)){
         var cifEmMatch=(f.concepto||'').match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
         if(cifEmMatch&&cifEmMatch[1]&&cifEmMatch[1]!==ownCif){provCif=cifEmMatch[1];}
         else{provCif='';}
@@ -3328,7 +3387,8 @@ async function contabilizarFacturas(){
       }
     }
 
-    var entryId=(f.tipo==='recibida'?'fr_':'fe_')+uid();
+    var invKey=invoiceKey(state.company.id,f.tipo||'recibida',f.numFact);
+    var entryId=(f.tipo==='recibida'?'fr_':'fe_')+invKey;
     var conceptStr=(f.isAbono?'Abono ':'Fra. ')+h(f.tercero)+' ['+f.numFact+']';
     // Add meta to first line with complete invoice data
     var metaObj={numFactura:f.numFact,tercero:f.tercero,cif:provCif||f.cif,tipoFactura:f.tipo||'recibida',isAbono:!!f.isAbono,base21:f.base21||0,iva21:f.iva21||0,base10:f.base10||0,iva10:f.iva10||0,base4:f.base4||0,iva4:f.iva4||0,base0:f.base0||0,retencion:f.retencion||0,recargo:f.recargo||0,totalFactura:f.total||0};
@@ -3343,7 +3403,7 @@ async function contabilizarFacturas(){
     
     // ═══ GUARDAR EN TABLA INVOICES (fuente única de verdad) ═══
     invoicesToSave.push({
-      id:'inv_'+uid(),
+      id:'inv_'+invKey,
       num_factura:f.numFact,
       fecha:f.fecha,
       tipo:f.tipo||'recibida',
@@ -5579,7 +5639,7 @@ function parseInvoiceFromExcelRow(r, colMap, ownCif){
   }
   
   // If CIF is own company, look for real emisor CIF in concepto
-  if(terceroCif===ownCif||terceroCif==='B22859755'){
+  if(ownCif&&terceroCif===ownCif){
     var cifEmMatch=concepto.match(/CIF Emisor:\s*\[([A-Z0-9]+)\]/i);
     if(cifEmMatch&&cifEmMatch[1]&&cifEmMatch[1]!==ownCif){
       terceroCif=cifEmMatch[1];
@@ -5764,13 +5824,53 @@ function runIntegrityTests(){
   var nFacturas=invoices.length;
   var nAsientos=state.entries.filter(function(e){return !e.del&&e.type==='import_factura';}).length;
   var countMatch=nFacturas===nAsientos;
-  
+
+  // Test 5: Ventas cruzado (Libro Fact Emitidas vs IVA Repercutido vs base ventas en asientos)
+  var ventasFact=emitidas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalBase;},0);
+  var ivaRepFact=emitidas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*(Math.abs(f.iva21)+Math.abs(f.iva10)+Math.abs(f.iva4));},0);
+  var ivaRepAsientos=0,ventasAsientos=0;
+  state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){
+    if(l.a&&l.a.indexOf('477')===0)ivaRepAsientos+=l.h-l.d;
+    if(l.a&&l.a[0]==='7')ventasAsientos+=l.h-l.d;
+  });});
+  var ventasMatch=Math.abs(ventasFact-ventasAsientos)<1;
+  var ivaRepMatch=Math.abs(ivaRepFact-ivaRepAsientos)<1;
+
+  // Test 6: Invariante invoice↔entry — toda factura con entry_id debe tener entry vivo
+  var entryIds={};
+  state.entries.forEach(function(e){if(!e.del)entryIds[e.id]=true;});
+  var huerfanas=invoices.filter(function(f){return f.entryId&&!entryIds[f.entryId];});
+  var huerfanasOk=huerfanas.length===0;
+
+  // Test 7: Duplicados por nº factura (canario hasta que UNIQUE index esté desplegado)
+  var seenDup={},dupCount=0;
+  invoices.forEach(function(f){
+    var k=(f.numFactura||'').toUpperCase()+'__'+f.tipo;
+    if(seenDup[k])dupCount++; else seenDup[k]=true;
+  });
+  var dupOk=dupCount===0;
+
+  // Test 8: Tesorería — pendiente de cobro (saldos 430x) ≈ facturas emitidas sin entry de cobro
+  var saldoClientes=0;
+  state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){
+    if(l.a&&l.a.indexOf('430')===0)saldoClientes+=l.d-l.h;
+  });});
+  // No tenemos forma directa de saber cuáles están cobradas; el invariante razonable
+  // es que el saldo no sea negativo y guarde coherencia con el total facturado emitido (con IVA).
+  var totalEmitidoCobrable=emitidas.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*Math.abs(f.totalFactura||0);},0);
+  var tesoreriaOk=saldoClientes<=totalEmitidoCobrable+1;
+
   var results={
     cuadreGeneral:{ok:cuadre,debe:Math.round(totalD*100)/100,haber:Math.round(totalH*100)/100},
     ivaSoportado:{ok:ivaMatch,facturas:Math.round(ivaSopFact*100)/100,asientos:Math.round(ivaSopAsientos*100)/100},
     compras:{ok:comprasMatch,facturas:Math.round(comprasFact*100)/100,asientos:Math.round(comprasAsientos*100)/100},
     conteo:{ok:countMatch,facturas:nFacturas,asientos:nAsientos},
-    allOk:cuadre&&ivaMatch&&comprasMatch&&countMatch
+    ventas:{ok:ventasMatch,facturas:Math.round(ventasFact*100)/100,asientos:Math.round(ventasAsientos*100)/100},
+    ivaRepercutido:{ok:ivaRepMatch,facturas:Math.round(ivaRepFact*100)/100,asientos:Math.round(ivaRepAsientos*100)/100},
+    huerfanas:{ok:huerfanasOk,count:huerfanas.length,ids:huerfanas.slice(0,5).map(function(f){return f.numFactura;})},
+    duplicados:{ok:dupOk,count:dupCount},
+    tesoreria:{ok:tesoreriaOk,saldoClientes:Math.round(saldoClientes*100)/100,facturas:Math.round(totalEmitidoCobrable*100)/100},
+    allOk:cuadre&&ivaMatch&&comprasMatch&&countMatch&&ventasMatch&&ivaRepMatch&&huerfanasOk&&dupOk&&tesoreriaOk
   };
   return results;
 }
@@ -7494,7 +7594,6 @@ renderView=function(){
 
 function quickDemo(){$("lu").value="admin";$("lp").value="admin";doLogin().then(function(){loadDemo();});}
 // Init
-try{loadMasters();}catch(e){console.error('loadMasters error:',e);}
 try{render();}catch(e){console.error('render error:',e);renderLogin();}
 </script>
 </body>
