@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.4.2</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.4.3</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -5421,10 +5421,10 @@ function runTestCuadre(){
     detail: 'Base facturas: '+fmt(ventasFactBase)+'\u20ac \u00b7 Asientos G7: '+fmt(ventasAsientos)+'\u20ac \u00b7 Diff: '+fmt(diffVentas)+'\u20ac'
   });
 
-  // Test 12: Compras asientos G6 ≈ base imponible facturas recibidas
+  // Test 12: Compras asientos G6 ≈ base imponible facturas recibidas (incluye recargo, que va a G6)
   var comprasFactBase = facRecibidas.reduce(function(s,f){
     var sign = f.isAbono ? -1 : 1;
-    return s + sign * Math.abs(f.totalBase||0);
+    return s + sign * (Math.abs(f.totalBase||0) + Math.abs(f.recargo||0));
   }, 0);
   var comprasAsientos = 0;
   all.forEach(function(e){
@@ -5441,7 +5441,7 @@ function runTestCuadre(){
     facRecibidas.forEach(function(f){
       if(!f.entryId) return;
       var sign = f.isAbono ? -1 : 1;
-      baseFactPorEntry[f.entryId] = (baseFactPorEntry[f.entryId]||0) + sign * Math.abs(f.totalBase||0);
+      baseFactPorEntry[f.entryId] = (baseFactPorEntry[f.entryId]||0) + sign * (Math.abs(f.totalBase||0) + Math.abs(f.recargo||0));
     });
     // Recorrer cada asiento con apuntes al grupo 6 y comparar con su factura
     all.forEach(function(e){
