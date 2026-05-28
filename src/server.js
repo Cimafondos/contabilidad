@@ -1665,6 +1665,7 @@ app.post('/api/generate-test-data/:companyId', authRequired, adminRequired, (req
   });
   if(errors > 0) return res.status(400).json({ error: errors + ' asientos descuadrados' });
 
+  try {
   // ═══ CREATE ACCOUNTS ═══
   const accts = [];
   for(let i=1;i<=12;i++){
@@ -1725,5 +1726,9 @@ app.post('/api/generate-test-data/:companyId', authRequired, adminRequired, (req
       descuento:'500€ pronto pago'
     }
   });
+  } catch(dbErr) {
+    console.error('Test data generation DB error:', dbErr.message);
+    res.status(500).json({ error: 'Error de base de datos: ' + dbErr.message });
+  }
 });
 

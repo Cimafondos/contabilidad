@@ -152,7 +152,7 @@ async function api(path,opts){
   if(token)headers['Authorization']='Bearer '+token;
   var r=await fetch(API+path,{headers:headers,method:opts.method||'GET',body:opts.body?JSON.stringify(opts.body):undefined});
   if(r.status===401){sessionStorage.removeItem('cf_token');state.user=null;render();throw new Error('Sesión expirada');}
-  if(!r.ok)throw new Error('Error '+r.status);return r.json();
+  if(!r.ok){var errBody;try{errBody=await r.json();}catch(ex){}throw new Error(errBody&&errBody.error?errBody.error:'Error '+r.status);}return r.json();
 }
 
 var state={user:null,company:null,view:'dash',tab:'inicio',accounts:[],entries:[],rules:[],invoices:[],toast:null,
@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.6.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.6.1</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
