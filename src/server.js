@@ -1399,3 +1399,186 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  JWT: active, ${TOKEN_EXPIRY} expiry`);
 });
 // force redeploy Wed May 28 21:46:00 UTC 2026 — v10.4.0
+
+// ── GENERATE TEST DATA (round numbers for verification) ──
+app.post('/api/generate-test-data/:companyId', authRequired, adminRequired, (req, res) => {
+  const cid = req.params.companyId;
+  const year = req.body.year || '2026';
+  autoBackup('pre-test-data');
+  
+  const entries = [];
+  const invs = [];
+  let n = 1;
+  const eid = () => 'test_' + String(n++).padStart(4,'0');
+  const M = ['01','02','03','04','05','06'];
+
+  // VENTAS: 20 × 10,000€ = 200,000€
+  for (let i = 0; i < 20; i++) {
+    const ci = (i % 10) + 1;
+    const code = '4300' + String(ci).padStart(4,'0');
+    const name = 'CLIENTE TEST ' + String(ci).padStart(3,'0') + ' S.L.';
+    const cif = 'B' + (80000000 + ci);
+    const mo = M[Math.floor(i/4)%6];
+    const dy = String((i%28)+1).padStart(2,'0');
+    const fecha = year+'-'+mo+'-'+dy;
+    const nf = 'VT-'+year+'-'+String(i+1).padStart(3,'0');
+    const id = eid();
+    entries.push({ id, date:fecha, concept:'Fra. '+name+' ['+nf+']', type:'import_factura',
+      lines:[{a:code,d:12100,h:0},{a:'47700000',d:0,h:2100},{a:'70000000',d:0,h:10000}]});
+    invs.push({ id:'inv_'+id, num_factura:nf, fecha, tipo:'emitida', is_abono:0,
+      tercero_nombre:name, tercero_cif:cif, tercero_cuenta:code,
+      base21:10000, iva21:2100, base10:0, iva10:0, base4:0, iva4:0, base0:0,
+      retencion:0, recargo:0, total:12100, entry_id:id, company_id:cid });
+  }
+
+  // COMPRAS: 8×21% + 1×10% + 1×4% = 100,000€
+  const rates = [21,21,21,21,21,21,21,21,10,4];
+  for (let i = 0; i < 10; i++) {
+    const code = '4000' + String(i+1).padStart(4,'0');
+    const name = 'PROVEEDOR TEST ' + String(i+1).padStart(3,'0') + ' S.L.';
+    const cif = 'A' + (10000000 + i + 1);
+    const mo = M[Math.floor(i/2)%6];
+    const dy = String((i%28)+5).padStart(2,'0');
+    const fecha = year+'-'+mo+'-'+dy;
+    const nf = 'RC-'+year+'-'+String(i+1).padStart(3,'0');
+    const id = eid();
+    const r = rates[i]; const iva = 10000*r/100; const tot = 10000+iva;
+    entries.push({ id, date:fecha, concept:'Fra. '+name+' ['+nf+']', type:'import_factura',
+      lines:[{a:'60000000',d:10000,h:0},{a:'47200000',d:iva,h:0},{a:code,d:0,h:tot}]});
+    const inv = { id:'inv_'+id, num_factura:nf, fecha, tipo:'recibida', is_abono:0,
+      tercero_nombre:name, tercero_cif:cif, tercero_cuenta:code,
+      base21:0, iva21:0, base10:0, iva10:0, base4:0, iva4:0, base0:0,
+      retencion:0, recargo:0, total:tot, entry_id:id, company_id:cid };
+    if(r===21){inv.base21=10000;inv.iva21=iva;}
+    else if(r===10){inv.base10=10000;inv.iva10=iva;}
+    else{inv.base4=10000;inv.iva4=iva;}
+    invs.push(inv);
+  }
+
+  // GASTOS: 10 × 1,000€ = 10,000€
+  const gastos = ['62100000','62200000','62300000','62400000','62500000',
+    '62600000','62700000','62800000','62900000','62900000'];
+  const gNames = ['Alquiler','Reparaciones','Asesoría','Transporte','Seguros',
+    'Banca','Publicidad','Suministros','Telefonía','Otros servicios'];
+  for (let i = 0; i < 10; i++) {
+    const id = eid();
+    const mo = M[i%6]; const dy = String(15+i).padStart(2,'0');
+    entries.push({ id, date:year+'-'+mo+'-'+dy, concept:gNames[i], type:'manual',
+      lines:[{a:gastos[i],d:1000,h:0},{a:'47200000',d:210,h:0},{a:'41000000',d:0,h:1210}]});
+  }
+
+  // NÓMINAS: 5 meses × 10,000€ bruto = 50,000€ + SS 15,000€
+  for (let m = 0; m < 5; m++) {
+    const mo = M[m]; const f = year+'-'+mo+'-28';
+    entries.push({ id:eid(), date:f, concept:'Nóminas '+mo+'/'+year, type:'manual',
+      lines:[{a:'64000000',d:10000,h:0},{a:'47510000',d:0,h:2000},{a:'47100000',d:0,h:1000},{a:'46500000',d:0,h:7000}]});
+    entries.push({ id:eid(), date:f, concept:'SS empresa '+mo+'/'+year, type:'manual',
+      lines:[{a:'64200000',d:3000,h:0},{a:'47100000',d:0,h:3000}]});
+    entries.push({ id:eid(), date:f, concept:'Pago nóminas '+mo+'/'+year, type:'manual',
+      lines:[{a:'46500000',d:7000,h:0},{a:'57200000',d:0,h:7000}]});
+    entries.push({ id:eid(), date:f, concept:'Pago SS '+mo+'/'+year, type:'manual',
+      lines:[{a:'47100000',d:4000,h:0},{a:'57200000',d:0,h:4000}]});
+  }
+
+  // PRÉSTAMO: alta 50,000€ + 6 cuotas
+  entries.push({ id:eid(), date:year+'-01-15', concept:'Alta préstamo bancario', type:'manual',
+    lines:[{a:'57200000',d:50000,h:0},{a:'17000000',d:0,h:50000}]});
+  for (let m = 0; m < 6; m++) {
+    entries.push({ id:eid(), date:year+'-'+M[m]+'-05', concept:'Cuota préstamo '+(m+1)+'/6', type:'manual',
+      lines:[{a:'17000000',d:5000,h:0},{a:'66200000',d:500,h:0},{a:'57200000',d:0,h:5500}]});
+  }
+
+  // ACTIVOS: vehículo 15,000€ + equipos 5,000€ = 20,000€
+  entries.push({ id:eid(), date:year+'-02-10', concept:'Compra vehículo', type:'manual',
+    lines:[{a:'21800000',d:15000,h:0},{a:'47200000',d:3150,h:0},{a:'52300000',d:0,h:18150}]});
+  entries.push({ id:eid(), date:year+'-03-20', concept:'Compra equipos informáticos', type:'manual',
+    lines:[{a:'21700000',d:5000,h:0},{a:'47200000',d:1050,h:0},{a:'52300000',d:0,h:6050}]});
+  entries.push({ id:eid(), date:year+'-02-15', concept:'Pago vehículo', type:'manual',
+    lines:[{a:'52300000',d:18150,h:0},{a:'57200000',d:0,h:18150}]});
+  entries.push({ id:eid(), date:year+'-03-25', concept:'Pago equipos', type:'manual',
+    lines:[{a:'52300000',d:6050,h:0},{a:'57200000',d:0,h:6050}]});
+
+  // COBROS: 10 × 15,000€ banco + 2 × 5,000€ caja = 160,000€
+  for (let i = 0; i < 10; i++) {
+    const code = '4300'+String((i%10)+1).padStart(4,'0');
+    const name = 'CLIENTE TEST '+String((i%10)+1).padStart(3,'0')+' S.L.';
+    entries.push({ id:eid(), date:year+'-'+M[(i+1)%6]+'-'+String(10+i).padStart(2,'0'),
+      concept:'Cobro '+name, type:'manual',
+      lines:[{a:'57200000',d:15000,h:0},{a:code,d:0,h:15000}]});
+  }
+  for (let i = 0; i < 2; i++) {
+    const code = '4300'+String(i+1).padStart(4,'0');
+    entries.push({ id:eid(), date:year+'-'+M[i+2]+'-20', concept:'Cobro caja', type:'manual',
+      lines:[{a:'57000000',d:5000,h:0},{a:code,d:0,h:5000}]});
+  }
+
+  // PAGOS PROVEEDORES: 8 × 10,000€ = 80,000€
+  for (let i = 0; i < 8; i++) {
+    const code = '4000'+String(i+1).padStart(4,'0');
+    const name = 'PROVEEDOR TEST '+String(i+1).padStart(3,'0')+' S.L.';
+    entries.push({ id:eid(), date:year+'-'+M[(i+1)%6]+'-'+String(12+i).padStart(2,'0'),
+      concept:'Pago '+name, type:'manual',
+      lines:[{a:code,d:10000,h:0},{a:'57200000',d:0,h:10000}]});
+  }
+
+  // PAGOS GASTOS: 10 × 1,210€ = 12,100€
+  for (let i = 0; i < 10; i++) {
+    entries.push({ id:eid(), date:year+'-'+M[i%6]+'-'+String(20+(i%8)).padStart(2,'0'),
+      concept:'Pago '+gNames[i], type:'manual',
+      lines:[{a:'41000000',d:1210,h:0},{a:'57200000',d:0,h:1210}]});
+  }
+
+  // Verify all entries balance
+  let errors = 0;
+  entries.forEach(e => {
+    const d = e.lines.reduce((s,l) => s + l.d, 0);
+    const h = e.lines.reduce((s,l) => s + l.h, 0);
+    if (Math.abs(d-h) > 0.01) { errors++; console.error('DESCUADRE:', e.id, e.concept, d, h); }
+  });
+  if (errors > 0) return res.status(400).json({ error: errors + ' asientos descuadrados' });
+
+  // Create accounts
+  const accts = [];
+  for (let i = 1; i <= 10; i++) {
+    accts.push(['4300'+String(i).padStart(4,'0'), 'CLIENTE TEST '+String(i).padStart(3,'0')+' S.L.', 4, 'A']);
+    accts.push(['4000'+String(i).padStart(4,'0'), 'PROVEEDOR TEST '+String(i).padStart(3,'0')+' S.L.', 4, 'P']);
+  }
+  const insAcct = db.prepare('INSERT OR IGNORE INTO accounts VALUES (?,?,?,?,?)');
+  accts.forEach(a => insAcct.run(a[0], a[1], a[2], a[3], cid));
+
+  // Insert entries
+  const insEntry = db.prepare('INSERT OR REPLACE INTO entries (id,date,concept,type,company_id,deleted) VALUES (?,?,?,?,?,0)');
+  const delLines = db.prepare('DELETE FROM entry_lines WHERE entry_id = ?');
+  const insLine = db.prepare('INSERT INTO entry_lines (entry_id,account,debit,credit,meta) VALUES (?,?,?,?,?)');
+  const tx = db.transaction(() => {
+    entries.forEach(e => {
+      insEntry.run(e.id, e.date, e.concept, e.type, cid);
+      delLines.run(e.id);
+      e.lines.forEach(l => insLine.run(e.id, l.a, l.d, l.h, ''));
+    });
+  });
+  tx();
+
+  // Insert invoices
+  const insInv = db.prepare(`INSERT OR REPLACE INTO invoices 
+    (id,num_factura,fecha,tipo,is_abono,tercero_nombre,tercero_cif,tercero_cuenta,
+     base21,iva21,base10,iva10,base4,iva4,base0,retencion,recargo,total,
+     forma_pago,fecha_vencimiento,concepto_gestor,entry_id,company_id,created_by)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const tx2 = db.transaction(() => {
+    invs.forEach(f => {
+      insInv.run(f.id, f.num_factura, f.fecha, f.tipo, f.is_abono,
+        f.tercero_nombre, f.tercero_cif, f.tercero_cuenta,
+        f.base21, f.iva21, f.base10, f.iva10, f.base4, f.iva4, f.base0,
+        f.retencion, f.recargo, f.total, '', '', '', f.entry_id, cid, 'test-generator');
+    });
+  });
+  tx2();
+
+  auditLog(req, 'generate-test-data', entries.length + ' entries, ' + invs.length + ' invoices');
+  console.log('✓ Test data generated: ' + entries.length + ' entries, ' + invs.length + ' invoices for ' + cid);
+  
+  res.json({ ok: true, entries: entries.length, invoices: invs.length,
+    totals: { ventas: 200000, compras: 100000, gastos: 10000, nominas: 50000, ss_empresa: 15000, prestamo: 50000, activos: 20000, intereses: 3000 }
+  });
+});

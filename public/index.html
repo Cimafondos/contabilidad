@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.4.4</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.5.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -4869,6 +4869,7 @@ async function renderAdmin(c){
   '<button class="btn btn-d" onclick="repairProveedores()">Reparar proveedores</button>'+
   '<button class="btn btn-a" onclick="limpiarFacturasEmpresa()">🗑 Borrar facturas empresa</button>'+
   '<button class="btn btn-r" onclick="resetCompletoEmpresa()">⚠️ Reset completo empresa</button>'+
+  '<button class="btn btn-d" onclick="generarDatosTest()" style="background:#7C3AED;color:#fff">🧪 Generar datos test (números redondos)</button>'+
   '</div>'+
   '<div style="margin-top:8px;font-size:11px;color:var(--txM)">Los asientos eliminados se pueden recuperar. Para borrado definitivo usa la Papelera.</div>'+
   '</div></div>'+
@@ -4995,6 +4996,18 @@ async function resetCompletoEmpresa(){
     state.invoices=[];
     state.entries=[];
     toast('✓ Reset completo de '+state.company.name);
+    await loadData();
+    render();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+async function generarDatosTest(){
+  if(!state.company||!state.company.id)return;
+  if(!confirm('🧪 Generar datos de prueba con números redondos para '+state.company.name+'?\n\nSe crearán ~105 asientos y 30 facturas con:\n• Ventas: 200.000€\n• Compras: 100.000€\n• Gastos: 10.000€\n• Nóminas: 50.000€\n• Préstamo: 50.000€\n• Activos: 20.000€\n\nTodos con importes redondos fáciles de verificar.'))return;
+  try{
+    toast('Generando datos de prueba...');
+    var result=await api('/api/generate-test-data/'+state.company.id,{method:'POST',body:{year:String(state.ejercicio)}});
+    toast('✓ Generados '+result.entries+' asientos y '+result.invoices+' facturas de prueba');
     await loadData();
     render();
   }catch(e){toast('Error: '+e.message,'error');}
