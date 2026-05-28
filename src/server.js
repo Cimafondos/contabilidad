@@ -1627,7 +1627,7 @@ app.post('/api/generate-test-data/:companyId', authRequired, adminRequired, (req
 
   // ═══ 15. DESCUENTO PRONTO PAGO ═══
   entries.push({id:eid(),date:dt('04',15),concept:'Dto pronto pago PROVEEDOR TEST 001',type:'manual',
-    lines:[{a:'40000001',d:0,h:500},{a:'60600000',d:0,h:500}]});
+    lines:[{a:'40000001',d:500,h:0},{a:'60600000',d:0,h:500}]});
 
   // ═══ 16. IMPUESTO SOCIEDADES — provisión 5,000€ ═══
   entries.push({id:eid(),date:dt('06',30),concept:'Provisión impuesto sociedades',type:'manual',
@@ -1659,7 +1659,7 @@ app.post('/api/generate-test-data/:companyId', authRequired, adminRequired, (req
   // ═══ 20. RAPPELS — descuento por volumen ═══
   // Rappel sobre compras: proveedor devuelve 1,000€
   entries.push({id:eid(),date:dt('06',20),concept:'Rappel s/ compras PROVEEDOR TEST 001',type:'manual',
-    lines:[{a:'40000001',d:0,h:1210},{a:'60900000',d:0,h:1000},{a:'47200000',d:0,h:210}]});
+    lines:[{a:'40000001',d:1210,h:0},{a:'60900000',d:0,h:1000},{a:'47200000',d:0,h:210}]});
   // Rappel sobre ventas: devolvemos 1,000€ a cliente
   entries.push({id:eid(),date:dt('06',20),concept:'Rappel s/ ventas CLIENTE TEST 001',type:'manual',
     lines:[{a:'70900000',d:1000,h:0},{a:'47700000',d:210,h:0},{a:'43000001',d:0,h:1210}]});
