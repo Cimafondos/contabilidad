@@ -1372,9 +1372,9 @@ migrateProviderAccounts();
 migrateFixProviderNames();
 scheduleDailyBackup();
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✓ Cimafondos v7.1.0 running on port ${PORT}`);
+  console.log(`✓ Cimafondos v10.4.0 running on port ${PORT}`);
   console.log(`  Database: ${DB_PATH}`);
   console.log(`  Backups: ${BACKUP_DIR}`);
   console.log(`  JWT: active, ${TOKEN_EXPIRY} expiry`);
 });
-// force redeploy Sun May 24 21:27:00 UTC 2026
+// force redeploy Wed May 28 21:46:00 UTC 2026 — v10.4.0
