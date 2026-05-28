@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.7.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.7.1</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2243,13 +2243,13 @@ function renderBalance(c){
       for(var i=0;i<prefixes.length;i++){if(code.startsWith(prefixes[i])){items.push({code:code,name:am[code]?am[code].name:code,saldo:s});break;}}});
     return items.sort(function(a,b){return a.code.localeCompare(b.code);});}
   var aInmMat=getItems(['21','22']);var aAmort=getItems(['28','29']);
-  var aInmIntang=getItems(['20']);var aInvFinLP=getItems(['24','25']);
+  var aInmIntang=getItems(['20']);var aInvFinLP=getItems(['24','25','26']);
   var aExist=getItems(['30','31','32','33','34','35','36']);
-  var aDeudores=getItems(['43','44','460','470','471','472','473','474']);
-  var aInvFinCP=getItems(['53','54']);var aEfectivo=getItems(['57']);
+  var aDeudores=getItems(['43','44','460','470','471','472','473','474','406','407','480']);
+  var aInvFinCP=getItems(['53','54','565','566']);var aEfectivo=getItems(['57']);
   var pFP=getItems(['10','11','12','13']);var pDeudaLP=getItems(['17']);
-  var pProv=getItems(['40']);
-  var pAcreed=getItems(['41','465','475','476','477','523','524','525','526']);
+  var pProv=getItems(['400','401','403']);
+  var pAcreed=getItems(['41','465','475','476','477','523','524','525','526','437','438','485']);
   var pDeudasCP=getItems(['50','51','52']);
   function sumD(it){return it.reduce(function(s,x){return s+x.saldo;},0);}
   var tANC=sumD(aInmIntang)+sumD(aInmMat)+sumD(aInvFinLP)+sumD(aAmort);
