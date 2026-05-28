@@ -5385,7 +5385,7 @@ function runTestCuadre(){
   var diffVentas = Math.round((ventasFactBase - ventasAsientos) * 100) / 100;
   results.push({
     name: 'Ventas: Facturas emitidas ↔ Asientos G7',
-    ok: facEmitidas.length === 0 || Math.abs(diffVentas) < 1,
+    ok: facEmitidas.length === 0 || Math.abs(diffVentas) < 0.01,
     detail: 'Base facturas: '+fmt(ventasFactBase)+'\u20ac \u00b7 Asientos G7: '+fmt(ventasAsientos)+'\u20ac \u00b7 Diff: '+fmt(diffVentas)+'\u20ac'
   });
 
@@ -5401,10 +5401,47 @@ function runTestCuadre(){
     });
   });
   var diffCompras = Math.round((comprasFactBase - comprasAsientos) * 100) / 100;
+  // ── Localizar el origen exacto del descuadre (asiento por asiento) ──
+  var culpablesG6 = [];
+  if(Math.abs(diffCompras) >= 0.01){
+    // Mapa: entry_id de factura recibida → base de la factura (con signo)
+    var baseFactPorEntry = {};
+    facRecibidas.forEach(function(f){
+      if(!f.entryId) return;
+      var sign = f.isAbono ? -1 : 1;
+      baseFactPorEntry[f.entryId] = (baseFactPorEntry[f.entryId]||0) + sign * Math.abs(f.totalBase||0);
+    });
+    // Recorrer cada asiento con apuntes al grupo 6 y comparar con su factura
+    all.forEach(function(e){
+      var g6 = 0;
+      e.lines.forEach(function(l){
+        if(l.a && l.a.charAt(0) === '6') g6 += l.d - l.h;
+      });
+      if(Math.abs(g6) < 0.005) return; // asiento sin grupo 6, se ignora
+      var baseFac = baseFactPorEntry[e.id];
+      if(baseFac === undefined){
+        // Apunte al grupo 6 sin factura recibida que lo respalde
+        culpablesG6.push({ e:e, g6:g6, motivo:'sin factura', delta:g6 });
+      } else {
+        var d = Math.round((g6 - baseFac) * 100) / 100;
+        if(Math.abs(d) >= 0.01){
+          culpablesG6.push({ e:e, g6:g6, motivo:'base ≠ factura ('+fmt(baseFac)+'\u20ac)', delta:d });
+        }
+      }
+    });
+    culpablesG6.sort(function(a,b){ return Math.abs(b.delta) - Math.abs(a.delta); });
+  }
+  var detalleCompras = 'Base facturas: '+fmt(comprasFactBase)+'\u20ac \u00b7 Asientos G6: '+fmt(comprasAsientos)+'\u20ac \u00b7 Diff: '+fmt(diffCompras)+'\u20ac';
+  if(culpablesG6.length){
+    detalleCompras += ' \u00b7 Origen: ' + culpablesG6.slice(0,5).map(function(c){
+      return (c.e.concept || c.e.id) + ' (' + c.e.date + '): ' + fmt(c.delta) + '\u20ac [' + c.motivo + ']';
+    }).join(' \u00b7 ');
+    if(culpablesG6.length > 5) detalleCompras += ' \u00b7 (+'+(culpablesG6.length-5)+' m\u00e1s)';
+  }
   results.push({
     name: 'Compras: Facturas recibidas ↔ Asientos G6',
-    ok: facRecibidas.length === 0 || Math.abs(diffCompras) < 5,
-    detail: 'Base facturas: '+fmt(comprasFactBase)+'\u20ac \u00b7 Asientos G6: '+fmt(comprasAsientos)+'\u20ac \u00b7 Diff: '+fmt(diffCompras)+'\u20ac'
+    ok: facRecibidas.length === 0 || Math.abs(diffCompras) < 0.01,
+    detail: detalleCompras
   });
 
   // Test 13: Facturas huérfanas (entry_id apunta a asiento eliminado o inexistente)
