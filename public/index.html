@@ -5365,35 +5365,51 @@ function runTestCuadre(){
   });
 
   // Test 7: IVA repercutido (cuenta 477) cuadra con facturas emitidas
+  // iva477 = TOTAL del periodo (lo necesita el Modelo 303, test 10).
   var iva477 = 0;
   Object.entries(gSaldos).forEach(function(x){
     if(x[0].startsWith('477')) iva477 += x[1].h - x[1].d;
+  });
+  // iva477Facturas = solo 477 de asientos de factura de venta (type import_factura con cuenta 430x/431x).
+  // Las rectificaciones de ventas (rappels 709, devoluciones 708, dtos 706) minoran el 477 pero
+  // no son facturas: no existen en la tabla invoices, así que se excluyen aquí.
+  var iva477Facturas = 0;
+  all.forEach(function(e){
+    if(e.type!=='import_factura') return;
+    var esVenta = e.lines.some(function(l){ return l.a && (l.a.startsWith('430') || l.a.startsWith('431')); });
+    if(!esVenta) return;
+    e.lines.forEach(function(l){
+      if(l.a && l.a.startsWith('477')) iva477Facturas += l.h - l.d;
+    });
   });
   var facEmitidas = getInvoiceData({tipo:'emitida'});
   var ivaFactEmitidas = facEmitidas.reduce(function(s,f){
     var sign = f.isAbono ? -1 : 1;
     return s + sign * (Math.abs(f.iva21||0) + Math.abs(f.iva10||0) + Math.abs(f.iva4||0));
   }, 0);
-  var diff477 = Math.round((iva477 - ivaFactEmitidas) * 100) / 100;
+  var diff477 = Math.round((iva477Facturas - ivaFactEmitidas) * 100) / 100;
   var ok477 = facEmitidas.length === 0 || Math.abs(diff477) < 1;
   results.push({
     name: 'IVA repercutido 477 cuadra con facturas emitidas',
     ok: ok477,
-    detail: 'Cta 477: '+fmt(iva477)+'\u20ac \u00b7 Facturas emit: '+fmt(ivaFactEmitidas)+'\u20ac \u00b7 Diff: '+fmt(diff477)+'\u20ac'
+    detail: 'Cta 477 (asientos factura): '+fmt(iva477Facturas)+'\u20ac \u00b7 Facturas emit: '+fmt(ivaFactEmitidas)+'\u20ac \u00b7 Diff: '+fmt(diff477)+'\u20ac'
   });
 
   // Test 8: Recargo de equivalencia coherente
-  var recargo = 0;
+  // En régimen de recargo (minorista), el recargo soportado se contabiliza como mayor coste
+  // en el grupo 6, NO en una cuenta de IVA. Verificamos que la 47200001 queda a cero.
+  var recargo47200001 = 0;
   Object.entries(gSaldos).forEach(function(x){
-    if(x[0] === '47200001') recargo += x[1].d - x[1].h;
+    if(x[0] === '47200001') recargo47200001 += x[1].d - x[1].h;
   });
   var recargoFact = facRecibidas.reduce(function(s,f){
     return s + Math.abs(f.recargo||0);
   }, 0);
+  var okRecargo = Math.abs(recargo47200001) < 1;
   results.push({
     name: 'Recargo de equivalencia coherente',
-    ok: true,
-    detail: 'Recargo contabilizado: '+fmt(recargo)+'\u20ac \u00b7 En facturas: '+fmt(recargoFact)+'\u20ac'
+    ok: okRecargo,
+    detail: 'En facturas: '+fmt(recargoFact)+'\u20ac (integrado como mayor coste en grupo 6) \u00b7 Cuenta 47200001: '+fmt(recargo47200001)+'\u20ac (debe ser 0)'
   });
 
   // Test 9: Retenciones IRPF de facturas (cuenta 4751) cuadran con facturas
@@ -5432,21 +5448,26 @@ function runTestCuadre(){
   var invoicesAll = getInvoiceData();
 
   // Test 11: Ventas asientos G7 ≈ base imponible facturas emitidas
+  // Solo cuenta el grupo 7 de asientos de factura de venta (import_factura con cuenta 430x/431x).
+  // Las rectificaciones de ventas (rappels 709, devoluciones 708, dtos 706) no son facturas.
   var ventasFactBase = facEmitidas.reduce(function(s,f){
     var sign = f.isAbono ? -1 : 1;
     return s + sign * Math.abs(f.totalBase||0);
   }, 0);
   var ventasAsientos = 0;
   all.forEach(function(e){
+    if(e.type!=='import_factura') return;
+    var esVenta = e.lines.some(function(l){ return l.a && (l.a.startsWith('430') || l.a.startsWith('431')); });
+    if(!esVenta) return;
     e.lines.forEach(function(l){
       if(l.a && l.a.charAt(0) === '7') ventasAsientos += l.h - l.d;
     });
   });
   var diffVentas = Math.round((ventasFactBase - ventasAsientos) * 100) / 100;
   results.push({
-    name: 'Ventas: Facturas emitidas ↔ Asientos G7',
+    name: 'Ventas: Facturas emitidas \u2194 Asientos G7',
     ok: facEmitidas.length === 0 || Math.abs(diffVentas) < 0.01,
-    detail: 'Base facturas: '+fmt(ventasFactBase)+'\u20ac \u00b7 Asientos G7: '+fmt(ventasAsientos)+'\u20ac \u00b7 Diff: '+fmt(diffVentas)+'\u20ac'
+    detail: 'Base facturas: '+fmt(ventasFactBase)+'\u20ac \u00b7 Asientos G7 (factura): '+fmt(ventasAsientos)+'\u20ac \u00b7 Diff: '+fmt(diffVentas)+'\u20ac'
   });
 
   // Test 12: Compras: facturas recibidas ↔ asientos de factura (solo tipo import_factura, cuenta 6xx)
