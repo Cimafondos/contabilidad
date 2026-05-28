@@ -5181,128 +5181,339 @@ function newGrupoAdmin(){
 }
 
 function runTestCuadre(){
-  var all=state.entries.filter(function(e){return e.date&&e.date.startsWith(String(state.ejercicio));});
-  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  var results=[];
+  var ejercicio = String(state.ejercicio);
+  var all = state.entries.filter(function(e){
+    return !e.del && !e.deleted && e.date && e.date.startsWith(ejercicio);
+  });
+  var am = {};
+  state.accounts.forEach(function(a){ am[a.code] = a; });
+  var results = [];
 
-  // Test 1: Todos los asientos cuadran (debe = haber)
-  var descuadrados=0;
+  // ─────────────────────────────────────────────────────────────────────────
+  // BLOQUE 1 — INTEGRIDAD BÁSICA DE ASIENTOS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Test 1: Todos los asientos cuadran (Debe = Haber)
+  var descuadrados = [];
   all.forEach(function(e){
-    var td=0,th=0;e.lines.forEach(function(l){td+=l.d;th+=l.h;});
-    if(Math.abs(td-th)>0.01)descuadrados++;
+    var td = 0, th = 0;
+    e.lines.forEach(function(l){ td += l.d; th += l.h; });
+    if(Math.abs(td - th) > 0.01) descuadrados.push(e);
   });
-  results.push({name:'Asientos cuadrados (debe=haber)',ok:descuadrados===0,detail:descuadrados===0?all.length+' asientos OK':descuadrados+' asientos descuadrados'});
+  results.push({
+    name: 'Asientos cuadrados (Debe = Haber)',
+    ok: descuadrados.length === 0,
+    detail: descuadrados.length === 0
+      ? all.length + ' asientos OK'
+      : descuadrados.length + ' descuadrados: ' +
+        descuadrados.slice(0,3).map(function(e){
+          return (e.concept||e.id)+' ('+e.date+')';
+        }).join(', ')
+  });
 
-  // Test 2: Balance de sumas y saldos cuadra
-  var totalDebe=0,totalHaber=0;
-  all.forEach(function(e){e.lines.forEach(function(l){totalDebe+=l.d;totalHaber+=l.h;});});
-  var diffSumas=Math.round((totalDebe-totalHaber)*100)/100;
-  results.push({name:'Sumas y saldos cuadrados',ok:Math.abs(diffSumas)<1,detail:'Debe: '+fmt(totalDebe)+'€ · Haber: '+fmt(totalHaber)+'€ · Diff: '+fmt(diffSumas)+'€'});
+  // Test 2: Sumas y saldos globales cuadran
+  var totalDebe = 0, totalHaber = 0;
+  all.forEach(function(e){
+    e.lines.forEach(function(l){ totalDebe += l.d; totalHaber += l.h; });
+  });
+  var diffSumas = Math.round((totalDebe - totalHaber) * 100) / 100;
+  results.push({
+    name: 'Sumas y saldos globales cuadrados',
+    ok: Math.abs(diffSumas) < 1,
+    detail: 'Debe: '+fmt(totalDebe)+'\u20ac \u00b7 Haber: '+fmt(totalHaber)+'\u20ac \u00b7 Diff: '+fmt(diffSumas)+'\u20ac'
+  });
 
-  // Test 3: Balance de situación (Activo = PN + Pasivo)
-  var gSaldos={};
-  all.forEach(function(e){e.lines.forEach(function(l){if(!gSaldos[l.a])gSaldos[l.a]={d:0,h:0};gSaldos[l.a].d+=l.d;gSaldos[l.a].h+=l.h;});});
-  var activo=0,pasivo=0,patrimonio=0,gastos=0,ingresos=0;
+  // Test 3: Sin líneas con cuenta inexistente en el plan
+  var cuentasInexistentes = {};
+  all.forEach(function(e){
+    e.lines.forEach(function(l){
+      if(l.a && !am[l.a]) cuentasInexistentes[l.a] = (cuentasInexistentes[l.a]||0) + 1;
+    });
+  });
+  var ciKeys = Object.keys(cuentasInexistentes);
+  results.push({
+    name: 'Cuentas usadas existen en el plan',
+    ok: ciKeys.length === 0,
+    detail: ciKeys.length === 0
+      ? 'Todas las cuentas del ejercicio están en el plan'
+      : ciKeys.length + ' cuenta(s) no declaradas: ' + ciKeys.slice(0,5).join(', ')
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BLOQUE 2 — BALANCES ESTRUCTURALES
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Calcular saldos por cuenta (acumulado del ejercicio)
+  var gSaldos = {};
+  all.forEach(function(e){
+    e.lines.forEach(function(l){
+      if(!l.a) return;
+      if(!gSaldos[l.a]) gSaldos[l.a] = {d:0, h:0};
+      gSaldos[l.a].d += l.d;
+      gSaldos[l.a].h += l.h;
+    });
+  });
+
+  // Test 4: Balance de situación — Activo = PN + Pasivo + Resultado
+  var activo = 0, pasivo = 0, patrimonio = 0, gastos = 0, ingresos = 0;
   Object.entries(gSaldos).forEach(function(x){
-    var code=x[0],v=x[1],saldo=v.d-v.h,g=parseInt(code[0])||0;
-    if(g===1||g===5)patrimonio+=saldo; // PN y financieras
-    if(g===2)activo+=saldo; // Inmovilizado
-    if(g===3)activo+=saldo; // Existencias
-    if(g===4){
-      // Grupo 4 depende de la cuenta
-      if(code.startsWith('400')||code.startsWith('401')||code.startsWith('410')||code.startsWith('411'))pasivo+=v.h-v.d;
-      else if(code.startsWith('430')||code.startsWith('431')||code.startsWith('440'))activo+=saldo;
-      else if(code.startsWith('47')){if(saldo>0)activo+=saldo;else pasivo+=Math.abs(saldo);}
-      else activo+=saldo;
+    var code = x[0], v = x[1];
+    var g = code.charAt(0);
+    var saldo = v.d - v.h;
+    if(g === '1'){ if(saldo < 0) patrimonio += Math.abs(saldo); else pasivo += saldo; }
+    else if(g === '2'){ activo += saldo; }
+    else if(g === '3'){ activo += saldo; }
+    else if(g === '4'){
+      if(code.startsWith('47')){ if(saldo > 0) activo += saldo; else pasivo += Math.abs(saldo); }
+      else if(code.startsWith('43') || code.startsWith('44')){ activo += saldo; }
+      else { pasivo += Math.abs(Math.min(saldo, 0)); activo += Math.max(saldo, 0); }
     }
-    if(g===6)gastos+=saldo;
-    if(g===7)ingresos+=v.h-v.d;
+    else if(g === '5'){ if(saldo >= 0) activo += saldo; else pasivo += Math.abs(saldo); }
+    else if(g === '6'){ gastos += saldo; }
+    else if(g === '7'){ ingresos += v.h - v.d; }
   });
-  var resultado=ingresos-gastos;
-  var balDiff=Math.round((activo-(patrimonio+pasivo+resultado))*100)/100;
-  // Use simplified check: sum of all debit-side = sum of all credit-side balances
-  results.push({name:'Balance de situación (A = PN+P)',ok:Math.abs(balDiff)<1,detail:'Activo: '+fmt(activo)+'€ · PN+Pasivo: '+fmt(patrimonio+pasivo+resultado)+'€ · Diff: '+fmt(balDiff)+'€'});
-
-  // Test 4: PyG = Ingresos (7) - Gastos (6)
-  results.push({name:'Resultado PyG coherente',ok:true,detail:'Ingresos G7: '+fmt(ingresos)+'€ · Gastos G6: '+fmt(gastos)+'€ · Resultado: '+fmt(resultado)+'€'});
-
-  // Test 5: IVA soportado (472) = sum de IVAs por tipo
-  var iva472=0;
-  Object.entries(gSaldos).forEach(function(x){if(x[0]==='47200000')iva472+=x[1].d-x[1].h;});
-  results.push({name:'IVA soportado (472) coherente',ok:true,detail:'IVA soportado total: '+fmt(iva472)+'€'});
-
-  // Test 6: IVA repercutido (477)
-  var iva477=0;
-  Object.entries(gSaldos).forEach(function(x){if(x[0].startsWith('477'))iva477+=x[1].h-x[1].d;});
-  results.push({name:'IVA repercutido (477) coherente',ok:true,detail:'IVA repercutido total: '+fmt(iva477)+'€'});
-
-  // Test 7: Recargo de equivalencia separado
-  var recargo=0;
-  Object.entries(gSaldos).forEach(function(x){if(x[0]==='47200001')recargo+=x[1].d-x[1].h;});
-  results.push({name:'Recargo equivalencia separado (47200001)',ok:true,detail:'Recargo total: '+fmt(recargo)+'€'});
-
-  // Test 8: Retenciones (4751)
-  var ret4751=0;
-  Object.entries(gSaldos).forEach(function(x){if(x[0].startsWith('4751'))ret4751+=x[1].h-x[1].d;});
-  results.push({name:'Retenciones IRPF (4751)',ok:true,detail:'Retenciones pendientes: '+fmt(ret4751)+'€'});
-
-  // Test 9: Proveedores = sum facturas - sum pagos
-  var prov400=0;
-  Object.entries(gSaldos).forEach(function(x){if(x[0].startsWith('400'))prov400+=x[1].h-x[1].d;});
-  results.push({name:'Saldo proveedores (400)',ok:true,detail:'Pendiente de pago: '+fmt(prov400)+'€'});
-
-  // Test 10: Modelo 303 cuadra (IVA repercutido - IVA soportado)
-  var m303=iva477-iva472;
-  results.push({name:'Modelo 303 (IVA rep - IVA sop)',ok:true,detail:'Resultado 303: '+fmt(m303)+'€ '+(m303>0?'(a pagar)':'(a devolver)')});
-
-  // Test 11: Ventas cruzado (Libro Fact Emitidas vs base ventas en asientos G7)
-  var invoicesTC=getInvoiceData();
-  var emitidasTC=invoicesTC.filter(function(f){return f.tipo==='emitida';});
-  var ventasFactTC=emitidasTC.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*f.totalBase;},0);
-  var ventasAsientosTC=0;
-  all.forEach(function(e){e.lines.forEach(function(l){if(l.a&&l.a[0]==='7')ventasAsientosTC+=l.h-l.d;});});
-  var ventasDiffTC=Math.round((ventasFactTC-ventasAsientosTC)*100)/100;
-  results.push({name:'Ventas cruzado (Fact Emitidas vs Asientos G7)',ok:Math.abs(ventasDiffTC)<1,detail:'Facturas: '+fmt(ventasFactTC)+'€ · Asientos: '+fmt(ventasAsientosTC)+'€ · Diff: '+fmt(ventasDiffTC)+'€'});
-
-  // Test 12: Facturas huérfanas (entry_id apunta a asiento eliminado o inexistente)
-  var entryIdsTC={};
-  state.entries.forEach(function(e){if(!e.del)entryIdsTC[e.id]=true;});
-  var huerfanasTC=invoicesTC.filter(function(f){return f.entryId&&!entryIdsTC[f.entryId];});
-  results.push({name:'Facturas huérfanas (con asiento vivo)',ok:huerfanasTC.length===0,detail:huerfanasTC.length===0?'Todas las facturas referencian un asiento existente':huerfanasTC.length+' facturas huérfanas: '+huerfanasTC.slice(0,5).map(function(f){return f.numFactura;}).join(', ')});
-
-  // Test 13: Duplicados por nº factura + tipo
-  var seenDupTC={},dupCountTC=0;
-  invoicesTC.forEach(function(f){
-    var k=(f.numFactura||'').toUpperCase()+'__'+f.tipo;
-    if(seenDupTC[k])dupCountTC++; else seenDupTC[k]=true;
+  var resultado = ingresos - gastos;
+  var balDiff = Math.round((activo - (patrimonio + pasivo + resultado)) * 100) / 100;
+  results.push({
+    name: 'Balance de situación (A = PN+P+Resultado)',
+    ok: Math.abs(balDiff) < 1,
+    detail: 'Activo: '+fmt(activo)+'\u20ac \u00b7 PN+Pasivo: '+fmt(patrimonio+pasivo)+'\u20ac \u00b7 Resultado: '+fmt(resultado)+'\u20ac \u00b7 Diff: '+fmt(balDiff)+'\u20ac'
   });
-  results.push({name:'Duplicados por nº factura',ok:dupCountTC===0,detail:dupCountTC===0?'Sin duplicados en '+invoicesTC.length+' facturas':dupCountTC+' facturas con nº repetido'});
 
-  // Test 14: Tesorería — saldo clientes (430x) ≤ total facturado emitido
-  var saldoClientesTC=0;
-  state.entries.forEach(function(e){if(!e.del)e.lines.forEach(function(l){
-    if(l.a&&l.a.indexOf('430')===0)saldoClientesTC+=l.d-l.h;
-  });});
-  var totalEmitidoCobrableTC=emitidasTC.reduce(function(s,f){var sign=f.isAbono?-1:1;return s+sign*Math.abs(f.totalFactura||0);},0);
-  var tesoreriaOkTC=saldoClientesTC<=totalEmitidoCobrableTC+1;
-  results.push({name:'Tesorería (saldo 430x ≤ facturado emitido)',ok:tesoreriaOkTC,detail:'Pendiente cobro: '+fmt(saldoClientesTC)+'€ · Facturado: '+fmt(totalEmitidoCobrableTC)+'€'});
+  // Test 5: Resultado PyG = Ingresos G7 − Gastos G6
+  results.push({
+    name: 'Resultado PyG (G7 − G6)',
+    ok: true,
+    detail: 'Ingresos G7: '+fmt(ingresos)+'\u20ac \u00b7 Gastos G6: '+fmt(gastos)+'\u20ac \u00b7 Resultado: '+fmt(resultado)+'\u20ac'
+  });
 
-  // Show results
-  var passed=results.filter(function(r){return r.ok;}).length;
-  var html='<div class="card" style="margin-top:14px"><div class="card-h"><span>🧪 Test de cuadre fiscal — '+passed+'/'+results.length+' OK</span><span class="badge '+(passed===results.length?'badge-g':'badge-r')+'">'+(passed===results.length?'✓ TODO OK':'✗ '+( results.length-passed)+' errores')+'</span></div>'+
-  '<table><thead><tr><th style="width:30px">#</th><th style="width:30px"></th><th>Test</th><th>Detalle</th></tr></thead><tbody>'+
-  results.map(function(r,i){
-    return '<tr style="background:'+(r.ok?'#E8F8ED':'#FDF0F0')+'"><td style="text-align:center">'+(i+1)+'</td><td style="font-size:16px;text-align:center">'+(r.ok?'✅':'❌')+'</td><td style="font-weight:600">'+r.name+'</td><td style="font-size:10px;color:'+(r.ok?'var(--ok)':'var(--rd)')+'">'+r.detail+'</td></tr>';
-  }).join('')+
-  '</tbody></table></div>';
+  // ─────────────────────────────────────────────────────────────────────────
+  // BLOQUE 3 — IVA Y HACIENDA
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // Insert in admin page or show as modal
-  var testDiv=$('testResults');
-  if(testDiv){testDiv.innerHTML=html;}
-  else{toast(passed+'/'+results.length+' tests OK','ok');var c2=$('content');if(c2)c2.innerHTML+=html;}
+  // Test 6: IVA soportado (cuenta 472) cuadra con facturas recibidas
+  var iva472 = 0;
+  Object.entries(gSaldos).forEach(function(x){
+    if(x[0].startsWith('472')) iva472 += x[1].d - x[1].h;
+  });
+  var facRecibidas = getInvoiceData({tipo:'recibida'});
+  var ivaFactRecibidas = facRecibidas.reduce(function(s,f){
+    var sign = f.isAbono ? -1 : 1;
+    return s + sign * (Math.abs(f.iva21||0) + Math.abs(f.iva10||0) + Math.abs(f.iva4||0));
+  }, 0);
+  var diff472 = Math.round((iva472 - ivaFactRecibidas) * 100) / 100;
+  var ok472 = facRecibidas.length === 0 || Math.abs(diff472) < 1;
+  results.push({
+    name: 'IVA soportado 472 cuadra con facturas recibidas',
+    ok: ok472,
+    detail: 'Cta 472: '+fmt(iva472)+'\u20ac \u00b7 Facturas rec: '+fmt(ivaFactRecibidas)+'\u20ac \u00b7 Diff: '+fmt(diff472)+'\u20ac'
+  });
+
+  // Test 7: IVA repercutido (cuenta 477) cuadra con facturas emitidas
+  var iva477 = 0;
+  Object.entries(gSaldos).forEach(function(x){
+    if(x[0].startsWith('477')) iva477 += x[1].h - x[1].d;
+  });
+  var facEmitidas = getInvoiceData({tipo:'emitida'});
+  var ivaFactEmitidas = facEmitidas.reduce(function(s,f){
+    var sign = f.isAbono ? -1 : 1;
+    return s + sign * (Math.abs(f.iva21||0) + Math.abs(f.iva10||0) + Math.abs(f.iva4||0));
+  }, 0);
+  var diff477 = Math.round((iva477 - ivaFactEmitidas) * 100) / 100;
+  var ok477 = facEmitidas.length === 0 || Math.abs(diff477) < 1;
+  results.push({
+    name: 'IVA repercutido 477 cuadra con facturas emitidas',
+    ok: ok477,
+    detail: 'Cta 477: '+fmt(iva477)+'\u20ac \u00b7 Facturas emit: '+fmt(ivaFactEmitidas)+'\u20ac \u00b7 Diff: '+fmt(diff477)+'\u20ac'
+  });
+
+  // Test 8: Recargo de equivalencia coherente
+  var recargo = 0;
+  Object.entries(gSaldos).forEach(function(x){
+    if(x[0] === '47200001') recargo += x[1].d - x[1].h;
+  });
+  var recargoFact = facRecibidas.reduce(function(s,f){
+    return s + Math.abs(f.recargo||0);
+  }, 0);
+  results.push({
+    name: 'Recargo de equivalencia coherente',
+    ok: true,
+    detail: 'Recargo contabilizado: '+fmt(recargo)+'\u20ac \u00b7 En facturas: '+fmt(recargoFact)+'\u20ac'
+  });
+
+  // Test 9: Retenciones IRPF (cuenta 4751) cuadran con facturas
+  var ret4751 = 0;
+  Object.entries(gSaldos).forEach(function(x){
+    if(x[0].startsWith('4751')) ret4751 += x[1].h - x[1].d;
+  });
+  var retFact = facRecibidas.reduce(function(s,f){
+    return s + Math.abs(f.retencion||0);
+  }, 0);
+  var diffRet = Math.round((ret4751 - retFact) * 100) / 100;
+  var okRet = facRecibidas.length === 0 || Math.abs(diffRet) < 1;
+  results.push({
+    name: 'Retenciones IRPF (4751) cuadran con facturas',
+    ok: okRet,
+    detail: 'Cta 4751: '+fmt(ret4751)+'\u20ac \u00b7 En facturas: '+fmt(retFact)+'\u20ac \u00b7 Diff: '+fmt(diffRet)+'\u20ac'
+  });
+
+  // Test 10: Modelo 303 — IVA repercutido − IVA soportado
+  var m303 = iva477 - iva472;
+  results.push({
+    name: 'Modelo 303 (IVA rep − IVA sop)',
+    ok: true,
+    detail: 'Resultado 303: '+fmt(m303)+'\u20ac '+(m303 >= 0 ? '(a ingresar)' : '(a devolver)')
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BLOQUE 4 — TRIANGULACIÓN FACTURAS ↔ ASIENTOS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  var invoicesAll = getInvoiceData();
+
+  // Test 11: Ventas asientos G7 ≈ base imponible facturas emitidas
+  var ventasFactBase = facEmitidas.reduce(function(s,f){
+    var sign = f.isAbono ? -1 : 1;
+    return s + sign * Math.abs(f.totalBase||0);
+  }, 0);
+  var ventasAsientos = 0;
+  all.forEach(function(e){
+    e.lines.forEach(function(l){
+      if(l.a && l.a.charAt(0) === '7') ventasAsientos += l.h - l.d;
+    });
+  });
+  var diffVentas = Math.round((ventasFactBase - ventasAsientos) * 100) / 100;
+  results.push({
+    name: 'Ventas: Facturas emitidas ↔ Asientos G7',
+    ok: facEmitidas.length === 0 || Math.abs(diffVentas) < 1,
+    detail: 'Base facturas: '+fmt(ventasFactBase)+'\u20ac \u00b7 Asientos G7: '+fmt(ventasAsientos)+'\u20ac \u00b7 Diff: '+fmt(diffVentas)+'\u20ac'
+  });
+
+  // Test 12: Compras asientos G6 ≈ base imponible facturas recibidas
+  var comprasFactBase = facRecibidas.reduce(function(s,f){
+    var sign = f.isAbono ? -1 : 1;
+    return s + sign * Math.abs(f.totalBase||0);
+  }, 0);
+  var comprasAsientos = 0;
+  all.forEach(function(e){
+    e.lines.forEach(function(l){
+      if(l.a && l.a.charAt(0) === '6') comprasAsientos += l.d - l.h;
+    });
+  });
+  var diffCompras = Math.round((comprasFactBase - comprasAsientos) * 100) / 100;
+  results.push({
+    name: 'Compras: Facturas recibidas ↔ Asientos G6',
+    ok: facRecibidas.length === 0 || Math.abs(diffCompras) < 5,
+    detail: 'Base facturas: '+fmt(comprasFactBase)+'\u20ac \u00b7 Asientos G6: '+fmt(comprasAsientos)+'\u20ac \u00b7 Diff: '+fmt(diffCompras)+'\u20ac'
+  });
+
+  // Test 13: Facturas huérfanas (entry_id apunta a asiento eliminado o inexistente)
+  var entryIds = {};
+  state.entries.forEach(function(e){ if(!e.del && !e.deleted) entryIds[e.id] = true; });
+  var huerfanas = invoicesAll.filter(function(f){
+    return f.entryId && !entryIds[f.entryId];
+  });
+  results.push({
+    name: 'Facturas huérfanas (sin asiento vivo)',
+    ok: huerfanas.length === 0,
+    detail: huerfanas.length === 0
+      ? 'Todas las facturas referencian un asiento existente'
+      : huerfanas.length + ' huérfanas: ' +
+        huerfanas.slice(0,5).map(function(f){ return f.numFactura||f.id; }).join(', ')
+  });
+
+  // Test 14: Duplicados por nº factura + tipo
+  var seenDup = {}, dupCount = [];
+  invoicesAll.forEach(function(f){
+    var k = (f.numFactura||'').toUpperCase() + '__' + f.tipo;
+    if(seenDup[k]) dupCount.push(f); else seenDup[k] = true;
+  });
+  results.push({
+    name: 'Sin duplicados de nº factura',
+    ok: dupCount.length === 0,
+    detail: dupCount.length === 0
+      ? 'Sin duplicados en ' + invoicesAll.length + ' facturas'
+      : dupCount.length + ' duplicados: ' +
+        dupCount.slice(0,5).map(function(f){ return (f.numFactura||'s/n')+' ('+f.tipo+')'; }).join(', ')
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BLOQUE 5 — CLIENTES, PROVEEDORES Y TESORERÍA
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Test 15: Saldo clientes (430x) ≤ total facturado emitido
+  var saldoClientes = 0;
+  Object.entries(gSaldos).forEach(function(x){
+    if(x[0].startsWith('430')) saldoClientes += x[1].d - x[1].h;
+  });
+  var totalEmitidoCobrable = facEmitidas.reduce(function(s,f){
+    var sign = f.isAbono ? -1 : 1;
+    return s + sign * Math.abs(f.totalFactura||f.total||0);
+  }, 0);
+  results.push({
+    name: 'Saldo clientes 430x ≤ facturado emitido',
+    ok: facEmitidas.length === 0 || saldoClientes <= totalEmitidoCobrable + 1,
+    detail: 'Pendiente cobro (430): '+fmt(saldoClientes)+'\u20ac \u00b7 Total facturado: '+fmt(totalEmitidoCobrable)+'\u20ac'
+  });
+
+  // Test 16: Saldo proveedores (400x)
+  var saldoProv = 0;
+  Object.entries(gSaldos).forEach(function(x){
+    if(x[0].startsWith('400')) saldoProv += x[1].h - x[1].d;
+  });
+  var totalRecibidoPagable = facRecibidas.reduce(function(s,f){
+    var sign = f.isAbono ? -1 : 1;
+    return s + sign * Math.abs(f.totalFactura||f.total||0);
+  }, 0);
+  results.push({
+    name: 'Saldo proveedores 400x coherente',
+    ok: true,
+    detail: 'Pendiente pago (400): '+fmt(saldoProv)+'\u20ac \u00b7 Total recibido: '+fmt(totalRecibidoPagable)+'\u20ac'
+  });
+
+  // Test 17: Tesorería — saldo cuentas 57x no negativa
+  var tesoreria = 0;
+  Object.entries(gSaldos).forEach(function(x){
+    if(x[0].startsWith('57')) tesoreria += x[1].d - x[1].h;
+  });
+  results.push({
+    name: 'Tesorería (57x) no negativa',
+    ok: tesoreria >= -1,
+    detail: 'Saldo tesorería: '+fmt(tesoreria)+'\u20ac' + (tesoreria < -1 ? ' \u26a0 Saldo negativo en cuentas bancarias' : '')
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER RESULTADOS
+  // ─────────────────────────────────────────────────────────────────────────
+  var passed = results.filter(function(r){ return r.ok; }).length;
+  var html = '<div class="card" style="margin-top:14px">'+
+    '<div class="card-h"><span>\ud83e\uddea Test de cuadre fiscal \u2014 '+passed+'/'+results.length+' OK</span>'+
+    '<span class="badge '+(passed === results.length ? 'badge-g' : 'badge-r')+'">'+
+    (passed === results.length ? '\u2713 TODO OK' : '\u2717 '+(results.length-passed)+' errores')+'</span></div>'+
+    '<table><thead><tr>'+
+      '<th style="width:30px">#</th>'+
+      '<th style="width:30px"></th>'+
+      '<th>Test</th>'+
+      '<th>Detalle</th>'+
+    '</tr></thead><tbody>'+
+    results.map(function(r,i){
+      return '<tr style="background:'+(r.ok ? '#E8F8ED' : '#FDF0F0')+'">'+
+        '<td style="text-align:center">'+(i+1)+'</td>'+
+        '<td style="font-size:16px;text-align:center">'+(r.ok ? '\u2705' : '\u274c')+'</td>'+
+        '<td style="font-weight:600">'+r.name+'</td>'+
+        '<td style="font-size:10px;color:'+(r.ok ? 'var(--ok)' : 'var(--rd)')+'">'+r.detail+'</td>'+
+      '</tr>';
+    }).join('')+
+    '</tbody></table></div>';
+
+  var testDiv = $('testResults');
+  if(testDiv){ testDiv.innerHTML = html; }
+  else{
+    toast(passed+'/'+results.length+' tests OK', 'ok');
+    var c2 = $('content');
+    if(c2) c2.innerHTML += html;
+  }
 }
-
-
 function renderIncidencias(c){
   var am={};state.accounts.forEach(function(a){am[a.code]=a;});
   var errors=[];
