@@ -1656,6 +1656,59 @@ app.post('/api/generate-test-data/:companyId', authRequired, adminRequired, (req
     base21:0,iva21:0,base10:0,iva10:0,base4:0,iva4:0,base0:0,
     retencion:0,recargo:0,total:0,entry_id:id,company_id:cid});}
 
+  // ═══ 20. RAPPELS — descuento por volumen ═══
+  // Rappel sobre compras: proveedor devuelve 1,000€
+  entries.push({id:eid(),date:dt('06',20),concept:'Rappel s/ compras PROVEEDOR TEST 001',type:'manual',
+    lines:[{a:'40000001',d:0,h:1210},{a:'60900000',d:0,h:1000},{a:'47200000',d:0,h:210}]});
+  // Rappel sobre ventas: devolvemos 1,000€ a cliente
+  entries.push({id:eid(),date:dt('06',20),concept:'Rappel s/ ventas CLIENTE TEST 001',type:'manual',
+    lines:[{a:'70900000',d:1000,h:0},{a:'47700000',d:210,h:0},{a:'43000001',d:0,h:1210}]});
+
+  // ═══ 21. IMPAGADO — cobro devuelto ═══
+  // Cobro que el banco devuelve (cliente no paga)
+  entries.push({id:eid(),date:dt('05',28),concept:'Cobro devuelto CLIENTE TEST 005 (impagado)',type:'manual',
+    lines:[{a:'43500000',d:5000,h:0},{a:'57200000',d:0,h:5000}]});
+  // Reclasificación a dudoso cobro
+  entries.push({id:eid(),date:dt('06',1),concept:'Reclasif. dudoso cobro CLIENTE TEST 005',type:'manual',
+    lines:[{a:'43500000',d:0,h:5000},{a:'43000005',d:5000,h:0}]});
+
+  // ═══ 22. PROVISIÓN INSOLVENCIAS ═══
+  entries.push({id:eid(),date:dt('06',30),concept:'Provisión insolvencias clientes',type:'manual',
+    lines:[{a:'69400000',d:5000,h:0},{a:'49000000',d:0,h:5000}]});
+
+  // ═══ 23. ANTICIPO DE CLIENTE — 3,000€ ═══
+  entries.push({id:eid(),date:dt('02',20),concept:'Anticipo recibido CLIENTE TEST 003',type:'manual',
+    lines:[{a:'57200000',d:3000,h:0},{a:'43800000',d:0,h:3000}]});
+  // Aplicación del anticipo a factura
+  entries.push({id:eid(),date:dt('03',5),concept:'Aplicación anticipo CLIENTE TEST 003',type:'manual',
+    lines:[{a:'43800000',d:3000,h:0},{a:'43000003',d:0,h:3000}]});
+
+  // ═══ 24. ANTICIPO A PROVEEDOR — 2,000€ ═══
+  entries.push({id:eid(),date:dt('01',25),concept:'Anticipo a PROVEEDOR TEST 002',type:'manual',
+    lines:[{a:'40700000',d:2000,h:0},{a:'57200000',d:0,h:2000}]});
+  // Aplicación del anticipo a factura
+  entries.push({id:eid(),date:dt('02',20),concept:'Aplicación anticipo PROVEEDOR TEST 002',type:'manual',
+    lines:[{a:'40000002',d:2000,h:0},{a:'40700000',d:0,h:2000}]});
+
+  // ═══ 25. DEVOLUCIÓN DE COMPRAS — 2,000€ ═══
+  entries.push({id:eid(),date:dt('04',25),concept:'Devolución compras PROVEEDOR TEST 003',type:'manual',
+    lines:[{a:'40000003',d:2420,h:0},{a:'60800000',d:0,h:2000},{a:'47200000',d:0,h:420}]});
+
+  // ═══ 26. DEVOLUCIÓN DE VENTAS — 1,000€ ═══
+  entries.push({id:eid(),date:dt('05',10),concept:'Devolución ventas CLIENTE TEST 004',type:'manual',
+    lines:[{a:'70800000',d:1000,h:0},{a:'47700000',d:210,h:0},{a:'43000004',d:0,h:1210}]});
+
+  // ═══ 27. GASTOS ANTICIPADOS (periodificación) — 2,000€ ═══
+  entries.push({id:eid(),date:dt('01',5),concept:'Seguro anual pagado por adelantado',type:'manual',
+    lines:[{a:'48000000',d:2000,h:0},{a:'57200000',d:0,h:2000}]});
+  // Imputación mensual del gasto anticipado (6 meses × 333.33 ≈ 2,000)
+  entries.push({id:eid(),date:dt('06',30),concept:'Periodificación seguro (6 meses)',type:'manual',
+    lines:[{a:'62500000',d:2000,h:0},{a:'48000000',d:0,h:2000}]});
+
+  // ═══ 28. PAGO IVA 1T ═══
+  entries.push({id:eid(),date:dt('04',20),concept:'Liquidación IVA 1T - pago',type:'manual',
+    lines:[{a:'47500000',d:5000,h:0},{a:'57200000',d:0,h:5000}]});
+
   // ═══ VERIFY ALL ENTRIES BALANCE ═══
   let errors = 0;
   entries.forEach(e => {
