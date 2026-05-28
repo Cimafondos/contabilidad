@@ -532,9 +532,9 @@ app.post('/api/login', rateLimitLogin, (req, res) => {
   const token = jwt.sign({ id: user.id, username: user.username, name: user.name, role: user.role, company_id: user.company_id, group_id: user.group_id }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
   // Get company: user's assigned company → first in group → first individually assigned → none
   let company = null;
-  if (user.company_id) company = db.prepare("SELECT * FROM companies WHERE id = ? AND id NOT IN ('_pgc_template_','__reset__')").get(user.company_id);
-  if (!company && user.group_id) company = db.prepare("SELECT * FROM companies WHERE group_id = ? AND id NOT IN ('_pgc_template_','__reset__') LIMIT 1").get(user.group_id);
-  if (!company) company = db.prepare("SELECT c.* FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ? AND c.id NOT IN ('_pgc_template_','__reset__') LIMIT 1").get(user.id);
+  if (user.company_id) company = db.prepare("SELECT * FROM companies WHERE id = ? AND id NOT IN ('_pgc_template_','__reset__','__cleanup_valentia_done__')").get(user.company_id);
+  if (!company && user.group_id) company = db.prepare("SELECT * FROM companies WHERE group_id = ? AND id NOT IN ('_pgc_template_','__reset__','__cleanup_valentia_done__') LIMIT 1").get(user.group_id);
+  if (!company) company = db.prepare("SELECT c.* FROM companies c INNER JOIN user_companies uc ON c.id = uc.company_id WHERE uc.user_id = ? AND c.id NOT IN ('_pgc_template_','__reset__','__cleanup_valentia_done__') LIMIT 1").get(user.id);
   if (!company) company = { id: '_none_', name: 'Sin empresa', cif: '', address: '', config: '{}' };
   if (loginAttempts[req.ip]) delete loginAttempts[req.ip];
   auditLog(req, 'login', username);
@@ -927,7 +927,7 @@ app.delete('/api/users/:companyId/:id', authRequired, adminRequired, (req, res) 
 
 // ── COMPANIES MANAGEMENT (filtered by user group + individual assignments) ──
 app.get('/api/companies', authRequired, (req, res) => {
-  const hidePGC = " AND c.id NOT IN ('_pgc_template_', '__reset__')";
+  const hidePGC = " AND c.id NOT IN ('_pgc_template_', '__reset__', '__cleanup_valentia_done__')";
   if (req.user.role === 'superadmin') {
     const rows = db.prepare('SELECT c.*, g.name as group_name FROM companies c LEFT JOIN groups g ON c.group_id = g.id WHERE 1=1' + hidePGC).all();
     res.json(rows);
@@ -1369,6 +1369,27 @@ app.get('*', (req, res) => {
 // ── Start ──
 migratePasswords();
 migrateProviderAccounts();
+
+// ── One-time cleanup: purge Valentia invoices & entries for clean resync ──
+(function cleanupValentia() {
+  try {
+    const flag = db.prepare("SELECT id FROM companies WHERE id = '__cleanup_valentia_done__'").get();
+    if (flag) return; // Already done
+    const valentias = db.prepare("SELECT id, name FROM companies WHERE name LIKE '%alentia%'").all();
+    if (!valentias.length) return;
+    valentias.forEach(v => {
+      const invCount = db.prepare('SELECT COUNT(*) as c FROM invoices WHERE company_id = ?').get(v.id).c;
+      const entCount = db.prepare('SELECT COUNT(*) as c FROM entries WHERE company_id = ?').get(v.id).c;
+      db.prepare('DELETE FROM invoices WHERE company_id = ?').run(v.id);
+      db.prepare('DELETE FROM entry_lines WHERE entry_id IN (SELECT id FROM entries WHERE company_id = ?)').run(v.id);
+      db.prepare('DELETE FROM entries WHERE company_id = ?').run(v.id);
+      db.prepare('DELETE FROM excluded_invoices WHERE company_id = ?').run(v.id);
+      console.log(`✓ Cleanup ${v.name} (${v.id}): deleted ${invCount} invoices, ${entCount} entries`);
+    });
+    db.prepare("INSERT OR IGNORE INTO companies VALUES ('__cleanup_valentia_done__', 'cleanup flag', '', '', '{}', NULL)").run();
+    console.log('✓ Valentia cleanup complete — resync from Gestor Documental');
+  } catch(e) { console.error('Cleanup error:', e.message); }
+})();
 migrateFixProviderNames();
 scheduleDailyBackup();
 app.listen(PORT, '0.0.0.0', () => {
