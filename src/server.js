@@ -1745,8 +1745,8 @@ app.post('/api/generate-test-data/:companyId', authRequired, adminRequired, (req
   const insInv = db.prepare(`INSERT OR REPLACE INTO invoices 
     (id,num_factura,fecha,tipo,is_abono,tercero_nombre,tercero_cif,tercero_cuenta,
      base21,iva21,base10,iva10,base4,iva4,base0,retencion,recargo,total,
-     forma_pago,fecha_vencimiento,concepto_gestor,entry_id,company_id,created_by)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     forma_pago,fecha_vencimiento,concepto_gestor,entry_id,company_id,created_by,deleted)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`);
   const tx2 = db.transaction(() => {
     invs.forEach(f => {
       insInv.run(f.id,f.num_factura,f.fecha,f.tipo,f.is_abono,
