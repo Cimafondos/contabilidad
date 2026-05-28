@@ -4865,6 +4865,8 @@ async function renderAdmin(c){
   '<button class="btn btn-p" onclick="recuperarAsientos()">Recuperar eliminados</button>'+
   '<button class="btn btn-d" onclick="exportarTodoCSV()">↓ Exportar CSV</button>'+
   '<button class="btn btn-d" onclick="repairProveedores()">Reparar proveedores</button>'+
+  '<button class="btn btn-a" onclick="limpiarFacturasEmpresa()">🗑 Borrar facturas empresa</button>'+
+  '<button class="btn btn-r" onclick="resetCompletoEmpresa()">⚠️ Reset completo empresa</button>'+
   '</div>'+
   '<div style="margin-top:8px;font-size:11px;color:var(--txM)">Los asientos eliminados se pueden recuperar. Para borrado definitivo usa la Papelera.</div>'+
   '</div></div>'+
@@ -4969,6 +4971,33 @@ async function repairProveedores(){
   toast('✓ '+created+' cuentas creadas/actualizadas');
   render();
 }
+
+async function limpiarFacturasEmpresa(){
+  if(!state.company||!state.company.id)return;
+  if(!confirm('¿Borrar TODAS las facturas de '+state.company.name+'? Los asientos se mantienen.'))return;
+  try{
+    await api('/api/invoices/'+state.company.id,{method:'DELETE'});
+    state.invoices=[];
+    toast('✓ Facturas borradas de '+state.company.name);
+    render();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+async function resetCompletoEmpresa(){
+  if(!state.company||!state.company.id)return;
+  if(!confirm('⚠️ ¿BORRAR TODO de '+state.company.name+'?\n\nSe borrarán:\n- Todos los asientos\n- Todas las facturas\n- Todas las facturas excluidas\n\nEsta acción NO se puede deshacer.'))return;
+  if(!confirm('¿Estás SEGURO? Escribe OK para confirmar.'))return;
+  try{
+    await api('/api/invoices/'+state.company.id,{method:'DELETE'});
+    await api('/api/entries-all/'+state.company.id,{method:'DELETE'});
+    state.invoices=[];
+    state.entries=[];
+    toast('✓ Reset completo de '+state.company.name);
+    await loadData();
+    render();
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
 function getEmpresas(){try{return JSON.parse(localStorage.getItem('cf_empresas')||'[]');}catch(e){return [];}}
 function saveEmpresas(arr){try{localStorage.setItem('cf_empresas',JSON.stringify(arr));}catch(e){}}
 
