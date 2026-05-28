@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.7.1</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.7.2</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -5231,8 +5231,25 @@ function newGrupoAdmin(){
 }
 
 var testCuadreActivo = false;
-function runTestCuadre(){
+async function runTestCuadre(){
   testCuadreActivo = true;
+  // Guard anti-falso-descuadre: tras un deploy el test podía ejecutarse antes
+  // de que terminara loadInvoices() (sesión no lista / 401) y comparaba contra
+  // 0 facturas → diffs enormes en tests 6,7,9,11,12,15,16. Recargamos siempre
+  // las facturas antes de medir y, si siguen vacías habiendo asientos de
+  // factura, avisamos en vez de correr el test con datos incompletos.
+  await loadInvoices();
+  var hayAsientosFactura = state.entries.some(function(e){ return e.type === 'import_factura'; });
+  if(hayAsientosFactura && (state.invoices||[]).length === 0){
+    var avisoHtml = '<div class="card" style="margin-top:14px">'+
+      '<div class="card-h"><span>🧪 Test de cuadre fiscal</span>'+
+      '<span class="badge badge-r">⏳ Facturas no cargadas</span></div>'+
+      '<div class="card-b">Las facturas aún no se han cargado (sesión no lista o error de red). '+
+      'Pulsa <b>Ctrl+F5</b> y vuelve a ejecutar el test para evitar falsos descuadres.</div></div>';
+    var avisoDiv = $('testResults');
+    if(avisoDiv){ avisoDiv.innerHTML = avisoHtml; } else { toast('Facturas no cargadas, reintenta', 'err'); }
+    return;
+  }
   var ejercicio = String(state.ejercicio);
   var all = state.entries.filter(function(e){
     return !e.del && !e.deleted && e.date && e.date.startsWith(ejercicio);
