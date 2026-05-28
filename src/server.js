@@ -1400,166 +1400,294 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 // force redeploy Wed May 28 21:46:00 UTC 2026 — v10.4.0
 
-// ── GENERATE TEST DATA (round numbers for verification) ──
+// ── GENERATE TEST DATA v2 (complete accounting with round numbers) ──
 app.post('/api/generate-test-data/:companyId', authRequired, adminRequired, (req, res) => {
   const cid = req.params.companyId;
-  const year = req.body.year || '2026';
+  const Y = req.body.year || '2026';
   autoBackup('pre-test-data');
-  
-  const entries = [];
-  const invs = [];
+  const entries = [], invs = [];
   let n = 1;
   const eid = () => 'test_' + String(n++).padStart(4,'0');
   const M = ['01','02','03','04','05','06'];
+  const dt = (mo,dy) => Y+'-'+mo+'-'+String(dy).padStart(2,'0');
 
-  // VENTAS: 20 × 10,000€ = 200,000€
-  for (let i = 0; i < 20; i++) {
-    const ci = (i % 10) + 1;
-    const code = '4300' + String(ci).padStart(4,'0');
-    const name = 'CLIENTE TEST ' + String(ci).padStart(3,'0') + ' S.L.';
-    const cif = 'B' + (80000000 + ci);
-    const mo = M[Math.floor(i/4)%6];
-    const dy = String((i%28)+1).padStart(2,'0');
-    const fecha = year+'-'+mo+'-'+dy;
-    const nf = 'VT-'+year+'-'+String(i+1).padStart(3,'0');
-    const id = eid();
-    entries.push({ id, date:fecha, concept:'Fra. '+name+' ['+nf+']', type:'import_factura',
+  // ═══ 0. ASIENTO APERTURA — Capital 50,000€ ═══
+  entries.push({ id:eid(), date:dt('01',1), concept:'Asiento apertura ejercicio '+Y, type:'manual',
+    lines:[{a:'57200000',d:50000,h:0},{a:'10000000',d:0,h:50000}]});
+
+  // ═══ 1. VENTAS — Net 200,000€ base ═══
+  // 19 normales 21% × 10,000€ = 190,000€
+  for(let i=0;i<19;i++){
+    const ci=(i%10)+1, code='4300'+String(ci).padStart(4,'0');
+    const name='CLIENTE TEST '+String(ci).padStart(3,'0')+' S.L.';
+    const cif='B'+(80000000+ci);
+    const mo=M[Math.floor(i/4)%6], dy=(i%27)+1;
+    const nf='VT-'+Y+'-'+String(i+1).padStart(3,'0'), id=eid();
+    entries.push({id,date:dt(mo,dy),concept:'Fra. '+name+' ['+nf+']',type:'import_factura',
       lines:[{a:code,d:12100,h:0},{a:'47700000',d:0,h:2100},{a:'70000000',d:0,h:10000}]});
-    invs.push({ id:'inv_'+id, num_factura:nf, fecha, tipo:'emitida', is_abono:0,
-      tercero_nombre:name, tercero_cif:cif, tercero_cuenta:code,
-      base21:10000, iva21:2100, base10:0, iva10:0, base4:0, iva4:0, base0:0,
-      retencion:0, recargo:0, total:12100, entry_id:id, company_id:cid });
+    invs.push({id:'inv_'+id,num_factura:nf,fecha:dt(mo,dy),tipo:'emitida',is_abono:0,
+      tercero_nombre:name,tercero_cif:cif,tercero_cuenta:code,
+      base21:10000,iva21:2100,base10:0,iva10:0,base4:0,iva4:0,base0:0,
+      retencion:0,recargo:0,total:12100,entry_id:id,company_id:cid});
+  }
+  // 1 factura exenta (exportación) 10,000€
+  {const id=eid(),nf='VT-'+Y+'-020';
+  entries.push({id,date:dt('04',5),concept:'Fra. CLIENTE EXPORT S.L. ['+nf+']',type:'import_factura',
+    lines:[{a:'43000008',d:10000,h:0},{a:'70000000',d:0,h:10000}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('04',5),tipo:'emitida',is_abono:0,
+    tercero_nombre:'CLIENTE EXPORT S.L.',tercero_cif:'B80000011',tercero_cuenta:'43000008',
+    base21:0,iva21:0,base10:0,iva10:0,base4:0,iva4:0,base0:10000,
+    retencion:0,recargo:0,total:10000,entry_id:id,company_id:cid});}
+  // 1 factura multi-IVA: base21=5000 + base10=5000 = 10,000€
+  {const id=eid(),nf='VT-'+Y+'-021';
+  entries.push({id,date:dt('05',8),concept:'Fra. CLIENTE MIXTO S.L. ['+nf+']',type:'import_factura',
+    lines:[{a:'43000009',d:11550,h:0},{a:'47700000',d:0,h:1550},{a:'70000000',d:0,h:10000}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('05',8),tipo:'emitida',is_abono:0,
+    tercero_nombre:'CLIENTE MIXTO S.L.',tercero_cif:'B80000012',tercero_cuenta:'43000009',
+    base21:5000,iva21:1050,base10:5000,iva10:500,base4:0,iva4:0,base0:0,
+    retencion:0,recargo:0,total:11550,entry_id:id,company_id:cid});}
+  // 1 abono venta -10,000€ (mismo cliente que factura 1)
+  {const id=eid(),nf='AB-VT-'+Y+'-001';
+  entries.push({id,date:dt('03',15),concept:'Abono CLIENTE TEST 001 S.L. ['+nf+']',type:'import_factura',
+    lines:[{a:'43000001',d:0,h:12100},{a:'47700000',d:2100,h:0},{a:'70000000',d:10000,h:0}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('03',15),tipo:'emitida',is_abono:1,
+    tercero_nombre:'CLIENTE TEST 001 S.L.',tercero_cif:'B80000001',tercero_cuenta:'43000001',
+    base21:10000,iva21:2100,base10:0,iva10:0,base4:0,iva4:0,base0:0,
+    retencion:0,recargo:0,total:12100,entry_id:id,company_id:cid});}
+
+  // ═══ 2. COMPRAS — Net 100,000€ base ═══
+  const provs=[];
+  for(let i=1;i<=12;i++){
+    provs.push({code:'4000'+String(i).padStart(4,'0'),
+      name:'PROVEEDOR TEST '+String(i).padStart(3,'0')+' S.L.',cif:'A'+(10000000+i)});
+  }
+  // 7 normales 21%
+  for(let i=0;i<7;i++){
+    const p=provs[i],mo=M[i%6],dy=5+i,nf='RC-'+Y+'-'+String(i+1).padStart(3,'0'),id=eid();
+    entries.push({id,date:dt(mo,dy),concept:'Fra. '+p.name+' ['+nf+']',type:'import_factura',
+      lines:[{a:'60000000',d:10000,h:0},{a:'47200000',d:2100,h:0},{a:p.code,d:0,h:12100}]});
+    invs.push({id:'inv_'+id,num_factura:nf,fecha:dt(mo,dy),tipo:'recibida',is_abono:0,
+      tercero_nombre:p.name,tercero_cif:p.cif,tercero_cuenta:p.code,
+      base21:10000,iva21:2100,base10:0,iva10:0,base4:0,iva4:0,base0:0,
+      retencion:0,recargo:0,total:12100,entry_id:id,company_id:cid});
+  }
+  // 1 al 10%
+  {const p=provs[7],nf='RC-'+Y+'-008',id=eid();
+  entries.push({id,date:dt('02',12),concept:'Fra. '+p.name+' ['+nf+']',type:'import_factura',
+    lines:[{a:'60000000',d:10000,h:0},{a:'47200000',d:1000,h:0},{a:p.code,d:0,h:11000}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('02',12),tipo:'recibida',is_abono:0,
+    tercero_nombre:p.name,tercero_cif:p.cif,tercero_cuenta:p.code,
+    base21:0,iva21:0,base10:10000,iva10:1000,base4:0,iva4:0,base0:0,
+    retencion:0,recargo:0,total:11000,entry_id:id,company_id:cid});}
+  // 1 al 4%
+  {const p=provs[8],nf='RC-'+Y+'-009',id=eid();
+  entries.push({id,date:dt('03',8),concept:'Fra. '+p.name+' ['+nf+']',type:'import_factura',
+    lines:[{a:'60000000',d:10000,h:0},{a:'47200000',d:400,h:0},{a:p.code,d:0,h:10400}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('03',8),tipo:'recibida',is_abono:0,
+    tercero_nombre:p.name,tercero_cif:p.cif,tercero_cuenta:p.code,
+    base21:0,iva21:0,base10:0,iva10:0,base4:10000,iva4:400,base0:0,
+    retencion:0,recargo:0,total:10400,entry_id:id,company_id:cid});}
+  // 1 con retención IRPF 15%: base 10,000€
+  {const p=provs[9],nf='RC-'+Y+'-010',id=eid();
+  const ret=1500; // 15% de 10,000
+  entries.push({id,date:dt('04',10),concept:'Fra. '+p.name+' ['+nf+'] (con ret.)',type:'import_factura',
+    lines:[{a:'60000000',d:10000,h:0},{a:'47200000',d:2100,h:0},{a:'47510000',d:0,h:ret},{a:p.code,d:0,h:10600}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('04',10),tipo:'recibida',is_abono:0,
+    tercero_nombre:p.name,tercero_cif:p.cif,tercero_cuenta:p.code,
+    base21:10000,iva21:2100,base10:0,iva10:0,base4:0,iva4:0,base0:0,
+    retencion:ret,recargo:0,total:10600,entry_id:id,company_id:cid});}
+  // 1 con recargo equivalencia 5.2%: base 10,000€
+  {const p=provs[10],nf='RC-'+Y+'-011',id=eid();
+  const rec=520; // 5.2% de 10,000
+  entries.push({id,date:dt('05',14),concept:'Fra. '+p.name+' ['+nf+'] (con rec.)',type:'import_factura',
+    lines:[{a:'60000000',d:10520,h:0},{a:'47200000',d:2100,h:0},{a:p.code,d:0,h:12620}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('05',14),tipo:'recibida',is_abono:0,
+    tercero_nombre:p.name,tercero_cif:p.cif,tercero_cuenta:p.code,
+    base21:10000,iva21:2100,base10:0,iva10:0,base4:0,iva4:0,base0:0,
+    retencion:0,recargo:rec,total:12620,entry_id:id,company_id:cid});}
+  // 1 abono compra -10,000€ (mismo proveedor que factura 1)
+  {const p=provs[0],nf='AB-RC-'+Y+'-001',id=eid();
+  entries.push({id,date:dt('03',20),concept:'Abono '+p.name+' ['+nf+']',type:'import_factura',
+    lines:[{a:'60000000',d:0,h:10000},{a:'47200000',d:0,h:2100},{a:p.code,d:12100,h:0}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('03',20),tipo:'recibida',is_abono:1,
+    tercero_nombre:p.name,tercero_cif:p.cif,tercero_cuenta:p.code,
+    base21:10000,iva21:2100,base10:0,iva10:0,base4:0,iva4:0,base0:0,
+    retencion:0,recargo:0,total:12100,entry_id:id,company_id:cid});}
+  // 1 factura multi-IVA: base21=5000 + base10=5000
+  {const p=provs[11],nf='RC-'+Y+'-012',id=eid();
+  entries.push({id,date:dt('06',3),concept:'Fra. '+p.name+' ['+nf+'] (multi-IVA)',type:'import_factura',
+    lines:[{a:'60000000',d:10000,h:0},{a:'47200000',d:1550,h:0},{a:p.code,d:0,h:11550}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('06',3),tipo:'recibida',is_abono:0,
+    tercero_nombre:p.name,tercero_cif:p.cif,tercero_cuenta:p.code,
+    base21:5000,iva21:1050,base10:5000,iva10:500,base4:0,iva4:0,base0:0,
+    retencion:0,recargo:0,total:11550,entry_id:id,company_id:cid});}
+
+  // ═══ 3. GASTOS — 10 × 1,000€ = 10,000€ ═══
+  const gAccts=['62100000','62200000','62300000','62400000','62500000','62600000','62700000','62800000','62900000','62900000'];
+  const gNames=['Alquiler','Reparaciones','Asesoría','Transporte','Seguros','Banca','Publicidad','Suministros','Telefonía','Limpieza'];
+  for(let i=0;i<10;i++){
+    const id=eid(),mo=M[i%6],dy=15+i;
+    entries.push({id,date:dt(mo,dy),concept:gNames[i],type:'manual',
+      lines:[{a:gAccts[i],d:1000,h:0},{a:'47200000',d:210,h:0},{a:'41000000',d:0,h:1210}]});
   }
 
-  // COMPRAS: 8×21% + 1×10% + 1×4% = 100,000€
-  const rates = [21,21,21,21,21,21,21,21,10,4];
-  for (let i = 0; i < 10; i++) {
-    const code = '4000' + String(i+1).padStart(4,'0');
-    const name = 'PROVEEDOR TEST ' + String(i+1).padStart(3,'0') + ' S.L.';
-    const cif = 'A' + (10000000 + i + 1);
-    const mo = M[Math.floor(i/2)%6];
-    const dy = String((i%28)+5).padStart(2,'0');
-    const fecha = year+'-'+mo+'-'+dy;
-    const nf = 'RC-'+year+'-'+String(i+1).padStart(3,'0');
-    const id = eid();
-    const r = rates[i]; const iva = 10000*r/100; const tot = 10000+iva;
-    entries.push({ id, date:fecha, concept:'Fra. '+name+' ['+nf+']', type:'import_factura',
-      lines:[{a:'60000000',d:10000,h:0},{a:'47200000',d:iva,h:0},{a:code,d:0,h:tot}]});
-    const inv = { id:'inv_'+id, num_factura:nf, fecha, tipo:'recibida', is_abono:0,
-      tercero_nombre:name, tercero_cif:cif, tercero_cuenta:code,
-      base21:0, iva21:0, base10:0, iva10:0, base4:0, iva4:0, base0:0,
-      retencion:0, recargo:0, total:tot, entry_id:id, company_id:cid };
-    if(r===21){inv.base21=10000;inv.iva21=iva;}
-    else if(r===10){inv.base10=10000;inv.iva10=iva;}
-    else{inv.base4=10000;inv.iva4=iva;}
-    invs.push(inv);
-  }
-
-  // GASTOS: 10 × 1,000€ = 10,000€
-  const gastos = ['62100000','62200000','62300000','62400000','62500000',
-    '62600000','62700000','62800000','62900000','62900000'];
-  const gNames = ['Alquiler','Reparaciones','Asesoría','Transporte','Seguros',
-    'Banca','Publicidad','Suministros','Telefonía','Otros servicios'];
-  for (let i = 0; i < 10; i++) {
-    const id = eid();
-    const mo = M[i%6]; const dy = String(15+i).padStart(2,'0');
-    entries.push({ id, date:year+'-'+mo+'-'+dy, concept:gNames[i], type:'manual',
-      lines:[{a:gastos[i],d:1000,h:0},{a:'47200000',d:210,h:0},{a:'41000000',d:0,h:1210}]});
-  }
-
-  // NÓMINAS: 5 meses × 10,000€ bruto = 50,000€ + SS 15,000€
-  for (let m = 0; m < 5; m++) {
-    const mo = M[m]; const f = year+'-'+mo+'-28';
-    entries.push({ id:eid(), date:f, concept:'Nóminas '+mo+'/'+year, type:'manual',
+  // ═══ 4. NÓMINAS — 5 × 10,000€ = 50,000€ + SS 15,000€ ═══
+  for(let m=0;m<5;m++){
+    const mo=M[m],f=dt(mo,28);
+    entries.push({id:eid(),date:f,concept:'Nóminas '+mo+'/'+Y,type:'manual',
       lines:[{a:'64000000',d:10000,h:0},{a:'47510000',d:0,h:2000},{a:'47100000',d:0,h:1000},{a:'46500000',d:0,h:7000}]});
-    entries.push({ id:eid(), date:f, concept:'SS empresa '+mo+'/'+year, type:'manual',
+    entries.push({id:eid(),date:f,concept:'SS empresa '+mo+'/'+Y,type:'manual',
       lines:[{a:'64200000',d:3000,h:0},{a:'47100000',d:0,h:3000}]});
-    entries.push({ id:eid(), date:f, concept:'Pago nóminas '+mo+'/'+year, type:'manual',
+    entries.push({id:eid(),date:f,concept:'Pago nóminas '+mo+'/'+Y,type:'manual',
       lines:[{a:'46500000',d:7000,h:0},{a:'57200000',d:0,h:7000}]});
-    entries.push({ id:eid(), date:f, concept:'Pago SS '+mo+'/'+year, type:'manual',
+    entries.push({id:eid(),date:f,concept:'Pago SS '+mo+'/'+Y,type:'manual',
       lines:[{a:'47100000',d:4000,h:0},{a:'57200000',d:0,h:4000}]});
   }
 
-  // PRÉSTAMO: alta 50,000€ + 6 cuotas
-  entries.push({ id:eid(), date:year+'-01-15', concept:'Alta préstamo bancario', type:'manual',
+  // ═══ 5. PRÉSTAMO — 50,000€ + 6 cuotas ═══
+  entries.push({id:eid(),date:dt('01',15),concept:'Alta préstamo bancario',type:'manual',
     lines:[{a:'57200000',d:50000,h:0},{a:'17000000',d:0,h:50000}]});
-  for (let m = 0; m < 6; m++) {
-    entries.push({ id:eid(), date:year+'-'+M[m]+'-05', concept:'Cuota préstamo '+(m+1)+'/6', type:'manual',
+  for(let m=0;m<6;m++){
+    entries.push({id:eid(),date:dt(M[m],5),concept:'Cuota préstamo '+(m+1)+'/6',type:'manual',
       lines:[{a:'17000000',d:5000,h:0},{a:'66200000',d:500,h:0},{a:'57200000',d:0,h:5500}]});
   }
 
-  // ACTIVOS: vehículo 15,000€ + equipos 5,000€ = 20,000€
-  entries.push({ id:eid(), date:year+'-02-10', concept:'Compra vehículo', type:'manual',
+  // ═══ 6. PÓLIZA DE CRÉDITO — disposición 20,000€, devolución 10,000€ ═══
+  entries.push({id:eid(),date:dt('02',1),concept:'Disposición póliza crédito',type:'manual',
+    lines:[{a:'57200000',d:20000,h:0},{a:'52000000',d:0,h:20000}]});
+  entries.push({id:eid(),date:dt('04',1),concept:'Devolución parcial póliza',type:'manual',
+    lines:[{a:'52000000',d:10000,h:0},{a:'57200000',d:0,h:10000}]});
+  entries.push({id:eid(),date:dt('05',1),concept:'Intereses póliza crédito',type:'manual',
+    lines:[{a:'66200000',d:500,h:0},{a:'57200000',d:0,h:500}]});
+
+  // ═══ 7. LEASING — 10,000€ valor, 5 cuotas ═══
+  entries.push({id:eid(),date:dt('01',20),concept:'Alta leasing maquinaria',type:'manual',
+    lines:[{a:'21300000',d:10000,h:0},{a:'47200000',d:2100,h:0},{a:'17400000',d:0,h:12100}]});
+  for(let m=0;m<5;m++){
+    entries.push({id:eid(),date:dt(M[m],20),concept:'Cuota leasing '+(m+1)+'/5',type:'manual',
+      lines:[{a:'17400000',d:2420,h:0},{a:'57200000',d:0,h:2420}]});
+  }
+
+  // ═══ 8. ACTIVOS — vehículo 15,000€ + equipos 5,000€ ═══
+  entries.push({id:eid(),date:dt('02',10),concept:'Compra vehículo',type:'manual',
     lines:[{a:'21800000',d:15000,h:0},{a:'47200000',d:3150,h:0},{a:'52300000',d:0,h:18150}]});
-  entries.push({ id:eid(), date:year+'-03-20', concept:'Compra equipos informáticos', type:'manual',
+  entries.push({id:eid(),date:dt('03',20),concept:'Compra equipos informáticos',type:'manual',
     lines:[{a:'21700000',d:5000,h:0},{a:'47200000',d:1050,h:0},{a:'52300000',d:0,h:6050}]});
-  entries.push({ id:eid(), date:year+'-02-15', concept:'Pago vehículo', type:'manual',
+  entries.push({id:eid(),date:dt('02',15),concept:'Pago vehículo',type:'manual',
     lines:[{a:'52300000',d:18150,h:0},{a:'57200000',d:0,h:18150}]});
-  entries.push({ id:eid(), date:year+'-03-25', concept:'Pago equipos', type:'manual',
+  entries.push({id:eid(),date:dt('03',25),concept:'Pago equipos',type:'manual',
     lines:[{a:'52300000',d:6050,h:0},{a:'57200000',d:0,h:6050}]});
 
-  // COBROS: 10 × 15,000€ banco + 2 × 5,000€ caja = 160,000€
-  for (let i = 0; i < 10; i++) {
-    const code = '4300'+String((i%10)+1).padStart(4,'0');
-    const name = 'CLIENTE TEST '+String((i%10)+1).padStart(3,'0')+' S.L.';
-    entries.push({ id:eid(), date:year+'-'+M[(i+1)%6]+'-'+String(10+i).padStart(2,'0'),
-      concept:'Cobro '+name, type:'manual',
+  // ═══ 9. AMORTIZACIONES — 6 meses ═══
+  entries.push({id:eid(),date:dt('06',30),concept:'Amortización vehículo (semestre)',type:'manual',
+    lines:[{a:'68100000',d:1500,h:0},{a:'28100000',d:0,h:1500}]});
+  entries.push({id:eid(),date:dt('06',30),concept:'Amortización equipos (semestre)',type:'manual',
+    lines:[{a:'68100000',d:500,h:0},{a:'28100000',d:0,h:500}]});
+  entries.push({id:eid(),date:dt('06',30),concept:'Amortización maquinaria leasing (semestre)',type:'manual',
+    lines:[{a:'68100000',d:1000,h:0},{a:'28100000',d:0,h:1000}]});
+
+  // ═══ 10. FIANZA alquiler — 2,000€ ═══
+  entries.push({id:eid(),date:dt('01',2),concept:'Fianza alquiler local',type:'manual',
+    lines:[{a:'26000000',d:2000,h:0},{a:'57200000',d:0,h:2000}]});
+
+  // ═══ 11. VARIACIÓN EXISTENCIAS — 5,000€ ═══
+  entries.push({id:eid(),date:dt('06',30),concept:'Variación existencias mercaderías',type:'manual',
+    lines:[{a:'30000000',d:5000,h:0},{a:'61000000',d:0,h:5000}]});
+
+  // ═══ 12. COBROS CLIENTES — 150,000€ banco + 10,000€ caja ═══
+  for(let i=0;i<10;i++){
+    const code='4300'+String((i%10)+1).padStart(4,'0');
+    entries.push({id:eid(),date:dt(M[(i+1)%6],10+i),concept:'Cobro CLIENTE TEST '+String((i%10)+1).padStart(3,'0'),type:'manual',
       lines:[{a:'57200000',d:15000,h:0},{a:code,d:0,h:15000}]});
   }
-  for (let i = 0; i < 2; i++) {
-    const code = '4300'+String(i+1).padStart(4,'0');
-    entries.push({ id:eid(), date:year+'-'+M[i+2]+'-20', concept:'Cobro caja', type:'manual',
-      lines:[{a:'57000000',d:5000,h:0},{a:code,d:0,h:5000}]});
-  }
+  // Cobros caja
+  entries.push({id:eid(),date:dt('03',20),concept:'Cobro caja CLIENTE TEST 001',type:'manual',
+    lines:[{a:'57000000',d:5000,h:0},{a:'43000001',d:0,h:5000}]});
+  entries.push({id:eid(),date:dt('04',20),concept:'Cobro caja CLIENTE TEST 002',type:'manual',
+    lines:[{a:'57000000',d:5000,h:0},{a:'43000002',d:0,h:5000}]});
+  // Cobro PARCIAL — 5,000€ de una factura de 12,100€
+  entries.push({id:eid(),date:dt('05',25),concept:'Cobro parcial CLIENTE TEST 003',type:'manual',
+    lines:[{a:'57200000',d:5000,h:0},{a:'43000003',d:0,h:5000}]});
 
-  // PAGOS PROVEEDORES: 8 × 10,000€ = 80,000€
-  for (let i = 0; i < 8; i++) {
-    const code = '4000'+String(i+1).padStart(4,'0');
-    const name = 'PROVEEDOR TEST '+String(i+1).padStart(3,'0')+' S.L.';
-    entries.push({ id:eid(), date:year+'-'+M[(i+1)%6]+'-'+String(12+i).padStart(2,'0'),
-      concept:'Pago '+name, type:'manual',
+  // ═══ 13. PAGOS PROVEEDORES — 80,000€ ═══
+  for(let i=0;i<8;i++){
+    const code='4000'+String(i+1).padStart(4,'0');
+    entries.push({id:eid(),date:dt(M[(i+1)%6],12+i),concept:'Pago PROVEEDOR TEST '+String(i+1).padStart(3,'0'),type:'manual',
       lines:[{a:code,d:10000,h:0},{a:'57200000',d:0,h:10000}]});
   }
+  // Pago PARCIAL — 3,000€ de una factura de 12,100€
+  entries.push({id:eid(),date:dt('06',10),concept:'Pago parcial PROVEEDOR TEST 009',type:'manual',
+    lines:[{a:'40000009',d:3000,h:0},{a:'57200000',d:0,h:3000}]});
 
-  // PAGOS GASTOS: 10 × 1,210€ = 12,100€
-  for (let i = 0; i < 10; i++) {
-    entries.push({ id:eid(), date:year+'-'+M[i%6]+'-'+String(20+(i%8)).padStart(2,'0'),
-      concept:'Pago '+gNames[i], type:'manual',
+  // ═══ 14. PAGOS GASTOS ═══
+  for(let i=0;i<10;i++){
+    entries.push({id:eid(),date:dt(M[i%6],20+(i%8)),concept:'Pago '+gNames[i],type:'manual',
       lines:[{a:'41000000',d:1210,h:0},{a:'57200000',d:0,h:1210}]});
   }
 
-  // Verify all entries balance
+  // ═══ 15. DESCUENTO PRONTO PAGO ═══
+  entries.push({id:eid(),date:dt('04',15),concept:'Dto pronto pago PROVEEDOR TEST 001',type:'manual',
+    lines:[{a:'40000001',d:0,h:500},{a:'60600000',d:0,h:500}]});
+
+  // ═══ 16. IMPUESTO SOCIEDADES — provisión 5,000€ ═══
+  entries.push({id:eid(),date:dt('06',30),concept:'Provisión impuesto sociedades',type:'manual',
+    lines:[{a:'63000000',d:5000,h:0},{a:'47520000',d:0,h:5000}]});
+
+  // ═══ 17. PAGO IRPF TRIMESTRAL ═══
+  entries.push({id:eid(),date:dt('04',20),concept:'Pago IRPF 1T (modelo 111)',type:'manual',
+    lines:[{a:'47510000',d:6000,h:0},{a:'57200000',d:0,h:6000}]});
+
+  // ═══ 18. FACTURA CON REDONDEO (céntimos) ═══
+  {const id=eid(),nf='RC-'+Y+'-013';
+  // 3 × 33.33€ = 99.99€ base, IVA 21% = 21.00€, total 120.99€
+  entries.push({id,date:dt('05',22),concept:'Fra. PROV REDONDEO S.L. ['+nf+']',type:'import_factura',
+    lines:[{a:'60000000',d:99.99,h:0},{a:'47200000',d:21,h:0},{a:'40000001',d:0,h:120.99}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('05',22),tipo:'recibida',is_abono:0,
+    tercero_nombre:'PROVEEDOR TEST 001 S.L.',tercero_cif:'A10000001',tercero_cuenta:'40000001',
+    base21:99.99,iva21:21,base10:0,iva10:0,base4:0,iva4:0,base0:0,
+    retencion:0,recargo:0,total:120.99,entry_id:id,company_id:cid});}
+
+  // ═══ 19. FACTURA TOTAL 0€ (compensación) ═══
+  {const id=eid(),nf='RC-'+Y+'-014';
+  entries.push({id,date:dt('06',15),concept:'Fra. compensación PROVEEDOR TEST 002 ['+nf+']',type:'import_factura',
+    lines:[{a:'60000000',d:0,h:0},{a:'47200000',d:0,h:0},{a:'40000002',d:0,h:0}]});
+  invs.push({id:'inv_'+id,num_factura:nf,fecha:dt('06',15),tipo:'recibida',is_abono:0,
+    tercero_nombre:'PROVEEDOR TEST 002 S.L.',tercero_cif:'A10000002',tercero_cuenta:'40000002',
+    base21:0,iva21:0,base10:0,iva10:0,base4:0,iva4:0,base0:0,
+    retencion:0,recargo:0,total:0,entry_id:id,company_id:cid});}
+
+  // ═══ VERIFY ALL ENTRIES BALANCE ═══
   let errors = 0;
   entries.forEach(e => {
-    const d = e.lines.reduce((s,l) => s + l.d, 0);
-    const h = e.lines.reduce((s,l) => s + l.h, 0);
-    if (Math.abs(d-h) > 0.01) { errors++; console.error('DESCUADRE:', e.id, e.concept, d, h); }
+    const d = Math.round(e.lines.reduce((s,l) => s + l.d, 0)*100)/100;
+    const h = Math.round(e.lines.reduce((s,l) => s + l.h, 0)*100)/100;
+    if(Math.abs(d-h) > 0.01){ errors++; console.error('DESCUADRE:',e.id,e.concept,d,h); }
   });
-  if (errors > 0) return res.status(400).json({ error: errors + ' asientos descuadrados' });
+  if(errors > 0) return res.status(400).json({ error: errors + ' asientos descuadrados' });
 
-  // Create accounts
+  // ═══ CREATE ACCOUNTS ═══
   const accts = [];
-  for (let i = 1; i <= 10; i++) {
-    accts.push(['4300'+String(i).padStart(4,'0'), 'CLIENTE TEST '+String(i).padStart(3,'0')+' S.L.', 4, 'A']);
-    accts.push(['4000'+String(i).padStart(4,'0'), 'PROVEEDOR TEST '+String(i).padStart(3,'0')+' S.L.', 4, 'P']);
+  for(let i=1;i<=12;i++){
+    accts.push(['4300'+String(i).padStart(4,'0'),'CLIENTE TEST '+String(i).padStart(3,'0')+' S.L.',4,'A']);
+    accts.push(['4000'+String(i).padStart(4,'0'),'PROVEEDOR TEST '+String(i).padStart(3,'0')+' S.L.',4,'P']);
   }
   const insAcct = db.prepare('INSERT OR IGNORE INTO accounts VALUES (?,?,?,?,?)');
-  accts.forEach(a => insAcct.run(a[0], a[1], a[2], a[3], cid));
+  accts.forEach(a => insAcct.run(a[0],a[1],a[2],a[3],cid));
 
-  // Insert entries
+  // ═══ INSERT ENTRIES ═══
   const insEntry = db.prepare('INSERT OR REPLACE INTO entries (id,date,concept,type,company_id,deleted) VALUES (?,?,?,?,?,0)');
   const delLines = db.prepare('DELETE FROM entry_lines WHERE entry_id = ?');
   const insLine = db.prepare('INSERT INTO entry_lines (entry_id,account,debit,credit,meta) VALUES (?,?,?,?,?)');
   const tx = db.transaction(() => {
     entries.forEach(e => {
-      insEntry.run(e.id, e.date, e.concept, e.type, cid);
+      insEntry.run(e.id,e.date,e.concept,e.type,cid);
       delLines.run(e.id);
-      e.lines.forEach(l => insLine.run(e.id, l.a, l.d, l.h, ''));
+      e.lines.forEach(l => insLine.run(e.id,l.a,l.d,l.h,''));
     });
   });
   tx();
 
-  // Insert invoices
+  // ═══ INSERT INVOICES ═══
   const insInv = db.prepare(`INSERT OR REPLACE INTO invoices 
     (id,num_factura,fecha,tipo,is_abono,tercero_nombre,tercero_cif,tercero_cuenta,
      base21,iva21,base10,iva10,base4,iva4,base0,retencion,recargo,total,
@@ -1567,18 +1695,35 @@ app.post('/api/generate-test-data/:companyId', authRequired, adminRequired, (req
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   const tx2 = db.transaction(() => {
     invs.forEach(f => {
-      insInv.run(f.id, f.num_factura, f.fecha, f.tipo, f.is_abono,
-        f.tercero_nombre, f.tercero_cif, f.tercero_cuenta,
-        f.base21, f.iva21, f.base10, f.iva10, f.base4, f.iva4, f.base0,
-        f.retencion, f.recargo, f.total, '', '', '', f.entry_id, cid, 'test-generator');
+      insInv.run(f.id,f.num_factura,f.fecha,f.tipo,f.is_abono,
+        f.tercero_nombre,f.tercero_cif,f.tercero_cuenta,
+        f.base21,f.iva21,f.base10,f.iva10,f.base4,f.iva4,f.base0,
+        f.retencion,f.recargo,f.total,'','','',f.entry_id,cid,'test-generator');
     });
   });
   tx2();
 
   auditLog(req, 'generate-test-data', entries.length + ' entries, ' + invs.length + ' invoices');
-  console.log('✓ Test data generated: ' + entries.length + ' entries, ' + invs.length + ' invoices for ' + cid);
+  console.log('✓ Test data v2: ' + entries.length + ' entries, ' + invs.length + ' invoices for ' + cid);
   
-  res.json({ ok: true, entries: entries.length, invoices: invs.length,
-    totals: { ventas: 200000, compras: 100000, gastos: 10000, nominas: 50000, ss_empresa: 15000, prestamo: 50000, activos: 20000, intereses: 3000 }
+  res.json({ ok:true, entries:entries.length, invoices:invs.length,
+    resumen:{
+      ventas_base:'200.000€ (19 normales + 1 exenta + 1 multi-IVA - 1 abono)',
+      compras_base:'100.000€ (7×21% + 1×10% + 1×4% + 1 ret + 1 rec + 1 multi - 1 abono + 1 redondeo)',
+      gastos:'10.000€ (10 tipos)',
+      nominas:'50.000€ bruto + 15.000€ SS empresa',
+      prestamo:'50.000€ (6 cuotas 5.000€+500€ int)',
+      poliza:'20.000€ disp, 10.000€ devuelto',
+      leasing:'10.000€ (5 cuotas)',
+      activos:'20.000€ (vehículo+equipos)',
+      amortizaciones:'3.000€',
+      fianza:'2.000€',
+      existencias:'5.000€',
+      imp_sociedades:'5.000€',
+      cobros:'165.000€ (150k banco+10k caja+5k parcial)',
+      pagos:'95.000€ (80k proveedores+3k parcial+12.1k gastos)',
+      descuento:'500€ pronto pago'
+    }
   });
 });
+
