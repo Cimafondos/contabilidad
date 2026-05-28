@@ -1716,6 +1716,7 @@ async function saveEntry(){
   var tags='';try{tags=$('eTags').value.trim();}catch(e){}
   await api('/api/entries/'+state.company.id,{method:'POST',body:{id:id,date:date,concept:concept,type:entryMode==='edit'?(editingEntry.type||'manual'):'manual',lines:lines,tags:tags}});
   $('entryModal').remove();await loadData();checkIntegrity();auditLog(entryMode==='edit'?'editar_asiento':'crear_asiento',concept);toast(entryMode==='edit'?'Asiento guardado':'Asiento creado');render();
+  if(testCuadreActivo){ setTimeout(function(){ try{ runTestCuadre(); }catch(e){} }, 100); }
 }
 
 // ═══ ASSISTANT with file upload ═══
@@ -5180,7 +5181,9 @@ function newGrupoAdmin(){
   }).catch(function(e){toast('Error: '+e.message,'error');});
 }
 
+var testCuadreActivo = false;
 function runTestCuadre(){
+  testCuadreActivo = true;
   var ejercicio = String(state.ejercicio);
   var all = state.entries.filter(function(e){
     return !e.del && !e.deleted && e.date && e.date.startsWith(ejercicio);
@@ -5433,10 +5436,12 @@ function runTestCuadre(){
   }
   var detalleCompras = 'Base facturas: '+fmt(comprasFactBase)+'\u20ac \u00b7 Asientos G6: '+fmt(comprasAsientos)+'\u20ac \u00b7 Diff: '+fmt(diffCompras)+'\u20ac';
   if(culpablesG6.length){
-    detalleCompras += ' \u00b7 Origen: ' + culpablesG6.slice(0,5).map(function(c){
-      return (c.e.concept || c.e.id) + ' (' + c.e.date + '): ' + fmt(c.delta) + '\u20ac [' + c.motivo + ']';
-    }).join(' \u00b7 ');
-    if(culpablesG6.length > 5) detalleCompras += ' \u00b7 (+'+(culpablesG6.length-5)+' m\u00e1s)';
+    detalleCompras += '<br><span style="color:var(--rd);font-weight:600">Origen del descuadre:</span>';
+    culpablesG6.slice(0,10).forEach(function(c){
+      detalleCompras += '<br>\u2022 ' + (c.e.concept || c.e.id) + ' (' + c.e.date + '): <strong>' + fmt(c.delta) + '\u20ac</strong> [' + c.motivo + '] ' +
+        '<button class="btn btn-p" style="padding:1px 8px;font-size:10px;margin-left:6px" onclick="editEntry(\'' + c.e.id + '\')">\u270f\ufe0f Editar asiento</button>';
+    });
+    if(culpablesG6.length > 10) detalleCompras += '<br>\u00b7 (+'+(culpablesG6.length-10)+' m\u00e1s)';
   }
   results.push({
     name: 'Compras: Facturas recibidas ↔ Asientos G6',
