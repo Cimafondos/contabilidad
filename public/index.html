@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.14.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.15.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2668,7 +2668,7 @@ function processImportRows(rows){
     if(Math.abs(amt)>0.005||concept!=='Movimiento'){
       amt=Math.round(amt*100)/100;
       var prop=proponerContrapartida(concept,beneficiario);
-      txns.push({date:dateStr,concept:concept,amount:amt,saldo:saldo,beneficiario:beneficiario,cuenta:prop.cuenta,motivo:prop.motivo,motivoDet:prop.motivoDet,entryId:bankEntryId(dateStr,amt,saldo,concept)});
+      txns.push({date:dateStr,concept:concept,amount:amt,saldo:saldo,beneficiario:beneficiario,cuenta:prop.cuenta,motivo:prop.motivo,motivoDet:prop.motivoDet,score:prop.score,entryId:bankEntryId(dateStr,amt,saldo,concept)});
     }
   }
   if(!txns.length&&saltadas>0){toast('No se reconocieron movimientos (revisa que el archivo tenga columnas de Fecha e Importe)','error');return;}
@@ -2695,73 +2695,98 @@ function _normNombreTercero(s){
     .replace(/\s+/g,' ').trim();
 }
 
+// Normaliza el concepto bancario para comparar: MAYÚSCULAS sin acentos, quita prefijos de
+// ruido (RECIBO, ADEUDO, TRANSFERENCIA, PAGO/COMPRA, BIZUM, SEPA…), fechas y referencias
+// numéricas largas. Así reglas y diccionario aciertan aunque el banco cambie el formato.
+function _normConcepto(s){
+  var t=String(s||'').toUpperCase()
+    .replace(/[ÁÀÄÂ]/g,'A').replace(/[ÉÈËÊ]/g,'E').replace(/[ÍÌÏÎ]/g,'I').replace(/[ÓÒÖÔ]/g,'O').replace(/[ÚÙÜÛ]/g,'U')
+    .replace(/[^A-Z0-9Ñ\s]/g,' ');
+  t=t.replace(/\b\d{1,2}[\s\/\-]\d{1,2}([\s\/\-]\d{2,4})?\b/g,' ').replace(/\b\d{6,}\b/g,' '); // fechas y refs largas
+  t=t.replace(/\b(ADEUDO|ADEUDOS|RECIBO|RECIB|DOMICILIACION|DOMICILIADO|DOMIC|SEPA|MANDATO|REFERENCIA|REF|CONCEPTO|TRANSFERENCIA|TRANSF|TRANSFER|TRASPASO|PAGO|PAGOS|COMPRA|COMPRAS|ABONO|CARGO|BIZUM|LIQUIDACION|FACTURA|FRA|NUM|ORDENANTE|BENEFICIARIO|EMISOR)\b/g,' ');
+  return t.replace(/\s+/g,' ').trim();
+}
+// Token estable del concepto (las 2 primeras palabras significativas) para aprender cuando
+// no hay un beneficiario claro.
+function _tokenConcepto(s){
+  var w=_normConcepto(s).split(' ').filter(function(x){return x.length>=4&&!/^\d+$/.test(x);});
+  return w.slice(0,2).join(' ');
+}
+
 // Motor de propuesta de contrapartida para un movimiento bancario.
-// Cascada (primer acierto gana): reglas usuario/aprendidas → maestros → reglas por
-// defecto (conceptos) → 555. Solo se usa la CUENTA, nunca el IVA (el asiento del banco
-// no lleva IVA). Devuelve {cuenta, motivo, motivoDet}.
+// Cascada (primer acierto gana): reglas usuario/aprendidas → maestros (CIF/nombre) → reglas
+// por defecto → diccionario incrustado → 555. Solo usa la CUENTA, nunca el IVA. Devuelve
+// {cuenta, motivo, motivoDet, score} donde score = alta | media | pendiente (semáforo).
 function proponerContrapartida(texto,beneficiario){
   var am={};(state.accounts||[]).forEach(function(a){am[a.code]=a;});
   var existe=function(c){return !!(c&&am[c]);};
-  var hay=((beneficiario||'')+' '+(texto||'')).trim();
+  var hayRaw=((beneficiario||'')+' '+(texto||'')).toUpperCase().trim();
+  var hayNorm=_normConcepto((beneficiario||'')+' '+(texto||''));
+  var test=function(p){if(!p)return false;try{var re=new RegExp(p,'i');return re.test(hayNorm)||re.test(hayRaw);}catch(e){return false;}};
   var rules=state.rules||[];
-  // 1) Reglas del usuario / aprendidas (id que NO empieza por 'r_d')
+  // 1) Reglas del usuario / aprendidas (id que NO empieza por 'r_d') → confianza ALTA
   for(var i=0;i<rules.length;i++){var r=rules[i];if((''+r.id).indexOf('r_d')===0)continue;
-    try{if(r.p&&new RegExp(r.p,'i').test(hay)&&existe(r.a))return {cuenta:r.a,motivo:'Regla',motivoDet:r.d||r.p};}catch(e){}}
-  // 2) Maestros (proveedor/cliente) por CIF o nombre normalizado
+    if(test(r.p)&&existe(r.a))return {cuenta:r.a,motivo:'Regla',motivoDet:r.d||r.p,score:'alta'};}
+  // 2) Maestros (proveedor/cliente): por CIF → ALTA, por nombre → MEDIA
   if(beneficiario){
     try{loadMasters();}catch(e){}
     var nb=_normNombreTercero(beneficiario);
     var cifM=(String(beneficiario).match(/\b([A-Z]\d{7,8}[A-Z]?|\d{8}[A-Z])\b/i)||[])[0];
     var pools=[{arr:(typeof masters!=='undefined'&&masters.supplier)||[],motivo:'Proveedor'},{arr:(typeof masters!=='undefined'&&masters.client)||[],motivo:'Cliente'}];
     for(var p=0;p<pools.length;p++){
+      var byCif=false;
       var m=pools[p].arr.find(function(x){
-        if(cifM&&x.cif&&String(x.cif).toUpperCase()===cifM.toUpperCase())return true;
+        if(cifM&&x.cif&&String(x.cif).toUpperCase()===cifM.toUpperCase()){byCif=true;return true;}
         var nx=_normNombreTercero(x.name);
         return nx&&nb&&nx.length>=4&&(nx===nb||nx.indexOf(nb)>=0||nb.indexOf(nx)>=0);
       });
-      if(m&&existe(m.account))return {cuenta:m.account,motivo:pools[p].motivo,motivoDet:m.name};
+      if(m&&existe(m.account))return {cuenta:m.account,motivo:pools[p].motivo,motivoDet:m.name,score:byCif?'alta':'media'};
     }
   }
-  // 3) Reglas por defecto (diccionario de conceptos: nómina, SS, suministros, etc.)
+  // 3) Reglas por defecto sembradas r_d → MEDIA
   for(var j=0;j<rules.length;j++){var rd=rules[j];if((''+rd.id).indexOf('r_d')!==0)continue;
-    try{if(rd.p&&new RegExp(rd.p,'i').test(hay)&&existe(rd.a))return {cuenta:rd.a,motivo:'Concepto',motivoDet:rd.d||rd.p};}catch(e){}}
-  // 3.5) Diccionario de conceptos INCRUSTADO (no depende de reglas sembradas). Cubre los
-  // gastos/suministros más habituales para que la importación proponga algo aunque la empresa
-  // no tenga reglas r_d. Solo se aplica si la cuenta existe en el plan; si no, sigue a 555.
+    if(test(rd.p)&&existe(rd.a))return {cuenta:rd.a,motivo:'Concepto',motivoDet:rd.d||rd.p,score:'media'};}
+  // 3.5) Diccionario incrustado AMPLIADO (no depende de reglas sembradas) → MEDIA. Patrones en
+  // MAYÚSCULAS sin acentos (se comparan contra el concepto normalizado). Solo si la cuenta existe.
   var dict=[
-    ['ALQUILER|ARRENDAMIENTO|\\bRENTA\\b','62100000','Alquiler'],
-    ['NOMINA|NÓMINA|SALARIO|SUELDO','64000000','Nóminas'],
-    ['SEGURIDAD SOCIAL|\\bTGSS\\b|\\bRGSS\\b|SEG\\.? *SOCIAL','64200000','Seg. Social'],
-    ['ENDESA|IBERDROLA|NATURGY|\\bLUZ\\b|ELECTRIC|\\bAGUA\\b|CANAL ISABEL|\\bGAS\\b','62800000','Suministros'],
-    ['VODAFONE|MOVISTAR|ORANGE|TELEFON|YOIGO|MASMOVIL|JAZZTEL|INTERNET|FIBRA','62900000','Comunicaciones'],
-    ['SEGURO|MAPFRE|ALLIANZ|\\bAXA\\b|MUTUA|REALE|ZURICH|GENERALI','62500000','Seguros'],
-    ['COMISION|COMISIÓN|MANTENIMIENTO CTA|MANTENIM|CUOTA TARJETA','62600000','Comisiones banco'],
-    ['INTERES|INTERÉS|PRESTAMO|PRÉSTAMO|HIPOTECA','66200000','Intereses'],
-    ['HACIENDA|\\bAEAT\\b|AGENCIA TRIBUTARIA|MODELO \\d','47500000','Hacienda'],
-    ['GASOLINA|GASOIL|GASÓLEO|CARBURANTE|\\bCEPSA\\b|\\bREPSOL\\b|\\bBP\\b|\\bGALP\\b|SHELL|PETROPRIX','62900000','Carburante'],
-    ['\\bTAXI\\b|\\bUBER\\b|CABIFY|\\bRENFE\\b|\\bAVE\\b|IBERIA|VUELING|RYANAIR','62400000','Transporte'],
-    ['RESTAURANTE|CAFETERIA|CAFETERÍA|\\bBAR\\b|CATERING|\\bMENU\\b','62900000','Restaurante'],
+    ['ALQUILER|ARRENDAMIENTO|\\bRENTA\\b|INMOBILIARIA','62100000','Alquiler'],
+    ['NOMINA|SALARIO|SUELDO|\\bPAGA\\b|RETRIBUCION|FINIQUITO','64000000','Nóminas'],
+    ['SEGURIDAD SOCIAL|\\bTGSS\\b|\\bRGSS\\b|\\bRETA\\b|TESORERIA GENERAL|SEG SOCIAL|COTIZACION|AUTONOMO','64200000','Seg. Social'],
+    ['IBERDROLA|ENDESA|NATURGY|HOLALUZ|TOTALENERGIES|CURENERGIA|\\bAUDAX\\b|OCTOPUS ENERGY|\\bLUZ\\b|ELECTRIC|ENERGIA|\\bEDP\\b','62800000','Electricidad'],
+    ['CANAL ISABEL|AQUALIA|EMASESA|HIDRALIA|\\bFACSA\\b|AGUAS DE|\\bAGUA\\b','62800000','Agua'],
+    ['\\bGAS\\b|REDEXIS|NEDGIA|GAS NATURAL','62800000','Gas'],
+    ['MOVISTAR|VODAFONE|ORANGE|YOIGO|MASMOVIL|JAZZTEL|PEPEPHONE|\\bDIGI\\b|\\bLOWI\\b|FINETWORK|EUSKALTEL|TELEFON|INTERNET|FIBRA|\\bO2\\b','62900000','Comunicaciones'],
+    ['MAPFRE|ALLIANZ|\\bAXA\\b|MUTUA|\\bREALE\\b|ZURICH|GENERALI|LINEA DIRECTA|\\bCASER\\b|SANITAS|ADESLAS|\\bASISA\\b|\\bDKV\\b|PELAYO|CATALANA OCC|\\bOCASO\\b|SANTALUCIA|SEGURO','62500000','Seguros'],
+    ['COMISION|MANTENIMIENTO|ADMINISTRACION CUENTA|CUOTA TARJETA|GASTOS TARJETA','62600000','Comisiones banco'],
+    ['INTERES|PRESTAMO|HIPOTECA|FINANCIACION|LEASING|RENTING','66200000','Intereses/Financiación'],
+    ['HACIENDA|\\bAEAT\\b|AGENCIA TRIBUTARIA|MODELO \\d|IMPUESTO|TRIBUT','47500000','Hacienda'],
+    ['GASOLINA|GASOIL|GASOLINERA|CARBURANTE|\\bCEPSA\\b|\\bREPSOL\\b|\\bBP\\b|\\bGALP\\b|SHELL|PETROPRIX|BALLENOIL|PLENOIL|\\bAVIA\\b|PETRONOR|CARBURA','62900000','Carburante'],
+    ['\\bTAXI\\b|\\bUBER\\b|CABIFY|FREENOW|BLABLACAR|\\bRENFE\\b|\\bALSA\\b|\\bAVE\\b|IBERIA|VUELING|RYANAIR|AIR EUROPA|\\bAENA\\b|\\bEMT\\b|\\bMETRO\\b|PEAJE|AUTOPISTA','62400000','Transporte'],
+    ['RESTAURANTE|CAFETERIA|\\bBAR\\b|CATERING|\\bMENU\\b|\\bHOTEL\\b|HOSPEDAJE','62900000','Restaurante/Dietas'],
     ['NOTARI|REGISTRO MERCANTIL|REGISTRO PROPIEDAD|ESCRITURA','62300000','Notaría/Registro'],
-    ['ABOGADO|PROCURADOR|LETRADO|ASESOR|GESTORIA|GESTORÍA','62300000','Servicios profesionales'],
-    ['PARKING|APARCAMIENTO|\\bGARAJE\\b','62900000','Parking'],
-    ['CORREOS|\\bMRW\\b|\\bSEUR\\b|\\bGLS\\b|\\bDHL\\b|MENSAJER','62400000','Mensajería']
+    ['ABOGADO|PROCURADOR|LETRADO|ASESOR|GESTORIA|AUDITOR|CONSULTOR','62300000','Servicios profesionales'],
+    ['PARKING|APARCAMIENTO|\\bGARAJE\\b|\\bORA\\b','62900000','Parking'],
+    ['CORREOS|\\bMRW\\b|\\bSEUR\\b|\\bGLS\\b|\\bDHL\\b|NACEX|\\bUPS\\b|FEDEX|ENVIALIA|MENSAJER|PAQUETERIA','62400000','Mensajería'],
+    ['GOOGLE|MICROSOFT|AMAZON WEB|\\bAWS\\b|ADOBE|DROPBOX|OPENAI|\\bZOOM\\b|\\bSAGE\\b|HOLDED|SOFTWARE|SUSCRIPCION|HOSTING|DOMINIO','62900000','Software/Suscripción']
   ];
   for(var q=0;q<dict.length;q++){
-    try{if(new RegExp(dict[q][0],'i').test(hay)&&existe(dict[q][1]))return {cuenta:dict[q][1],motivo:'Concepto',motivoDet:dict[q][2]};}catch(e){}
+    if(test(dict[q][0])&&existe(dict[q][1]))return {cuenta:dict[q][1],motivo:'Concepto',motivoDet:dict[q][2],score:'media'};
   }
-  // 4) Sin acierto → pendiente de aplicación
-  return {cuenta:'55500000',motivo:'Pendiente',motivoDet:''};
+  // 4) Sin acierto → pendiente de aplicación (555)
+  return {cuenta:'55500000',motivo:'Pendiente',motivoDet:'',score:'pendiente'};
 }
 
-// Aprendizaje: al asignar a mano una contrapartida a un beneficiario, crea una regla
-// (id r_auto_, prioridad alta, sin IVA) para proponerla automáticamente la próxima vez.
-async function aprenderReglaBanco(beneficiario,cuenta){
-  if(!beneficiario||!cuenta||cuenta==='55500000')return;
-  var pat=_normNombreTercero(beneficiario);
+// Aprendizaje: al asignar a mano una contrapartida, crea una regla (id r_auto_, prioridad alta,
+// sin IVA) para proponerla automáticamente la próxima vez. Aprende por el NOMBRE del beneficiario
+// y, si no hay beneficiario claro, por el TOKEN del concepto normalizado.
+async function aprenderReglaBanco(beneficiario,cuenta,concepto){
+  if(!cuenta||cuenta==='55500000')return;
+  var bn=_normNombreTercero(beneficiario||'');
+  var pat=(bn&&bn.length>=4)?bn:_tokenConcepto(concepto||'');
   if(!pat||pat.length<4)return;
   var patRe=pat.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   if((state.rules||[]).some(function(r){return r.p===patRe&&r.a===cuenta;}))return; // ya existe
-  try{await api('/api/rules/'+state.company.id,{method:'POST',body:{id:'r_auto_'+uid(),p:patRe,a:cuenta,d:String(beneficiario).slice(0,30),pr:1,iv:'na'}});}catch(e){}
+  try{await api('/api/rules/'+state.company.id,{method:'POST',body:{id:'r_auto_'+uid(),p:patRe,a:cuenta,d:pat.slice(0,30),pr:1,iv:'na'}});}catch(e){}
 }
 
 // ═══ IMPORTAR FACTURAS DESDE GESTOR DOCUMENTAL ═══
@@ -3670,11 +3695,12 @@ function showImportResults(txns){
   var accName=function(c){return (window._accIndex[c]||'');};
   var datalist='<datalist id="impAcctList">'+(state.accounts||[]).map(function(a){return '<option value="'+a.code+'">'+a.code+' — '+h(a.name)+'</option>';}).join('')+'</datalist>';
   var motivoBadge=function(m){var col=m==='Regla'?'badge-g':(m==='Proveedor'||m==='Cliente')?'badge-b':m==='Concepto'?'badge-b':'badge-a';return '<span class="badge '+col+'">'+m+'</span>';};
+  var scoreDot=function(sc){var c=sc==='alta'?'#16A34A':sc==='media'?'#F59E0B':'#9CA3AF';var tt=sc==='alta'?'Confianza alta (regla tuya o CIF)':sc==='media'?'Confianza media (diccionario/concepto) — revisa':'Sin propuesta (555) — asignar';return '<span title="'+tt+'" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+c+';margin-right:5px;vertical-align:middle"></span>';};
   var res=$('impResult');if(!res){toast('No se pudo mostrar el resultado','error');return;}
   var nNuevos=txns.length-nDup;
   var nProp=txns.filter(function(t){return !t.isDup&&t.cuenta&&t.cuenta!=='55500000';}).length;
   res.innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:14px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 '+txns.length+' movimientos · '+nNuevos+' nuevos · '+nProp+' con propuesta'+(nDup?' · <span style="color:var(--am)">'+nDup+' duplicados</span>':'')+'</span><div><button class="btn btn-d" onclick="clearImpResult()" style="margin-right:6px">✕ Cancelar</button><button class="btn" onclick="impReaplicar()" title="Aplica las cuentas que ya has asignado al resto de filas que coincidan (mismo beneficiario/concepto) y que sigan en 555" style="margin-right:6px;background:#EEF2FF;color:var(--pri);border:1px solid var(--pri)">🔁 Reaplicar reglas</button><button class="btn btn-p" onclick="importAll()">✅ Contabilizar marcados</button></div></div>'+
-  '<div style="padding:7px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Asiento: <b>Banco (572)</b> ↔ <b>contrapartida</b> propuesta (sin IVA). Revisa/edita la cuenta de cada fila; lo que dejes sin reconocer va a <b>555</b>. Cuando corriges una cuenta nueva, el programa <b>aprende</b> y la próxima vez la propone sola. Duplicados desmarcados (no se duplican aunque los marques).</div>'+datalist+
+  '<div style="padding:7px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Asiento: <b>Banco (572)</b> ↔ <b>contrapartida</b> propuesta (sin IVA). Revisa/edita la cuenta de cada fila; lo que dejes sin reconocer va a <b>555</b>. Cuando corriges una cuenta nueva, el programa <b>aprende</b> y la próxima vez la propone sola. Duplicados desmarcados (no se duplican aunque los marques).<br><span style="color:#16A34A">●</span> alta · <span style="color:#F59E0B">●</span> media (revisar) · <span style="color:#9CA3AF">●</span> sin propuesta (555).</div>'+datalist+
   '<div style="padding:8px 14px;border-bottom:1px solid #EDF0F4;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px"><span style="color:var(--txM)">📅 Filtrar por fecha:</span> <span>Desde <input type="date" id="impFrom" onchange="impFilterByDate()" style="font-size:11px;padding:2px 4px;border:1px solid #CBD5E1;border-radius:4px"></span> <span>Hasta <input type="date" id="impTo" onchange="impFilterByDate()" style="font-size:11px;padding:2px 4px;border:1px solid #CBD5E1;border-radius:4px"></span> <button class="btn btn-p" style="font-size:10px;padding:2px 10px" onclick="impFilterByDate()">Aplicar rango</button> <button class="btn btn-d" style="font-size:10px;padding:2px 8px" onclick="var f=document.getElementById(\'impFrom\');var t=document.getElementById(\'impTo\');if(f)f.value=\'\';if(t)t.value=\'\';impFilterByDate();">Quitar filtro</button> <span id="impFilterCount" style="color:var(--txM);font-weight:600"></span></div>'+
   '<div class="scr"><table><thead><tr><th style="width:30px"><input type="checkbox" id="impCkAll" title="Marcar/desmarcar todo" onclick="impToggleAll(this.checked)"></th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th>Contrapartida</th><th>Motivo</th><th>Estado</th></tr></thead><tbody>'+
   txns.map(function(t,i){
@@ -3682,7 +3708,7 @@ function showImportResults(txns){
     var cls=t.isDup?'background:#FFF3E0':'';
     var needsNew=(!t.cuenta||t.cuenta==='55500000'||!window._accIndex[t.cuenta]);
     var inp='<input id="impAcct'+i+'" list="impAcctList" value="'+h(t.cuenta||'')+'" maxlength="8" inputmode="numeric" oninput="impAcctInput(this,'+i+')" onchange="impNormAcct(this,'+i+')" style="width:88px;font-family:monospace;font-size:10px;padding:2px 4px;border:1px solid #CBD5E1;border-radius:4px"><button type="button" onclick="impPickAccount('+i+')" title="Buscar/elegir cuenta (por código o nombre)" style="margin-left:3px;font-size:10px;line-height:1;padding:2px 5px;border:1px solid #CBD5E1;background:#fff;border-radius:4px;cursor:pointer">🔍</button> <span id="impAcctN'+i+'" style="font-size:9px;color:var(--txM)">'+h(accName(t.cuenta))+'</span><button type="button" id="impNew'+i+'" onclick="impNewAccount('+i+')" title="Crear cuenta nueva y asignarla a esta fila" style="display:'+(needsNew?'inline-block':'none')+';margin-left:4px;font-size:10px;line-height:1;padding:2px 5px;border:1px solid var(--pri);background:var(--priLt);color:var(--pri);border-radius:4px;cursor:pointer">➕</button>';
-    return '<tr id="impRow'+i+'" style="'+cls+'"><td><input type="checkbox" id="impCk'+i+'" '+(t.isDup?'':'checked')+'></td><td style="font-size:10px">'+fmtD(t.date)+'</td><td style="font-size:10px">'+h(t.concept.substring(0,55))+'</td><td style="text-align:right;font-weight:600" class="'+(ingreso?'amt-pos':'amt-neg')+'">'+fmt(t.amount)+'€</td><td>'+inp+'</td><td style="font-size:9px" title="'+h(t.motivoDet||'')+'">'+motivoBadge(t.motivo||'Pendiente')+'</td><td>'+(t.isDup?'<span class="badge badge-a" title="'+h(t.dupReason||'')+'">⚠ Duplicado</span>':'<span class="badge badge-b">Nuevo</span>')+'</td></tr>';
+    return '<tr id="impRow'+i+'" style="'+cls+'"><td><input type="checkbox" id="impCk'+i+'" '+(t.isDup?'':'checked')+'></td><td style="font-size:10px">'+fmtD(t.date)+'</td><td style="font-size:10px">'+h(t.concept.substring(0,55))+'</td><td style="text-align:right;font-weight:600" class="'+(ingreso?'amt-pos':'amt-neg')+'">'+fmt(t.amount)+'€</td><td>'+inp+'</td><td style="font-size:9px" title="'+h(t.motivoDet||'')+'">'+scoreDot(t.score)+motivoBadge(t.motivo||'Pendiente')+'</td><td>'+(t.isDup?'<span class="badge badge-a" title="'+h(t.dupReason||'')+'">⚠ Duplicado</span>':'<span class="badge badge-b">Nuevo</span>')+'</td></tr>';
   }).join('')+'</tbody></table></div></div>';
 }
 
@@ -3884,10 +3910,10 @@ async function importAll(){
     // id determinista (huella del movimiento) → INSERT OR REPLACE en servidor evita duplicar
     await api('/api/entries/'+state.company.id,{method:'POST',body:{id:t.entryId||('imp_'+uid()),date:t.date,concept:t.concept,type:'import',lines:lines}});
     count++;
-    // Aprender: si el usuario asignó/corrigió una cuenta para un beneficiario, recordarla
-    if(cuenta!=='55500000'&&t.beneficiario&&(t.motivo==='Pendiente'||cuenta!==t.cuenta))porAprender.push([t.beneficiario,cuenta]);
+    // Aprender: si el usuario asignó/corrigió una cuenta, recordarla (por beneficiario o concepto)
+    if(cuenta!=='55500000'&&(t.motivo==='Pendiente'||cuenta!==t.cuenta))porAprender.push([t.beneficiario||'',cuenta,t.concept]);
   }
-  for(var k=0;k<porAprender.length;k++){await aprenderReglaBanco(porAprender[k][0],porAprender[k][1]);aprendidas++;}
+  for(var k=0;k<porAprender.length;k++){await aprenderReglaBanco(porAprender[k][0],porAprender[k][1],porAprender[k][2]);aprendidas++;}
   await loadData();checkIntegrity();toast(count+' movimientos contabilizados'+(aprendidas?' · '+aprendidas+' reglas aprendidas':''));render();
 }
 
