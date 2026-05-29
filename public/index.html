@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.17.1</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.18.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2362,13 +2362,24 @@ async function deleteAccount(code){
 function exportAccountsExcel(){exportExcel(state.accounts.map(function(a){return [a.code,a.name,a.g,a.t];}),['Código','Nombre','Grupo','Tipo'],'plan_cuentas');}
 
 // ═══ RULES with edit ═══
+function ruleType(id){id=''+id;return id.indexOf('r_auto_')===0?'aprendida':(id.indexOf('r_d')===0?'default':'tuya');}
+function ruleTypeBadge(t){return t==='tuya'?'<span class="badge badge-g">Tuya</span>':t==='aprendida'?'<span class="badge badge-b">🤖 Aprendida</span>':'<span class="badge badge-a">Por defecto</span>';}
 function renderRules(c){
-  c.innerHTML='<div class="card"><div class="card-h"><span>Reglas de contabilización — '+state.rules.length+'</span><button class="btn btn-p" onclick="toggleRuleForm()">Nueva regla <span style="background:rgba(255,255,255,0.25);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:3px">R</span></button></div>'+
-  '<div id="ruleForm" style="display:none;padding:12px 16px;border-bottom:1px solid #F3F4F6;background:#FAFBFC;display:flex;gap:6px;align-items:end;flex-wrap:wrap"><div style="flex:2;min-width:100px"><div class="lbl">Patrón (regex)</div><input class="inp" id="rPat" placeholder="ALQUILER|ARRENDAMIENTO"></div><div style="flex:2;min-width:120px"><div class="lbl">Cuenta</div>'+acSearchHTML('rAcctSearch','','')+'</div><div style="min-width:70px"><div class="lbl">IVA</div><select class="sel" id="rIva">'+IVA.map(function(r){return '<option value="'+r.id+'">'+r.l+'</option>';}).join('')+'</select></div><div style="flex:1;min-width:70px"><div class="lbl">Descripción</div><input class="inp" id="rDesc"></div><button class="btn btn-p" onclick="addRule()">Añadir</button><button class="btn btn-d" onclick="toggleRuleForm()">Cancelar</button></div>'+
-  '<div class="scr"><table><thead><tr><th>Patrón</th><th>Cuenta</th><th>IVA</th><th>Descripción</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
-  state.rules.map(function(r,i){var iv=IVA.find(function(x){return x.id===r.iv;});return '<tr class="'+(i%2?'alt':'')+'"><td style="font-family:monospace;font-size:11px;color:var(--am)">'+h(r.p)+'</td><td >'+acctLink(r.a,'')+'</td><td><span class="badge badge-b">'+(iv?iv.l:'N/A')+'</span></td><td>'+h(r.d)+'</td><td style="white-space:nowrap"><button class="abtn" onclick="editRule(\''+r.id+'\')" title="Editar">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteRule(\''+r.id+'\')" title="Borrar">✕</button></td></tr>';}).join('')+
+  var rules=(state.rules||[]).slice();
+  var ord={tuya:0,aprendida:1,default:2};
+  rules.sort(function(a,b){var d=ord[ruleType(a.id)]-ord[ruleType(b.id)];return d!==0?d:String(a.p||'').localeCompare(String(b.p||''));});
+  var nT=rules.filter(function(r){return ruleType(r.id)==='tuya';}).length;
+  var nA=rules.filter(function(r){return ruleType(r.id)==='aprendida';}).length;
+  var nD=rules.filter(function(r){return ruleType(r.id)==='default';}).length;
+  c.innerHTML='<div class="card"><div class="card-h"><span>Reglas de contabilización — '+rules.length+' <span style="font-weight:400;color:var(--txM);font-size:11px">('+nT+' tuyas · '+nA+' aprendidas · '+nD+' por defecto)</span></span><button class="btn btn-p" onclick="toggleRuleForm()">Nueva regla <span style="background:rgba(255,255,255,0.25);padding:1px 5px;border-radius:3px;font-size:9px;margin-left:3px">R</span></button></div>'+
+  '<div style="padding:7px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Cuando un movimiento/concepto <b>contiene</b> el texto de la regla, se propone su cuenta. Las <b>🤖 aprendidas</b> las crea el programa cuando corriges una cuenta al importar. Puedes separar varias palabras con <b>|</b> (significa "o"): <code>ALQUILER|ARRENDAMIENTO</code>.</div>'+
+  '<div id="ruleForm" style="display:none;padding:12px 16px;border-bottom:1px solid #F3F4F6;background:#FAFBFC;display:flex;gap:6px;align-items:end;flex-wrap:wrap"><div style="flex:2;min-width:100px"><div class="lbl">Si el concepto contiene…</div><input class="inp" id="rPat" placeholder="ALQUILER|ARRENDAMIENTO"></div><div style="flex:2;min-width:120px"><div class="lbl">…usar la cuenta</div>'+acSearchHTML('rAcctSearch','','')+'</div><div style="min-width:70px"><div class="lbl">IVA</div><select class="sel" id="rIva">'+IVA.map(function(r){return '<option value="'+r.id+'">'+r.l+'</option>';}).join('')+'</select></div><div style="flex:1;min-width:70px"><div class="lbl">Descripción (opcional)</div><input class="inp" id="rDesc"></div><button class="btn btn-p" onclick="addRule()">Añadir</button><button class="btn btn-d" onclick="toggleRuleForm()">Cancelar</button></div>'+
+  '<div style="padding:8px 14px;border-bottom:1px solid #EDF0F4"><input class="inp" oninput="filterRules(this.value)" placeholder="🔍 Buscar regla por texto o cuenta…" style="width:100%;max-width:320px"></div>'+
+  '<div class="scr"><table><thead><tr><th style="width:90px">Tipo</th><th>Si contiene</th><th>Cuenta</th><th>IVA</th><th>Descripción</th><th style="width:60px">Acc.</th></tr></thead><tbody>'+
+  rules.map(function(r,i){var iv=IVA.find(function(x){return x.id===r.iv;});var tp=ruleType(r.id);return '<tr class="rule-row '+(i%2?'alt':'')+'" data-search="'+h(String(r.p||'').toLowerCase()+' '+String(r.d||'').toLowerCase()+' '+(r.a||''))+'"><td>'+ruleTypeBadge(tp)+'</td><td style="font-family:monospace;font-size:11px;color:var(--am)">'+h(r.p)+'</td><td >'+acctLink(r.a,'')+'</td><td><span class="badge badge-b">'+(iv?iv.l:'N/A')+'</span></td><td>'+h(r.d)+'</td><td style="white-space:nowrap"><button class="abtn" onclick="editRule(\''+r.id+'\')" title="Editar">✏️</button> <button class="abtn" style="color:var(--rd)" onclick="deleteRule(\''+r.id+'\')" title="Borrar">✕</button></td></tr>';}).join('')+
   '</tbody></table></div></div>';
 }
+function filterRules(q){q=(q||'').toLowerCase();document.querySelectorAll('.rule-row').forEach(function(r){r.style.display=(!q||(r.getAttribute('data-search')||'').indexOf(q)>=0)?'':'none';});}
 function toggleRuleForm(){var el=document.getElementById('ruleForm');if(el)el.style.display=el.style.display==='none'?'flex':'none';}
 async function addRule(){
   var p=$('rPat').value,a=acGetCode('rAcctSearch'),iv=$('rIva').value,d=$('rDesc').value;
