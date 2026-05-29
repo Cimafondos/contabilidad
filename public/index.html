@@ -3651,13 +3651,53 @@ function showImportResults(txns){
   var nProp=txns.filter(function(t){return !t.isDup&&t.cuenta&&t.cuenta!=='55500000';}).length;
   res.innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:14px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 '+txns.length+' movimientos · '+nNuevos+' nuevos · '+nProp+' con propuesta'+(nDup?' · <span style="color:var(--am)">'+nDup+' duplicados</span>':'')+'</span><div><button class="btn btn-d" onclick="clearImpResult()" style="margin-right:6px">✕ Cancelar</button><button class="btn btn-p" onclick="importAll()">✅ Contabilizar marcados</button></div></div>'+
   '<div style="padding:7px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Asiento: <b>Banco (572)</b> ↔ <b>contrapartida</b> propuesta (sin IVA). Revisa/edita la cuenta de cada fila; lo que dejes sin reconocer va a <b>555</b>. Cuando corriges una cuenta nueva, el programa <b>aprende</b> y la próxima vez la propone sola. Duplicados desmarcados (no se duplican aunque los marques).</div>'+datalist+
-  '<div class="scr"><table><thead><tr><th style="width:30px">✓</th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th>Contrapartida</th><th>Motivo</th><th>Estado</th></tr></thead><tbody>'+
+  '<div class="scr"><table><thead><tr><th style="width:30px"><input type="checkbox" id="impCkAll" title="Marcar/desmarcar todo" onclick="impToggleAll(this.checked)"></th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th>Contrapartida</th><th>Motivo</th><th>Estado</th></tr></thead><tbody>'+
   txns.map(function(t,i){
     var ingreso=t.amount>=0;
     var cls=t.isDup?'background:#FFF3E0':'';
-    var inp='<input id="impAcct'+i+'" list="impAcctList" value="'+h(t.cuenta||'')+'" oninput="var s=document.getElementById(\'impAcctN'+i+'\');if(s)s.textContent=(window._accIndex[this.value]||\'\');" style="width:88px;font-family:monospace;font-size:10px;padding:2px 4px;border:1px solid #CBD5E1;border-radius:4px"> <span id="impAcctN'+i+'" style="font-size:9px;color:var(--txM)">'+h(accName(t.cuenta))+'</span>';
+    var needsNew=(!t.cuenta||t.cuenta==='55500000'||!window._accIndex[t.cuenta]);
+    var inp='<input id="impAcct'+i+'" list="impAcctList" value="'+h(t.cuenta||'')+'" oninput="var v=this.value;var s=document.getElementById(\'impAcctN'+i+'\');if(s)s.textContent=(window._accIndex[v]||\'\');var b=document.getElementById(\'impNew'+i+'\');if(b)b.style.display=(!v||v===\'55500000\'||!window._accIndex[v])?\'inline-block\':\'none\';" style="width:88px;font-family:monospace;font-size:10px;padding:2px 4px;border:1px solid #CBD5E1;border-radius:4px"> <span id="impAcctN'+i+'" style="font-size:9px;color:var(--txM)">'+h(accName(t.cuenta))+'</span><button type="button" id="impNew'+i+'" onclick="impNewAccount('+i+')" title="Crear cuenta nueva y asignarla a esta fila" style="display:'+(needsNew?'inline-block':'none')+';margin-left:4px;font-size:10px;line-height:1;padding:2px 5px;border:1px solid var(--pri);background:var(--priLt);color:var(--pri);border-radius:4px;cursor:pointer">➕</button>';
     return '<tr style="'+cls+'"><td><input type="checkbox" id="impCk'+i+'" '+(t.isDup?'':'checked')+'></td><td style="font-size:10px">'+fmtD(t.date)+'</td><td style="font-size:10px">'+h(t.concept.substring(0,55))+'</td><td style="text-align:right;font-weight:600" class="'+(ingreso?'amt-pos':'amt-neg')+'">'+fmt(t.amount)+'€</td><td>'+inp+'</td><td style="font-size:9px" title="'+h(t.motivoDet||'')+'">'+motivoBadge(t.motivo||'Pendiente')+'</td><td>'+(t.isDup?'<span class="badge badge-a" title="'+h(t.dupReason||'')+'">⚠ Duplicado</span>':'<span class="badge badge-b">Nuevo</span>')+'</td></tr>';
   }).join('')+'</tbody></table></div></div>';
+}
+
+// Marcar/desmarcar TODAS las filas del resultado de importación a la vez
+function impToggleAll(on){
+  var txns=window._impTxns||[];
+  for(var i=0;i<txns.length;i++){var ck=document.getElementById('impCk'+i);if(ck)ck.checked=!!on;}
+}
+
+// Crear una cuenta nueva sin salir del modal y asignarla a la fila i (botón ➕)
+async function impNewAccount(i){
+  var inp=document.getElementById('impAcct'+i);
+  var pre=(inp&&inp.value&&inp.value!=='55500000')?inp.value:'';
+  var code=prompt('Código de la cuenta nueva (hasta 8 dígitos):',pre);
+  if(code===null)return;
+  code=String(code).replace(/[^0-9]/g,'');
+  if(!code){toast('Código obligatorio','error');return;}
+  if(code.length>8)code=code.slice(0,8);
+  if(code.length<8)code=code+('00000000').slice(code.length);
+  var exists=state.accounts.some(function(a){return a.code===code;});
+  if(!exists){
+    var name=prompt('Nombre de la cuenta '+code+':','');
+    if(name===null)return;
+    name=String(name).trim();
+    if(!name){toast('Nombre obligatorio','error');return;}
+    var d=code[0];var t=d==='6'?'G':d==='7'?'I':'A';
+    try{
+      await api('/api/accounts/'+state.company.id,{method:'POST',body:{code:code,name:name,g:parseInt(d)||0,t:t}});
+      await loadData();
+    }catch(e){toast('Error: '+e.message,'error');return;}
+  }
+  // Refrescar índice de cuentas y el datalist con el plan actualizado
+  window._accIndex={};(state.accounts||[]).forEach(function(a){window._accIndex[a.code]=a.name;});
+  var dl=document.getElementById('impAcctList');
+  if(dl)dl.innerHTML=(state.accounts||[]).map(function(a){return '<option value="'+a.code+'">'+a.code+' — '+h(a.name)+'</option>';}).join('');
+  // Asignar la cuenta a la fila y ocultar el botón
+  if(inp)inp.value=code;
+  var sp=document.getElementById('impAcctN'+i);if(sp)sp.textContent=(window._accIndex[code]||'');
+  var b=document.getElementById('impNew'+i);if(b)b.style.display='none';
+  toast(exists?('Cuenta '+code+' asignada'):('Cuenta '+code+' creada y asignada'));
 }
 
 async function importAll(){
