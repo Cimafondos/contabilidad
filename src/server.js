@@ -479,40 +479,47 @@ function auditLog(req, action, detail) {
 }
 
 // ── Auto-backup ──
+const FP_FILE = path.join(BACKUP_DIR, '.last_fp');
+// Huella del estado de los datos: si no cambia, la copia diaria se omite (solo se hace copia
+// cuando ha habido movimientos nuevos: asientos/líneas/transacciones).
+function dataFingerprint() {
+  try {
+    const e = db.prepare('SELECT COUNT(*) c, COALESCE(MAX(rowid),0) m FROM entries').get();
+    let l = { c: 0, m: 0 }; try { l = db.prepare('SELECT COUNT(*) c, COALESCE(MAX(rowid),0) m FROM entry_lines').get(); } catch(_) {}
+    let t = { c: 0, m: 0 }; try { t = db.prepare('SELECT COUNT(*) c, COALESCE(MAX(rowid),0) m FROM transactions').get(); } catch(_) {}
+    return [e.c, e.m, l.c, l.m, t.c, t.m].join('_');
+  } catch(e) { return ''; }
+}
+// label: 'startup'|'manual' siempre copian; 'daily' solo si hay cambios desde la última copia.
 function autoBackup(label) {
   try {
+    const fp = dataFingerprint();
+    if (label === 'daily') {
+      let prev = ''; try { prev = fs.readFileSync(FP_FILE, 'utf8'); } catch(_) {}
+      if (fp && prev === fp) { console.log('• Backup diario omitido (sin movimientos nuevos)'); return; }
+    }
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const bp = path.join(BACKUP_DIR, 'backup_' + label + '_' + ts + '.db');
     db.backup(bp).then(() => {
       console.log('✓ Auto-backup:', bp);
+      try { fs.writeFileSync(FP_FILE, fp); } catch(_) {}
       const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.db')).sort();
-      while (files.length > 20) { fs.unlinkSync(path.join(BACKUP_DIR, files.shift())); }
+      while (files.length > 30) { fs.unlinkSync(path.join(BACKUP_DIR, files.shift())); }
     }).catch(e => console.error('Backup failed:', e.message));
   } catch(e) { console.error('Auto-backup error:', e.message); }
 }
 
-// ── Ensure passwords are correct (force reset if needed) ──
+// ── Migración de contraseñas ──
+// SEGURIDAD: ya NO se fuerzan contraseñas por defecto en cada arranque (antes reseteaba
+// admin/admin y javier/1234 en cada deploy, lo que era un agujero grave y revertía cualquier
+// cambio). Ahora solo se hashea con bcrypt cualquier contraseña que quedara en texto plano.
+// Las contraseñas que cambie el usuario PERSISTEN entre despliegues.
 function migratePasswords() {
-  // Always force known passwords for admin and javier
-  const knownUsers = [
-    { username: 'admin', password: 'admin' },
-    { username: 'javier', password: '1234' },
-    { username: 'Santi', password: '1234' },
-    { username: 'santi', password: '1234' },
-  ];
-  knownUsers.forEach(ku => {
-    const user = db.prepare('SELECT id, password FROM users WHERE username = ?').get(ku.username);
-    if (user) {
-      const hashed = bcrypt.hashSync(ku.password, BCRYPT_ROUNDS);
-      db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, user.id);
-    }
-  });
-  // Hash any remaining plain-text passwords
   const users = db.prepare('SELECT id, password FROM users').all();
   const update = db.prepare('UPDATE users SET password = ? WHERE id = ?');
   users.forEach(u => {
-    if (!u.password.startsWith('$2')) {
-      update.run(bcrypt.hashSync(u.password, BCRYPT_ROUNDS), u.id);
+    if (!u.password || !u.password.startsWith('$2')) {
+      update.run(bcrypt.hashSync(u.password || Math.random().toString(36).slice(2), BCRYPT_ROUNDS), u.id);
     }
   });
 }
@@ -843,6 +850,31 @@ app.get('/api/backup/:companyId', authRequired, (req, res) => {
     masters: db.prepare('SELECT * FROM masters WHERE company_id = ?').all(cid),
   };
   res.json(data);
+});
+
+// ── Gestión de copias de seguridad del SERVIDOR (.db completos del volumen) ──
+// Restringido a superadmin: el .db contiene los datos de TODAS las empresas.
+const SAFE_BACKUP = /^backup_[A-Za-z0-9_\-]+\.db$/;
+app.get('/api/backups', authRequired, superadminRequired, (req, res) => {
+  try {
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => SAFE_BACKUP.test(f));
+    const list = files.map(f => {
+      const st = fs.statSync(path.join(BACKUP_DIR, f));
+      return { name: f, size: st.size, mtime: st.mtime.toISOString(), label: (f.split('_')[1] || '') };
+    }).sort((a, b) => b.mtime.localeCompare(a.mtime));
+    res.json({ backups: list, dir: BACKUP_DIR });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/backups/create', authRequired, superadminRequired, (req, res) => {
+  try { autoBackup('manual'); auditLog(req, 'backup_manual_servidor', ''); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/api/backups/download/:name', authRequired, superadminRequired, (req, res) => {
+  const name = req.params.name;
+  if (!SAFE_BACKUP.test(name)) return res.status(400).json({ error: 'Nombre no válido' });
+  const fp = path.join(BACKUP_DIR, name);
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'No existe' });
+  res.download(fp, name);
 });
 // — OCR via Claude API —
 app.post('/api/ocr', async (req, res) => {

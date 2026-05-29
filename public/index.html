@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.15.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.16.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -8045,7 +8045,11 @@ async function ejecutarCierre(){
 function renderBackups(c){
   var hist=getBackupHistory();
   var log=getBackupLog();
-  c.innerHTML='<div class="card"><div class="card-h"><span>Historial de backups — '+hist.length+' versiones</span><button class="btn btn-p" onclick="doBackup()">Descargar backup</button></div>'+
+  var esSuper=state.user&&state.user.role==='superadmin';
+  c.innerHTML='<div class="card" style="border:1px solid var(--pri)"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">🛡️ Copias del servidor (todas las empresas)</span>'+(esSuper?'<button class="btn btn-p" onclick="crearBackupServidor()">＋ Crear copia ahora</button>':'')+'</div>'+
+  '<div style="padding:7px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">El servidor hace una copia automática al arrancar y <b>cada día si ha habido movimientos nuevos</b> (guarda las últimas 30). Aquí puedes crear una copia manual y descargarla. '+(esSuper?'':'<b>Solo el superadministrador</b> puede ver/descargar estas copias.')+'</div>'+
+  '<div id="srvBackupsBody" style="padding:10px 14px;font-size:12px;color:var(--txM)">Cargando…</div></div>'+
+  '<div class="card"><div class="card-h"><span>Historial de backups — '+hist.length+' versiones</span><button class="btn btn-p" onclick="doBackup()">Descargar backup</button></div>'+
   (hist.length?'<div class="scr"><table><thead><tr><th>Fecha/Hora</th><th>Asientos</th><th>Tamaño</th><th style="width:140px">Acciones</th></tr></thead><tbody>'+
   hist.map(function(h2,i){
     var dt=new Date(h2.ts);var fh=String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear()+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
@@ -8058,6 +8062,39 @@ function renderBackups(c){
     var dt=new Date(l.ts);var fh=String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
     return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:10px">'+fh+'</td><td><span class="badge '+(l.tipo==='manual'?'badge-b':'badge-g')+'">'+l.tipo+'</span></td><td style="font-size:11px">'+h(l.user)+'</td><td style="font-size:11px;color:var(--txS)">'+h(l.detalle)+'</td><td style="font-size:11px">'+l.entries+'</td></tr>';
   }).join('')+'</tbody></table></div>':'<div class="empty">Sin log aún</div>')+'</div>';
+  loadServerBackups();
+}
+// ── Copias del servidor (.db del volumen) ──
+async function loadServerBackups(){
+  var el=document.getElementById('srvBackupsBody');if(!el)return;
+  if(!(state.user&&state.user.role==='superadmin')){el.textContent='Solo el superadministrador puede ver estas copias.';return;}
+  try{
+    var r=await api('/api/backups');
+    var bks=r.backups||[];
+    if(!bks.length){el.innerHTML='<span class="empty">Aún no hay copias en el servidor.</span>';return;}
+    el.innerHTML='<table><thead><tr><th>Fecha/Hora</th><th>Tipo</th><th style="text-align:right">Tamaño</th><th style="width:90px"></th></tr></thead><tbody>'+
+    bks.map(function(b,i){
+      var dt=new Date(b.mtime);var fh=String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear()+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
+      var kb=Math.round(b.size/1024);var tam=kb>1024?((kb/1024).toFixed(1)+' MB'):(kb+' KB');
+      var tipo=b.label==='daily'?'diaria':b.label==='startup'?'arranque':b.label==='manual'?'manual':b.label;
+      return '<tr class="'+(i%2?'alt':'')+'"><td style="font-size:11px">'+fh+'</td><td><span class="badge '+(b.label==='manual'?'badge-b':'badge-g')+'">'+tipo+'</span></td><td style="text-align:right;font-size:11px;color:var(--txM)">'+tam+'</td><td><button class="btn btn-d" style="font-size:10px;padding:4px 10px" onclick="descargarBackupServidor(\''+b.name+'\')">↓ Descargar</button></td></tr>';
+    }).join('')+'</tbody></table>';
+  }catch(e){el.textContent='No se pudieron cargar las copias: '+e.message;}
+}
+async function crearBackupServidor(){
+  try{showProgress('Creando copia','En el servidor...');await api('/api/backups/create',{method:'POST'});
+    setTimeout(function(){hideProgress('✅','Copia creada');loadServerBackups();},1200);
+  }catch(e){hideProgress('❌','Error');toast('Error: '+e.message,'error');}
+}
+async function descargarBackupServidor(name){
+  try{
+    var token=sessionStorage.getItem('cf_token');
+    var r=await fetch(API+'/api/backups/download/'+encodeURIComponent(name),{headers:{'Authorization':'Bearer '+token}});
+    if(!r.ok)throw new Error('Error '+r.status);
+    var blob=await r.blob();var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+    toast('Copia descargada');
+  }catch(e){toast('Error: '+e.message,'error');}
 }
 async function restoreBackup(idx){
   var hist=getBackupHistory();var bk=hist[idx];if(!bk||!bk.data)return;
