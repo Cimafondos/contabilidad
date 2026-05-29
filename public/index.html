@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.7.2</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.8.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -1385,8 +1385,8 @@ function renderDash(c){
       if(g===7){var vi=l.h-l.d;ti+=vi;monthI[mon]+=vi;var cn=a?a.name:'Otros';if(!catIngreso[cn])catIngreso[cn]=0;catIngreso[cn]+=vi;}
       if(g===6){var vg=l.d-l.h;tg+=vg;monthG[mon]+=vg;var cn2=a?a.name:'Otros';if(!catGasto[cn2])catGasto[cn2]=0;catGasto[cn2]+=vg;}
       if((l.a||'').startsWith('572')){tb+=l.d-l.h;monthT[mon]+=l.d-l.h;}
-      if(l.a==='47700000')tiva_rep+=l.h-l.d;
-      if(l.a==='47200000')tiva_sop+=l.d-l.h;
+      if((l.a||'').indexOf('477')===0)tiva_rep+=l.h-l.d;
+      if((l.a||'').indexOf('472')===0)tiva_sop+=l.d-l.h;
     });
   });
   var tr=ti-tg;var tiva=tiva_rep-tiva_sop;
@@ -4070,32 +4070,55 @@ function deleteCaptador(idx){if(!confirm('¿Eliminar?'))return;loadCaptadores();
 
 // ═══ MODELO 303 — IVA TRIMESTRAL ═══
 function renderModelo303(c){
-  // ═══ MODELO 303 v10 — usa getInvoiceData() como fuente única ═══
+  // ═══ MODELO 303 v10.8 — IVA contabilizado (cuentas 477/472) ═══
+  // El IVA repercutido/soportado y el resultado se calculan desde las cuentas 477 y 472
+  // (todo el IVA devengado/deducible contabilizado), igual que el Panel y el Test 10 de
+  // cuadre fiscal. Antes se calculaba sólo desde la tabla de facturas y dejaba fuera el
+  // IVA soportado de gastos, leasing e inmovilizado (asientos sin factura registrada),
+  // por eso el resultado discrepaba del Panel. El desglose por tipo (21/10/4) y las bases
+  // se siguen tomando de las facturas registradas, con una línea de conciliación para el
+  // IVA contabilizado sin factura.
   var trimLabels=['1T (Ene-Mar)','2T (Abr-Jun)','3T (Jul-Sep)','4T (Oct-Dic)'];
   var trimKeys=['1T','2T','3T','4T'];
+  var ejStr=String(state.ejercicio);
+  var qKey=function(fecha){var m=parseInt(fecha.substring(5,7));return m<=3?'1T':m<=6?'2T':m<=9?'3T':'4T';};
+  // IVA contabilizado por trimestre desde las cuentas 477 (repercutido) y 472 (soportado)
+  var ledger={'1T':{rep:0,sop:0},'2T':{rep:0,sop:0},'3T':{rep:0,sop:0},'4T':{rep:0,sop:0}};
+  state.entries.filter(function(e){return !e.del&&!e.deleted&&e.date&&e.date.startsWith(ejStr);}).forEach(function(e){
+    var tk=qKey(e.date);
+    e.lines.forEach(function(l){
+      if(!l.a)return;
+      if(l.a.indexOf('477')===0)ledger[tk].rep+=(l.h||0)-(l.d||0);
+      else if(l.a.indexOf('472')===0)ledger[tk].sop+=(l.d||0)-(l.h||0);
+    });
+  });
   var datos=trimKeys.map(function(tk,idx){
     var recibidas=getInvoiceData({tipo:'recibida',trimestre:tk});
     var emitidas=getInvoiceData({tipo:'emitida',trimestre:tk});
     var rates={21:{baseR:0,cuotaR:0,baseS:0,cuotaS:0},10:{baseR:0,cuotaR:0,baseS:0,cuotaS:0},4:{baseR:0,cuotaR:0,baseS:0,cuotaS:0}};
-    var baseSop=0,sop=0,baseRep=0,rep=0;
+    var baseSop=0,sopFact=0,baseRep=0,repFact=0;
     recibidas.forEach(function(f){
       var sign=f.isAbono?-1:1;
       rates[21].baseS+=sign*Math.abs(f.base21);rates[21].cuotaS+=sign*Math.abs(f.iva21);
       rates[10].baseS+=sign*Math.abs(f.base10);rates[10].cuotaS+=sign*Math.abs(f.iva10);
       rates[4].baseS+=sign*Math.abs(f.base4);rates[4].cuotaS+=sign*Math.abs(f.iva4);
-      baseSop+=sign*f.totalBase;sop+=sign*f.totalIva;
+      baseSop+=sign*f.totalBase;sopFact+=sign*f.totalIva;
     });
     emitidas.forEach(function(f){
       var sign=f.isAbono?-1:1;
       rates[21].baseR+=sign*Math.abs(f.base21);rates[21].cuotaR+=sign*Math.abs(f.iva21);
       rates[10].baseR+=sign*Math.abs(f.base10);rates[10].cuotaR+=sign*Math.abs(f.iva10);
       rates[4].baseR+=sign*Math.abs(f.base4);rates[4].cuotaR+=sign*Math.abs(f.iva4);
-      baseRep+=sign*f.totalBase;rep+=sign*f.totalIva;
+      baseRep+=sign*f.totalBase;repFact+=sign*f.totalIva;
     });
-    return {name:trimLabels[idx],baseRep:baseRep,rep:rep,baseSop:baseSop,sop:sop,resultado:rep-sop,rates:rates};
+    // IVA repercutido/soportado = contabilizado en cuentas (incluye gastos/inmovilizado sin factura)
+    var rep=ledger[tk].rep, sop=ledger[tk].sop;
+    return {name:trimLabels[idx],baseRep:baseRep,rep:rep,sopFact:sopFact,repFact:repFact,baseSop:baseSop,sop:sop,resultado:rep-sop,rates:rates};
   });
   var totalRep=datos.reduce(function(s,d){return s+d.rep;},0);
   var totalSop=datos.reduce(function(s,d){return s+d.sop;},0);
+  var totalRepFact=datos.reduce(function(s,d){return s+d.repFact;},0);
+  var totalSopFact=datos.reduce(function(s,d){return s+d.sopFact;},0);
   var totalBaseRep=datos.reduce(function(s,d){return s+d.baseRep;},0);
   var totalBaseSop=datos.reduce(function(s,d){return s+d.baseSop;},0);
   var totalRates={21:{baseR:0,cuotaR:0,baseS:0,cuotaS:0},10:{baseR:0,cuotaR:0,baseS:0,cuotaS:0},4:{baseR:0,cuotaR:0,baseS:0,cuotaS:0}};
@@ -4104,11 +4127,19 @@ function renderModelo303(c){
   [21,10,4].forEach(function(r){
     var d=totalRates[r];
     if(Math.abs(d.baseR)>0.01||Math.abs(d.cuotaR)>0.01||Math.abs(d.baseS)>0.01||Math.abs(d.cuotaS)>0.01){
-      rateDetail+='<tr style="background:#F8F9FB;font-size:11px"><td style="padding-left:20px;color:var(--txM)">↳ IVA '+r+'%</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(Math.abs(d.cuotaR-d.cuotaS))+'€</td><td></td></tr>';
+      rateDetail+='<tr style="background:#F8F9FB;font-size:11px"><td style="padding-left:20px;color:var(--txM)">↳ IVA '+r+'% (facturas)</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaR)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.baseS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(d.cuotaS)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(Math.abs(d.cuotaR-d.cuotaS))+'€</td><td></td></tr>';
     }
   });
+  // Conciliación: IVA contabilizado (cuentas 477/472) que no procede de facturas registradas
+  // (gastos, leasing, inmovilizado, etc.). Hace que el desglose cuadre con el total.
+  var diffRepFact=Math.round((totalRep-totalRepFact)*100)/100;
+  var diffSopFact=Math.round((totalSop-totalSopFact)*100)/100;
+  if(Math.abs(diffRepFact)>0.01||Math.abs(diffSopFact)>0.01){
+    rateDetail+='<tr style="background:#FFF8EC;font-size:11px"><td style="padding-left:20px;color:var(--am)">↳ IVA contabilizado sin factura (gastos/inmovilizado)</td><td style="text-align:right;color:var(--txM)">—</td><td style="text-align:right;color:var(--txM)">'+fmt(diffRepFact)+'€</td><td style="text-align:right;color:var(--txM)">—</td><td style="text-align:right;color:var(--txM)">'+fmt(diffSopFact)+'€</td><td style="text-align:right;color:var(--txM)">'+fmt(Math.abs(diffRepFact-diffSopFact))+'€</td><td></td></tr>';
+  }
   c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 303 — IVA Trimestral '+state.ejercicio+'</span><div><button class="btn btn-d" onclick="export303Excel()">↓ Excel</button> <button class="btn btn-d" onclick="export303PDF()">↓ PDF</button> <button class="btn btn-d" onclick="export303TXT()">↓ TXT AEAT</button></div></div>'+
   '<div class="row" style="margin:12px 14px"><div class="stat" style="border-left:3px solid var(--rd)"><div class="stat-l">IVA Repercutido</div><div class="stat-v" style="color:var(--rd)">'+fmt(totalRep)+'€</div></div><div class="stat" style="border-left:3px solid var(--ok)"><div class="stat-l">IVA Soportado</div><div class="stat-v" style="color:var(--ok)">'+fmt(totalSop)+'€</div></div><div class="stat" style="border-left:3px solid var(--bl)"><div class="stat-l">Resultado — '+(totalRep-totalSop>=0?'a pagar':'a devolver')+'</div><div class="stat-v" style="color:'+(totalRep-totalSop>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(totalRep-totalSop))+'€</div></div></div>'+
+  '<div style="padding:6px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">IVA repercutido/soportado = saldo contabilizado en cuentas 477/472 (incluye gastos e inmovilizado). Coincide con el Panel. Las bases y el desglose por tipo proceden de las facturas registradas.</div>'+
   '<table><thead><tr><th>Trimestre</th><th style="text-align:right">Base ventas</th><th style="text-align:right;color:var(--rd)">IVA repercutido</th><th style="text-align:right">Base compras</th><th style="text-align:right;color:var(--ok)">IVA soportado</th><th style="text-align:right">Resultado</th><th>Acción</th></tr></thead><tbody>'+
   datos.map(function(d,i){return '<tr class="'+(i%2?'alt':'')+'"><td style="font-weight:600">'+d.name+'</td><td style="text-align:right">'+fmt(d.baseRep)+'€</td><td style="text-align:right;color:var(--rd)">'+fmt(d.rep)+'€</td><td style="text-align:right">'+fmt(d.baseSop)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(d.sop)+'€</td><td style="text-align:right;font-weight:700;color:'+(d.resultado>=0?'var(--rd)':'var(--ok)')+'">'+fmt(Math.abs(d.resultado))+'€</td><td style="font-size:10px;color:'+(d.resultado>=0?'var(--rd)':'var(--ok)')+'">'+( d.resultado>=0?'A pagar':'A devolver')+'</td></tr>';}).join('')+
   '<tr class="total"><td>ANUAL</td><td style="text-align:right">'+fmt(totalBaseRep)+'€</td><td style="text-align:right">'+fmt(totalRep)+'€</td><td style="text-align:right">'+fmt(totalBaseSop)+'€</td><td style="text-align:right">'+fmt(totalSop)+'€</td><td style="text-align:right;font-size:14px">'+fmt(Math.abs(totalRep-totalSop))+'€</td><td></td></tr>'+
@@ -4221,9 +4252,14 @@ function renderModelo111(c){
 var m347Minimo=3005.06;
 function renderModelo347(c){
   // ═══ MODELO 347 v10 — usa getInvoiceData() ═══
+  // Exclusiones legales del 347: las operaciones exentas/exportaciones NO se declaran
+  // (se informan en otros modelos). Filtramos las facturas exentas (p.ej. CLIENTE EXPORT)
+  // y, después, los terceros cuyo total no supera el umbral de 3.005,06€.
   var invoices=getInvoiceData();
   var terceros={};
+  var exentasExcluidas=0, importeExento=0;
   invoices.forEach(function(f){
+    if(f.esExenta){exentasExcluidas++;importeExento+=Math.abs(f.totalFactura);return;}
     var key=f.cif||f.tercero;
     if(!key)return;
     if(!terceros[key])terceros[key]={nombre:f.tercero,cif:f.cif,compras:0,ventas:0,t1:0,t2:0,t3:0,t4:0};
@@ -4236,10 +4272,35 @@ function renderModelo347(c){
   var minimo=parseFloat($('min347')?$('min347').value:3005.06)||3005.06;
   var lista=Object.values(terceros).filter(function(t){return Math.abs(t.compras+t.ventas)>minimo;}).sort(function(a,b){return Math.abs(b.compras+b.ventas)-Math.abs(a.compras+a.ventas);});
   c.innerHTML='<div class="card"><div class="card-h"><span>Modelo 347 — Terceros >'+fmt(minimo)+'€ — '+state.ejercicio+'</span><div style="display:flex;align-items:center;gap:6px"><span class="badge badge-b">'+lista.length+' declarables</span><button class="btn btn-d" onclick="export347Excel()">↓ Excel</button></div></div>'+
-  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Operaciones con clientes y proveedores (IVA incluido). Presentación: febrero año siguiente.<div style="margin-top:6px;text-align:right">Mínimo €: <input id="min347" value="'+minimo+'" style="width:70px;padding:2px 6px;border:1px solid #CBD5E1;border-radius:4px"> <button class="btn btn-p" style="padding:3px 10px;font-size:11px" onclick="renderModelo347($(\'content\'))">Aplicar</button></div></div>'+
+  '<div style="padding:8px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Operaciones con clientes y proveedores (IVA incluido). Presentación: febrero año siguiente.'+(exentasExcluidas?' <span style="color:var(--am)">Excluidas '+exentasExcluidas+' operación(es) exenta/exportación ('+fmt(importeExento)+'€), no declarables en 347.</span>':'')+'<div style="margin-top:6px;text-align:right">Mínimo €: <input id="min347" value="'+minimo+'" style="width:70px;padding:2px 6px;border:1px solid #CBD5E1;border-radius:4px"> <button class="btn btn-p" style="padding:3px 10px;font-size:11px" onclick="renderModelo347($(\'content\'))">Aplicar</button></div></div>'+
   '<table><thead><tr><th>Tercero</th><th>CIF/NIF</th><th style="text-align:right">Compras (IVA incl.)</th><th style="text-align:right">Ventas (IVA incl.)</th><th style="text-align:right">Total</th><th style="text-align:right">1T</th><th style="text-align:right">2T</th><th style="text-align:right">3T</th><th style="text-align:right">4T</th></tr></thead><tbody>'+
   lista.map(function(t,i){return '<tr class="'+(i%2?'alt':'')+'"><td>'+h(t.nombre)+'</td><td style="font-size:9px;color:var(--txM)">'+h(t.cif)+'</td><td style="text-align:right;color:var(--rd)">'+fmt(t.compras)+'€</td><td style="text-align:right;color:var(--ok)">'+fmt(t.ventas)+'€</td><td style="text-align:right;font-weight:700">'+fmt(t.compras+t.ventas)+'€</td><td style="text-align:right;font-size:10px">'+fmt(t.t1)+'</td><td style="text-align:right;font-size:10px">'+fmt(t.t2)+'</td><td style="text-align:right;font-size:10px">'+fmt(t.t3)+'</td><td style="text-align:right;font-size:10px">'+fmt(t.t4)+'</td></tr>';}).join('')+
   (lista.length?'<tr class="total"><td colspan="2">TOTALES ('+lista.length+' terceros)</td><td style="text-align:right">'+fmt(lista.reduce(function(s,t){return s+t.compras;},0))+'€</td><td style="text-align:right">'+fmt(lista.reduce(function(s,t){return s+t.ventas;},0))+'€</td><td style="text-align:right;font-size:14px">'+fmt(lista.reduce(function(s,t){return s+t.compras+t.ventas;},0))+'€</td><td colspan="4"></td></tr>':'')+'</tbody></table></div>';
+}
+
+// Alias de exportación esperados por los botones de las pantallas de modelos.
+// Antes no existían y los botones lanzaban ReferenceError al pulsarlos.
+function export303Excel(){exportModelo303();}
+function export303PDF(){exportPDF('Modelo 303 — IVA '+state.ejercicio);}
+function export303TXT(){exportModelo303();}
+function export390Excel(){exportModelo390();}
+
+// Exportación CSV del Modelo 347 — misma lógica que renderModelo347 (excluye exentas y aplica umbral)
+function export347Excel(){
+  var minimo=parseFloat($('min347')?$('min347').value:3005.06)||3005.06;
+  var terceros={};
+  getInvoiceData().forEach(function(f){
+    if(f.esExenta)return;
+    var key=f.cif||f.tercero;if(!key)return;
+    if(!terceros[key])terceros[key]={nombre:f.tercero,cif:f.cif,compras:0,ventas:0};
+    var importe=f.isAbono?-f.totalFactura:f.totalFactura;
+    if(f.tipo==='recibida')terceros[key].compras+=importe;else terceros[key].ventas+=importe;
+  });
+  var rows=Object.values(terceros)
+    .filter(function(t){return Math.abs(t.compras+t.ventas)>minimo;})
+    .sort(function(a,b){return Math.abs(b.compras+b.ventas)-Math.abs(a.compras+a.ventas);})
+    .map(function(t){return [t.nombre,t.cif,fmt(t.compras),fmt(t.ventas),fmt(t.compras+t.ventas)];});
+  exportModeloCSV('modelo_347_'+state.ejercicio,['Tercero','CIF/NIF','Compras','Ventas','Total'],rows);
 }
 
 
@@ -5005,7 +5066,7 @@ async function generarDatosTest(){
   if(!state.company||!state.company.id)return;
   var code=prompt('🧪 Introduce el código de test para generar datos de prueba con números redondos:');
   if(!code||code.trim()!=='1994'){if(code!==null)toast('Código incorrecto','error');return;}
-  if(!confirm('Generar dataset completo para '+state.company.name+'?\n\nIncluye: ventas, compras, abonos, retenciones, recargo equiv., multi-IVA, exentas, rappels, impagados, nóminas, préstamo, póliza crédito, leasing, activos, amortizaciones, fianzas, existencias, cobros/pagos parciales, descuentos, redondeos, imp. sociedades.\n\nTodos con importes redondos. Se borrarán los datos actuales de esta empresa.'))return;
+  if(!confirm('Generar dataset completo para '+state.company.name+'?\n\nIncluye: ventas, compras, abonos, retenciones, recargo equiv., multi-IVA, exentas, rappels, impagados, nóminas, préstamo, póliza crédito, leasing, activos, amortizaciones, fianzas, existencias, cobros/pagos parciales, descuentos, redondeos, imp. sociedades.\n\nTodos con importes redondos. Se borrarán TODOS los datos actuales de esta empresa (asientos, facturas y plan de cuentas) y se recargará el PGC base limpio.'))return;
   try{
     toast('Borrando datos actuales...');
     await api('/api/invoices/'+state.company.id,{method:'DELETE'});
@@ -5994,6 +6055,9 @@ function getInvoiceData(opts){
       base10:f.base10||0, iva10:f.iva10||0,
       base4:f.base4||0, iva4:f.iva4||0,
       base0:f.base0||0,
+      // Operación exenta/exportación: base sólo en exento (base0) y sin IVA ni base gravada.
+      // El Modelo 347 excluye exportaciones/operaciones exentas → se usa para filtrarlas.
+      esExenta:(Math.abs(f.base0||0)>0.01)&&(Math.abs(f.base21||0)+Math.abs(f.base10||0)+Math.abs(f.base4||0)+Math.abs(f.iva21||0)+Math.abs(f.iva10||0)+Math.abs(f.iva4||0)<0.01),
       retencion:f.retencion||0,
       recargo:f.recargo||0,
       total:f.total||0,

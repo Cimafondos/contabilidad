@@ -1719,6 +1719,13 @@ app.post('/api/generate-test-data/:companyId', authRequired, adminRequired, (req
   if(errors > 0) return res.status(400).json({ error: errors + ' asientos descuadrados' });
 
   try {
+  // ═══ RESET COMPLETO DEL PLAN DE CUENTAS ═══
+  // Para un dataset 100% aislado borramos todo el plan de la empresa y recargamos
+  // el PGC base limpio desde la plantilla. Así eliminamos cuentas de terceros reales
+  // residuales (p.ej. 40000007/43000004) que quedaban mezcladas con los datos test.
+  db.prepare('DELETE FROM accounts WHERE company_id = ?').run(cid);
+  loadPGCForCompany(cid);
+
   // ═══ CREATE ACCOUNTS ═══
   const accts = [];
   for(let i=1;i<=12;i++){
