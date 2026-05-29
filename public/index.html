@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.19.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.20.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2687,7 +2687,7 @@ function processImportRows(rows){
     var saldo=saldoI>=0?parseBankAmount(r[saldoI]):null;
     if(Math.abs(amt)>0.005||concept!=='Movimiento'){
       amt=Math.round(amt*100)/100;
-      var prop=proponerContrapartida(concept,beneficiario);
+      var prop=proponerContrapartida(concept,beneficiario,amt);
       txns.push({date:dateStr,concept:concept,amount:amt,saldo:saldo,beneficiario:beneficiario,cuenta:prop.cuenta,motivo:prop.motivo,motivoDet:prop.motivoDet,score:prop.score,entryId:bankEntryId(dateStr,amt,saldo,concept)});
     }
   }
@@ -2757,12 +2757,13 @@ function _historialContrapartidas(){
 // Cascada (primer acierto gana): reglas usuario/aprendidas → maestros (CIF/nombre) → reglas
 // por defecto → diccionario incrustado → 555. Solo usa la CUENTA, nunca el IVA. Devuelve
 // {cuenta, motivo, motivoDet, score} donde score = alta | media | pendiente (semáforo).
-function proponerContrapartida(texto,beneficiario){
+function proponerContrapartida(texto,beneficiario,amount){
   var am={};(state.accounts||[]).forEach(function(a){am[a.code]=a;});
   var existe=function(c){return !!(c&&am[c]);};
   var hayRaw=((beneficiario||'')+' '+(texto||'')).toUpperCase().trim();
   var hayNorm=_normConcepto((beneficiario||'')+' '+(texto||''));
   var test=function(p){if(!p)return false;try{var re=new RegExp(p,'i');return re.test(hayNorm)||re.test(hayRaw);}catch(e){return false;}};
+  var esPago=(typeof amount==='number'&&amount<0); // pago = sale dinero; cobro = entra
   var rules=state.rules||[];
   // 1) Reglas del usuario / aprendidas (id que NO empieza por 'r_d') → confianza ALTA
   for(var i=0;i<rules.length;i++){var r=rules[i];if((''+r.id).indexOf('r_d')===0)continue;
@@ -2775,21 +2776,27 @@ function proponerContrapartida(texto,beneficiario){
     if(cand){var best=null,bestN=0;for(var cc in cand){if(cand[cc]>bestN){bestN=cand[cc];best=cc;}}
       if(best&&best!=='55500000'&&existe(best))return {cuenta:best,motivo:'Histórico',motivoDet:tok+' · usado '+bestN+'×',score:bestN>=2?'alta':'media'};}
   }
-  // 2) Maestros (proveedor/cliente): por CIF → ALTA, por nombre → MEDIA
-  if(beneficiario){
-    try{loadMasters();}catch(e){}
-    var nb=_normNombreTercero(beneficiario);
-    var cifM=(String(beneficiario).match(/\b([A-Z]\d{7,8}[A-Z]?|\d{8}[A-Z])\b/i)||[])[0];
-    var pools=[{arr:(typeof masters!=='undefined'&&masters.supplier)||[],motivo:'Proveedor'},{arr:(typeof masters!=='undefined'&&masters.client)||[],motivo:'Cliente'}];
-    for(var p=0;p<pools.length;p++){
-      var byCif=false;
-      var m=pools[p].arr.find(function(x){
-        if(cifM&&x.cif&&String(x.cif).toUpperCase()===cifM.toUpperCase()){byCif=true;return true;}
-        var nx=_normNombreTercero(x.name);
-        return nx&&nb&&nx.length>=4&&(nx===nb||nx.indexOf(nb)>=0||nb.indexOf(nx)>=0);
-      });
-      if(m&&existe(m.account))return {cuenta:m.account,motivo:pools[p].motivo,motivoDet:m.name,score:byCif?'alta':'media'};
-    }
+  // 2) TERCEROS (maestros): el banco salda con el tercero, no con el gasto/ingreso. Según el
+  //    signo: en un PAGO busca primero PROVEEDOR; en un COBRO, primero CLIENTE. Busca por CIF
+  //    o por nombre dentro del concepto completo (no solo el campo beneficiario). CIF→ALTA, nombre→MEDIA.
+  try{loadMasters();}catch(e){}
+  var cifM=(hayRaw.match(/\b([A-Z]\d{7,8}[A-Z]?|\d{8}[A-Z])\b/)||[])[0];
+  var supA=(typeof masters!=='undefined'&&masters.supplier)||[];
+  var cliA=(typeof masters!=='undefined'&&masters.client)||[];
+  var pools=esPago?[{arr:supA,motivo:'Proveedor'},{arr:cliA,motivo:'Cliente'}]:[{arr:cliA,motivo:'Cliente'},{arr:supA,motivo:'Proveedor'}];
+  for(var p=0;p<pools.length;p++){
+    var byCif=false;
+    var m=pools[p].arr.find(function(x){
+      if(cifM&&x.cif&&String(x.cif).toUpperCase()===cifM.toUpperCase()){byCif=true;return true;}
+      var nx=_normNombreTercero(x.name);
+      return nx&&nx.length>=4&&hayNorm.indexOf(nx)>=0;
+    });
+    if(m&&existe(m.account))return {cuenta:m.account,motivo:pools[p].motivo,motivoDet:m.name,score:byCif?'alta':'media'};
+  }
+  // 2.5) SOCIOS: aportaciones/retiradas/préstamos de socios → cuenta corriente con socios (551).
+  if(test('\\bSOCIO\\b|\\bSOCIOS\\b|APORTACION SOCIAL|APORTACION DE SOCIO|PRESTAMO SOCIO|CUENTA SOCIO|RETIRADA SOCIO|DIVIDENDO')){
+    var sCta=existe('55100000')?'55100000':(existe('55000000')?'55000000':null);
+    if(sCta)return {cuenta:sCta,motivo:'Socio',motivoDet:esPago?'Pago a socio':'Cobro de socio',score:'media'};
   }
   // 3) Reglas por defecto sembradas r_d → MEDIA
   for(var j=0;j<rules.length;j++){var rd=rules[j];if((''+rd.id).indexOf('r_d')!==0)continue;
@@ -3742,7 +3749,7 @@ function showImportResults(txns){
   window._accIndex={};(state.accounts||[]).forEach(function(a){window._accIndex[a.code]=a.name;});
   var accName=function(c){return (window._accIndex[c]||'');};
   var datalist='<datalist id="impAcctList">'+(state.accounts||[]).map(function(a){return '<option value="'+a.code+'">'+a.code+' — '+h(a.name)+'</option>';}).join('')+'</datalist>';
-  var motivoBadge=function(m){var col=(m==='Regla'||m==='Histórico')?'badge-g':(m==='Proveedor'||m==='Cliente')?'badge-b':m==='Concepto'?'badge-b':'badge-a';return '<span class="badge '+col+'">'+m+'</span>';};
+  var motivoBadge=function(m){var col=(m==='Regla'||m==='Histórico')?'badge-g':(m==='Proveedor'||m==='Cliente'||m==='Socio')?'badge-b':m==='Concepto'?'badge-b':'badge-a';return '<span class="badge '+col+'">'+m+'</span>';};
   var scoreDot=function(sc){var c=sc==='alta'?'#16A34A':sc==='media'?'#F59E0B':'#9CA3AF';var tt=sc==='alta'?'Confianza alta (regla tuya o CIF)':sc==='media'?'Confianza media (diccionario/concepto) — revisa':'Sin propuesta (555) — asignar';return '<span title="'+tt+'" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+c+';margin-right:5px;vertical-align:middle"></span>';};
   var res=$('impResult');if(!res){toast('No se pudo mostrar el resultado','error');return;}
   var nNuevos=txns.length-nDup;
@@ -3819,7 +3826,7 @@ function impReaplicar(){
     var dest='';
     for(var k=0;k<aprendidas.length;k++){try{var rk=new RegExp(aprendidas[k].re,'i');if(rk.test(hay)||rk.test(hayN)){dest=aprendidas[k].cuenta;break;}}catch(e){}}
     if(!dest){
-      var prop=proponerContrapartida(txns[j].concept,txns[j].beneficiario);
+      var prop=proponerContrapartida(txns[j].concept,txns[j].beneficiario,txns[j].amount);
       if(prop&&prop.cuenta&&prop.cuenta!=='55500000'&&window._accIndex[prop.cuenta])dest=prop.cuenta;
     }
     if(dest&&window._accIndex[dest]){
