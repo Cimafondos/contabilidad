@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.8.3</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.9.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2663,10 +2663,12 @@ function processImportRows(rows){
     else{amt=parseBankAmount(r[header.length-1]);}
     var concept=conceptCols.map(function(ci){return String(r[ci]==null?'':r[ci]).trim();}).filter(Boolean).join(' · ');
     if(!concept)concept='Movimiento';
+    var beneficiario=benefI>=0?String(r[benefI]==null?'':r[benefI]).trim():'';
     var saldo=saldoI>=0?parseBankAmount(r[saldoI]):null;
     if(Math.abs(amt)>0.005||concept!=='Movimiento'){
       amt=Math.round(amt*100)/100;
-      txns.push({date:dateStr,concept:concept,amount:amt,saldo:saldo,entryId:bankEntryId(dateStr,amt,saldo,concept)});
+      var prop=proponerContrapartida(concept,beneficiario);
+      txns.push({date:dateStr,concept:concept,amount:amt,saldo:saldo,beneficiario:beneficiario,cuenta:prop.cuenta,motivo:prop.motivo,motivoDet:prop.motivoDet,entryId:bankEntryId(dateStr,amt,saldo,concept)});
     }
   }
   if(!txns.length&&saltadas>0){toast('No se reconocieron movimientos (revisa que el archivo tenga columnas de Fecha e Importe)','error');return;}
@@ -2683,6 +2685,59 @@ function bankEntryId(fecha,amount,saldo,concept){
   var imp=Math.round(Math.abs(amount)*100)*(amount<0?-1:1);
   var tail=(saldo!==null&&saldo!==undefined&&!isNaN(saldo))?('s'+Math.round(saldo*100)):('c'+bankHash((concept||'')+'|'+(amount<0?'-':'+')));
   return 'bk_'+cid+'_'+fecha+'_'+imp+'_'+tail;
+}
+
+// Normaliza un nombre de tercero para comparar (mayúsculas, sin forma jurídica ni puntuación)
+function _normNombreTercero(s){
+  return String(s||'').toUpperCase()
+    .replace(/[.,'"]/g,' ')
+    .replace(/\b(S\s?L\s?U|S\s?L\s?P|S\s?L|S\s?A\s?U|S\s?A|S\s?COOP|SC|CB)\b/g,' ')
+    .replace(/\s+/g,' ').trim();
+}
+
+// Motor de propuesta de contrapartida para un movimiento bancario.
+// Cascada (primer acierto gana): reglas usuario/aprendidas → maestros → reglas por
+// defecto (conceptos) → 555. Solo se usa la CUENTA, nunca el IVA (el asiento del banco
+// no lleva IVA). Devuelve {cuenta, motivo, motivoDet}.
+function proponerContrapartida(texto,beneficiario){
+  var am={};(state.accounts||[]).forEach(function(a){am[a.code]=a;});
+  var existe=function(c){return !!(c&&am[c]);};
+  var hay=((beneficiario||'')+' '+(texto||'')).trim();
+  var rules=state.rules||[];
+  // 1) Reglas del usuario / aprendidas (id que NO empieza por 'r_d')
+  for(var i=0;i<rules.length;i++){var r=rules[i];if((''+r.id).indexOf('r_d')===0)continue;
+    try{if(r.p&&new RegExp(r.p,'i').test(hay)&&existe(r.a))return {cuenta:r.a,motivo:'Regla',motivoDet:r.d||r.p};}catch(e){}}
+  // 2) Maestros (proveedor/cliente) por CIF o nombre normalizado
+  if(beneficiario){
+    try{loadMasters();}catch(e){}
+    var nb=_normNombreTercero(beneficiario);
+    var cifM=(String(beneficiario).match(/\b([A-Z]\d{7,8}[A-Z]?|\d{8}[A-Z])\b/i)||[])[0];
+    var pools=[{arr:(typeof masters!=='undefined'&&masters.supplier)||[],motivo:'Proveedor'},{arr:(typeof masters!=='undefined'&&masters.client)||[],motivo:'Cliente'}];
+    for(var p=0;p<pools.length;p++){
+      var m=pools[p].arr.find(function(x){
+        if(cifM&&x.cif&&String(x.cif).toUpperCase()===cifM.toUpperCase())return true;
+        var nx=_normNombreTercero(x.name);
+        return nx&&nb&&nx.length>=4&&(nx===nb||nx.indexOf(nb)>=0||nb.indexOf(nx)>=0);
+      });
+      if(m&&existe(m.account))return {cuenta:m.account,motivo:pools[p].motivo,motivoDet:m.name};
+    }
+  }
+  // 3) Reglas por defecto (diccionario de conceptos: nómina, SS, suministros, etc.)
+  for(var j=0;j<rules.length;j++){var rd=rules[j];if((''+rd.id).indexOf('r_d')!==0)continue;
+    try{if(rd.p&&new RegExp(rd.p,'i').test(hay)&&existe(rd.a))return {cuenta:rd.a,motivo:'Concepto',motivoDet:rd.d||rd.p};}catch(e){}}
+  // 4) Sin acierto → pendiente de aplicación
+  return {cuenta:'55500000',motivo:'Pendiente',motivoDet:''};
+}
+
+// Aprendizaje: al asignar a mano una contrapartida a un beneficiario, crea una regla
+// (id r_auto_, prioridad alta, sin IVA) para proponerla automáticamente la próxima vez.
+async function aprenderReglaBanco(beneficiario,cuenta){
+  if(!beneficiario||!cuenta||cuenta==='55500000')return;
+  var pat=_normNombreTercero(beneficiario);
+  if(!pat||pat.length<4)return;
+  var patRe=pat.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  if((state.rules||[]).some(function(r){return r.p===patRe&&r.a===cuenta;}))return; // ya existe
+  try{await api('/api/rules/'+state.company.id,{method:'POST',body:{id:'r_auto_'+uid(),p:patRe,a:cuenta,d:String(beneficiario).slice(0,30),pr:1,iv:'na'}});}catch(e){}
 }
 
 // ═══ IMPORTAR FACTURAS DESDE GESTOR DOCUMENTAL ═══
@@ -3586,16 +3641,22 @@ function showImportResults(txns){
   var nDup=txns.filter(function(t){return t.isDup;}).length;
 
   window._impTxns=txns;
+  // Índice de cuentas (código→nombre) y datalist para el selector editable de contrapartida
+  window._accIndex={};(state.accounts||[]).forEach(function(a){window._accIndex[a.code]=a.name;});
+  var accName=function(c){return (window._accIndex[c]||'');};
+  var datalist='<datalist id="impAcctList">'+(state.accounts||[]).map(function(a){return '<option value="'+a.code+'">'+a.code+' — '+h(a.name)+'</option>';}).join('')+'</datalist>';
+  var motivoBadge=function(m){var col=m==='Regla'?'badge-g':(m==='Proveedor'||m==='Cliente')?'badge-b':m==='Concepto'?'badge-b':'badge-a';return '<span class="badge '+col+'">'+m+'</span>';};
   var res=$('impResult');if(!res){toast('No se pudo mostrar el resultado','error');return;}
   var nNuevos=txns.length-nDup;
-  res.innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:14px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 '+txns.length+' movimientos · '+nNuevos+' nuevos'+(nDup?' · <span style="color:var(--am)">'+nDup+' duplicados (desmarcados)</span>':'')+'</span><div><button class="btn btn-d" onclick="clearImpResult()" style="margin-right:6px">✕ Cancelar</button><button class="btn btn-p" onclick="importAll()">✅ Contabilizar marcados</button></div></div>'+
-  '<div style="padding:7px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Cada movimiento se contabiliza como <b>Banco (572)</b> contra <b>Partidas pendientes de aplicación (555)</b>, sin IVA. Asigna la contrapartida real (cliente, proveedor, gasto…) después. Los <b>duplicados</b> (ya contabilizados o repetidos) van desmarcados y no se duplican aunque los marques.</div>'+
-  '<div class="scr"><table><thead><tr><th style="width:30px">✓</th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th>Asiento</th><th>Estado</th></tr></thead><tbody>'+
+  var nProp=txns.filter(function(t){return !t.isDup&&t.cuenta&&t.cuenta!=='55500000';}).length;
+  res.innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:14px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 '+txns.length+' movimientos · '+nNuevos+' nuevos · '+nProp+' con propuesta'+(nDup?' · <span style="color:var(--am)">'+nDup+' duplicados</span>':'')+'</span><div><button class="btn btn-d" onclick="clearImpResult()" style="margin-right:6px">✕ Cancelar</button><button class="btn btn-p" onclick="importAll()">✅ Contabilizar marcados</button></div></div>'+
+  '<div style="padding:7px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Asiento: <b>Banco (572)</b> ↔ <b>contrapartida</b> propuesta (sin IVA). Revisa/edita la cuenta de cada fila; lo que dejes sin reconocer va a <b>555</b>. Cuando corriges una cuenta nueva, el programa <b>aprende</b> y la próxima vez la propone sola. Duplicados desmarcados (no se duplican aunque los marques).</div>'+datalist+
+  '<div class="scr"><table><thead><tr><th style="width:30px">✓</th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th>Contrapartida</th><th>Motivo</th><th>Estado</th></tr></thead><tbody>'+
   txns.map(function(t,i){
     var ingreso=t.amount>=0;
-    var asiento=ingreso?'572 Debe · 555 Haber':'555 Debe · 572 Haber';
     var cls=t.isDup?'background:#FFF3E0':'';
-    return '<tr style="'+cls+'"><td><input type="checkbox" id="impCk'+i+'" '+(t.isDup?'':'checked')+'></td><td style="font-size:10px">'+fmtD(t.date)+'</td><td style="font-size:10px">'+h(t.concept.substring(0,60))+'</td><td style="text-align:right;font-weight:600" class="'+(ingreso?'amt-pos':'amt-neg')+'">'+fmt(t.amount)+'€</td><td style="font-size:9px;color:var(--txM)">'+asiento+'</td><td>'+(t.isDup?'<span class="badge badge-a" title="'+h(t.dupReason||'')+'">⚠ Duplicado ('+h(t.dupReason||'')+')</span>':'<span class="badge badge-b">Nuevo</span>')+'</td></tr>';
+    var inp='<input id="impAcct'+i+'" list="impAcctList" value="'+h(t.cuenta||'')+'" oninput="var s=document.getElementById(\'impAcctN'+i+'\');if(s)s.textContent=(window._accIndex[this.value]||\'\');" style="width:88px;font-family:monospace;font-size:10px;padding:2px 4px;border:1px solid #CBD5E1;border-radius:4px"> <span id="impAcctN'+i+'" style="font-size:9px;color:var(--txM)">'+h(accName(t.cuenta))+'</span>';
+    return '<tr style="'+cls+'"><td><input type="checkbox" id="impCk'+i+'" '+(t.isDup?'':'checked')+'></td><td style="font-size:10px">'+fmtD(t.date)+'</td><td style="font-size:10px">'+h(t.concept.substring(0,55))+'</td><td style="text-align:right;font-weight:600" class="'+(ingreso?'amt-pos':'amt-neg')+'">'+fmt(t.amount)+'€</td><td>'+inp+'</td><td style="font-size:9px" title="'+h(t.motivoDet||'')+'">'+motivoBadge(t.motivo||'Pendiente')+'</td><td>'+(t.isDup?'<span class="badge badge-a" title="'+h(t.dupReason||'')+'">⚠ Duplicado</span>':'<span class="badge badge-b">Nuevo</span>')+'</td></tr>';
   }).join('')+'</tbody></table></div></div>';
 }
 
@@ -3605,26 +3666,32 @@ async function importAll(){
   if(!state.accounts.some(function(a){return a.code==='55500000';})){
     try{await api('/api/accounts/'+state.company.id,{method:'POST',body:{code:'55500000',name:'Partidas pendientes de aplicación',g:5,t:'P'}});await loadData();}catch(e){}
   }
-  var count=0;
+  var count=0,aprendidas=0,porAprender=[];
   for(var i=0;i<txns.length;i++){
     var ck=$('impCk'+i);if(!ck||!ck.checked)continue;
     var t=txns[i];var absAmt=Math.abs(t.amount);
     if(absAmt<0.005)continue;
-    // Un movimiento bancario = un asiento de 2 líneas. SIN IVA, sin cuentas de gasto/ingreso.
-    // Banco (572) entra/sale; la contrapartida queda en 555 para reasignar manualmente.
+    // Contrapartida = la cuenta editada por el usuario (o la propuesta). Si no existe → 555.
+    var inp=$('impAcct'+i);
+    var cuenta=inp?String(inp.value||'').trim():(t.cuenta||'55500000');
+    if(!cuenta||!state.accounts.some(function(a){return a.code===cuenta;}))cuenta='55500000';
+    // Un movimiento bancario = un asiento de 2 líneas. SIN IVA. Banco (572) ↔ contrapartida.
     var lines;
     if(t.amount<0){
-      // Cargo (salida de dinero): banco al Haber, contrapartida pendiente al Debe
-      lines=[{a:'55500000',d:absAmt,h:0},{a:'57200000',d:0,h:absAmt}];
+      // Cargo (salida de dinero): banco al Haber, contrapartida al Debe
+      lines=[{a:cuenta,d:absAmt,h:0},{a:'57200000',d:0,h:absAmt}];
     }else{
-      // Ingreso (entrada de dinero): banco al Debe, contrapartida pendiente al Haber
-      lines=[{a:'57200000',d:absAmt,h:0},{a:'55500000',d:0,h:absAmt}];
+      // Ingreso (entrada de dinero): banco al Debe, contrapartida al Haber
+      lines=[{a:'57200000',d:absAmt,h:0},{a:cuenta,d:0,h:absAmt}];
     }
     // id determinista (huella del movimiento) → INSERT OR REPLACE en servidor evita duplicar
     await api('/api/entries/'+state.company.id,{method:'POST',body:{id:t.entryId||('imp_'+uid()),date:t.date,concept:t.concept,type:'import',lines:lines}});
     count++;
+    // Aprender: si el usuario asignó/corrigió una cuenta para un beneficiario, recordarla
+    if(cuenta!=='55500000'&&t.beneficiario&&(t.motivo==='Pendiente'||cuenta!==t.cuenta))porAprender.push([t.beneficiario,cuenta]);
   }
-  await loadData();checkIntegrity();toast(count+' movimientos contabilizados (Banco ↔ 555 pendientes)');render();
+  for(var k=0;k<porAprender.length;k++){await aprenderReglaBanco(porAprender[k][0],porAprender[k][1]);aprendidas++;}
+  await loadData();checkIntegrity();toast(count+' movimientos contabilizados'+(aprendidas?' · '+aprendidas+' reglas aprendidas':''));render();
 }
 
 // ═══ IMPORTAR ASIENTOS CONTABLES (Nº Asiento · Fecha · Cuenta · Descripción · Debe · Haber) ═══
