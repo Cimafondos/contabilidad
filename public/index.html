@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.8.1</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.8.3</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2646,6 +2646,7 @@ function processImportRows(rows){
   var concI=find(/concepto|concept/);
   var benefI=find(/benefic|ordenante/);
   var obsI=find(/observ|detalle|descrip/);
+  var saldoI=find(/saldo|balance/);
   // Columnas que forman el concepto legible (beneficiario + observaciones + concepto genérico)
   var conceptCols=[benefI,obsI,concI].filter(function(x){return x>=0;});
   if(!conceptCols.length){var cc=find(/concepto|concept|desc/);conceptCols=[cc>=0?cc:1];}
@@ -2662,10 +2663,26 @@ function processImportRows(rows){
     else{amt=parseBankAmount(r[header.length-1]);}
     var concept=conceptCols.map(function(ci){return String(r[ci]==null?'':r[ci]).trim();}).filter(Boolean).join(' · ');
     if(!concept)concept='Movimiento';
-    if(Math.abs(amt)>0.005||concept!=='Movimiento')txns.push({date:dateStr,concept:concept,amount:Math.round(amt*100)/100});
+    var saldo=saldoI>=0?parseBankAmount(r[saldoI]):null;
+    if(Math.abs(amt)>0.005||concept!=='Movimiento'){
+      amt=Math.round(amt*100)/100;
+      txns.push({date:dateStr,concept:concept,amount:amt,saldo:saldo,entryId:bankEntryId(dateStr,amt,saldo,concept)});
+    }
   }
   if(!txns.length&&saltadas>0){toast('No se reconocieron movimientos (revisa que el archivo tenga columnas de Fecha e Importe)','error');return;}
   showImportResults(txns);
+}
+
+// Hash determinista (FNV-1a 32 bits) para la huella del movimiento bancario
+function bankHash(s){var h=2166136261>>>0;s=String(s);for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h.toString(36);}
+
+// ID determinista de un movimiento bancario → permite dedup robusta (mismo movimiento = mismo id).
+// El SALDO hace único cada movimiento dentro de la cuenta; si no hay saldo, se usa el hash del concepto.
+function bankEntryId(fecha,amount,saldo,concept){
+  var cid=(state.company&&state.company.id)||'_';
+  var imp=Math.round(Math.abs(amount)*100)*(amount<0?-1:1);
+  var tail=(saldo!==null&&saldo!==undefined&&!isNaN(saldo))?('s'+Math.round(saldo*100)):('c'+bankHash((concept||'')+'|'+(amount<0?'-':'+')));
+  return 'bk_'+cid+'_'+fecha+'_'+imp+'_'+tail;
 }
 
 // ═══ IMPORTAR FACTURAS DESDE GESTOR DOCUMENTAL ═══
@@ -3553,53 +3570,61 @@ function processN43(text){
 
 function showImportResults(txns){
   if(!txns.length){toast('No se encontraron movimientos','error');return;}
-  // Match rules and detect duplicates
+  // Un movimiento bancario NO es una factura: solo es entrada/salida de la cuenta 572.
+  // No se clasifica ni se genera IVA. La contrapartida queda en 555 (Partidas pendientes
+  // de aplicación) y el usuario la reasigna después.
+  // DEDUP ROBUSTA: cada movimiento tiene un id determinista (fecha+importe+saldo). Marcamos
+  // duplicado si ese id ya está contabilizado (reimportar el mismo mes no duplica) o si se
+  // repite dentro del propio fichero. Por defecto los duplicados quedan desmarcados.
+  var existentes={};(state.entries||[]).forEach(function(e){if(e&&e.id)existentes[e.id]=true;});
+  var enLote={};
   txns.forEach(function(t){
-    t.matched=false;t.account='62900000';t.ruleDesc='Sin clasificar';t.iva='general';
-    // Positive = income (G7), negative = expense (G6)
-    if(t.amount>0){t.account='75900000';t.ruleDesc='Ingreso';t.iva='general';}
-    for(var i=0;i<state.rules.length;i++){
-      var r=state.rules[i];
-      try{if(new RegExp(r.p,'i').test(t.concept)){t.account=r.a;t.ruleDesc=r.d;t.iva=r.iv||'general';t.matched=true;break;}}catch(e){}
-    }
-    // Duplicate check
-    t.isDup=state.entries.some(function(e){return e.date===t.date&&Math.abs(e.lines.reduce(function(s,l){return s+l.d;},0)-Math.abs(t.amount))<0.01;});
+    if(existentes[t.entryId]){t.isDup=true;t.dupReason='ya contabilizado';}
+    else if(enLote[t.entryId]){t.isDup=true;t.dupReason='repetido en el fichero';}
+    else{t.isDup=false;enLote[t.entryId]=true;}
   });
+  var nDup=txns.filter(function(t){return t.isDup;}).length;
 
   window._impTxns=txns;
-  var am={};state.accounts.forEach(function(a){am[a.code]=a;});
-  var res=$('impResult');
-  res.innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:14px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 '+txns.length+' movimientos encontrados</span><div><button class="btn btn-d" onclick="clearImpResult()" style="margin-right:6px">✕ Cancelar</button><button class="btn btn-p" onclick="importAll()">✅ Contabilizar todos</button></div></div>'+
-  '<div class="scr"><table><thead><tr><th style="width:30px">✓</th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th>Cuenta</th><th>Regla</th><th>Estado</th></tr></thead><tbody>'+
+  var res=$('impResult');if(!res){toast('No se pudo mostrar el resultado','error');return;}
+  var nNuevos=txns.length-nDup;
+  res.innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:14px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 '+txns.length+' movimientos · '+nNuevos+' nuevos'+(nDup?' · <span style="color:var(--am)">'+nDup+' duplicados (desmarcados)</span>':'')+'</span><div><button class="btn btn-d" onclick="clearImpResult()" style="margin-right:6px">✕ Cancelar</button><button class="btn btn-p" onclick="importAll()">✅ Contabilizar marcados</button></div></div>'+
+  '<div style="padding:7px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Cada movimiento se contabiliza como <b>Banco (572)</b> contra <b>Partidas pendientes de aplicación (555)</b>, sin IVA. Asigna la contrapartida real (cliente, proveedor, gasto…) después. Los <b>duplicados</b> (ya contabilizados o repetidos) van desmarcados y no se duplican aunque los marques.</div>'+
+  '<div class="scr"><table><thead><tr><th style="width:30px">✓</th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th>Asiento</th><th>Estado</th></tr></thead><tbody>'+
   txns.map(function(t,i){
-    var cls=t.isDup?'background:#FFF3E0':t.matched?'background:#E8F8ED':'';
-    return '<tr style="'+cls+'"><td><input type="checkbox" id="impCk'+i+'" '+(t.isDup?'':'checked')+'></td><td style="font-size:10px">'+fmtD(t.date)+'</td><td style="font-size:10px">'+h(t.concept.substring(0,50))+'</td><td style="text-align:right;font-weight:600" class="'+(t.amount>=0?'amt-pos':'amt-neg')+'">'+fmt(t.amount)+'€</td><td >'+acctLink(t.account,'')+' <span style="color:var(--txM);font-size:9px">'+(am[t.account]?am[t.account].name:'')+'</span></td><td style="font-size:10px">'+h(t.ruleDesc)+'</td><td>'+(t.isDup?'<span class="badge badge-a">⚠ Duplicado</span>':t.matched?'<span class="badge badge-g">✓ Regla</span>':'<span class="badge badge-b">Auto</span>')+'</td></tr>';
+    var ingreso=t.amount>=0;
+    var asiento=ingreso?'572 Debe · 555 Haber':'555 Debe · 572 Haber';
+    var cls=t.isDup?'background:#FFF3E0':'';
+    return '<tr style="'+cls+'"><td><input type="checkbox" id="impCk'+i+'" '+(t.isDup?'':'checked')+'></td><td style="font-size:10px">'+fmtD(t.date)+'</td><td style="font-size:10px">'+h(t.concept.substring(0,60))+'</td><td style="text-align:right;font-weight:600" class="'+(ingreso?'amt-pos':'amt-neg')+'">'+fmt(t.amount)+'€</td><td style="font-size:9px;color:var(--txM)">'+asiento+'</td><td>'+(t.isDup?'<span class="badge badge-a" title="'+h(t.dupReason||'')+'">⚠ Duplicado ('+h(t.dupReason||'')+')</span>':'<span class="badge badge-b">Nuevo</span>')+'</td></tr>';
   }).join('')+'</tbody></table></div></div>';
 }
 
 async function importAll(){
   var txns=window._impTxns;if(!txns)return;
+  // Asegurar la cuenta de contrapartida 555 (Partidas pendientes de aplicación)
+  if(!state.accounts.some(function(a){return a.code==='55500000';})){
+    try{await api('/api/accounts/'+state.company.id,{method:'POST',body:{code:'55500000',name:'Partidas pendientes de aplicación',g:5,t:'P'}});await loadData();}catch(e){}
+  }
   var count=0;
   for(var i=0;i<txns.length;i++){
     var ck=$('impCk'+i);if(!ck||!ck.checked)continue;
     var t=txns[i];var absAmt=Math.abs(t.amount);
-    var ic=IVA.find(function(x){return x.id===t.iva;});
-    var ded=ic&&ic.r>0&&t.iva!=='nodeducible';
-    var base=absAmt,iva=0;if(ded){base=Math.round((absAmt/(1+ic.r))*100)/100;iva=Math.round((absAmt-base)*100)/100;}
+    if(absAmt<0.005)continue;
+    // Un movimiento bancario = un asiento de 2 líneas. SIN IVA, sin cuentas de gasto/ingreso.
+    // Banco (572) entra/sale; la contrapartida queda en 555 para reasignar manualmente.
     var lines;
     if(t.amount<0){
-      lines=[{a:t.account,d:ded?base:absAmt,h:0}];
-      if(ded)lines.push({a:'47200000',d:iva,h:0});
-      lines.push({a:'57200000',d:0,h:absAmt});
+      // Cargo (salida de dinero): banco al Haber, contrapartida pendiente al Debe
+      lines=[{a:'55500000',d:absAmt,h:0},{a:'57200000',d:0,h:absAmt}];
     }else{
-      lines=[{a:'57200000',d:absAmt,h:0}];
-      if(ded)lines.push({a:'47700000',d:0,h:iva});
-      lines.push({a:t.account,d:0,h:ded?base:absAmt});
+      // Ingreso (entrada de dinero): banco al Debe, contrapartida pendiente al Haber
+      lines=[{a:'57200000',d:absAmt,h:0},{a:'55500000',d:0,h:absAmt}];
     }
-    await api('/api/entries/'+state.company.id,{method:'POST',body:{id:'imp_'+uid(),date:t.date,concept:t.concept,type:'import',lines:lines}});
+    // id determinista (huella del movimiento) → INSERT OR REPLACE en servidor evita duplicar
+    await api('/api/entries/'+state.company.id,{method:'POST',body:{id:t.entryId||('imp_'+uid()),date:t.date,concept:t.concept,type:'import',lines:lines}});
     count++;
   }
-  await loadData();checkIntegrity();toast(count+' asientos importados');render();
+  await loadData();checkIntegrity();toast(count+' movimientos contabilizados (Banco ↔ 555 pendientes)');render();
 }
 
 // ═══ IMPORTAR ASIENTOS CONTABLES (Nº Asiento · Fecha · Cuenta · Descripción · Debe · Haber) ═══
