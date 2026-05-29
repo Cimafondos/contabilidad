@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.10.1</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.11.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2725,6 +2725,30 @@ function proponerContrapartida(texto,beneficiario){
   // 3) Reglas por defecto (diccionario de conceptos: nómina, SS, suministros, etc.)
   for(var j=0;j<rules.length;j++){var rd=rules[j];if((''+rd.id).indexOf('r_d')!==0)continue;
     try{if(rd.p&&new RegExp(rd.p,'i').test(hay)&&existe(rd.a))return {cuenta:rd.a,motivo:'Concepto',motivoDet:rd.d||rd.p};}catch(e){}}
+  // 3.5) Diccionario de conceptos INCRUSTADO (no depende de reglas sembradas). Cubre los
+  // gastos/suministros más habituales para que la importación proponga algo aunque la empresa
+  // no tenga reglas r_d. Solo se aplica si la cuenta existe en el plan; si no, sigue a 555.
+  var dict=[
+    ['ALQUILER|ARRENDAMIENTO|\\bRENTA\\b','62100000','Alquiler'],
+    ['NOMINA|NÓMINA|SALARIO|SUELDO','64000000','Nóminas'],
+    ['SEGURIDAD SOCIAL|\\bTGSS\\b|\\bRGSS\\b|SEG\\.? *SOCIAL','64200000','Seg. Social'],
+    ['ENDESA|IBERDROLA|NATURGY|\\bLUZ\\b|ELECTRIC|\\bAGUA\\b|CANAL ISABEL|\\bGAS\\b','62800000','Suministros'],
+    ['VODAFONE|MOVISTAR|ORANGE|TELEFON|YOIGO|MASMOVIL|JAZZTEL|INTERNET|FIBRA','62900000','Comunicaciones'],
+    ['SEGURO|MAPFRE|ALLIANZ|\\bAXA\\b|MUTUA|REALE|ZURICH|GENERALI','62500000','Seguros'],
+    ['COMISION|COMISIÓN|MANTENIMIENTO CTA|MANTENIM|CUOTA TARJETA','62600000','Comisiones banco'],
+    ['INTERES|INTERÉS|PRESTAMO|PRÉSTAMO|HIPOTECA','66200000','Intereses'],
+    ['HACIENDA|\\bAEAT\\b|AGENCIA TRIBUTARIA|MODELO \\d','47500000','Hacienda'],
+    ['GASOLINA|GASOIL|GASÓLEO|CARBURANTE|\\bCEPSA\\b|\\bREPSOL\\b|\\bBP\\b|\\bGALP\\b|SHELL|PETROPRIX','62900000','Carburante'],
+    ['\\bTAXI\\b|\\bUBER\\b|CABIFY|\\bRENFE\\b|\\bAVE\\b|IBERIA|VUELING|RYANAIR','62400000','Transporte'],
+    ['RESTAURANTE|CAFETERIA|CAFETERÍA|\\bBAR\\b|CATERING|\\bMENU\\b','62900000','Restaurante'],
+    ['NOTARI|REGISTRO MERCANTIL|REGISTRO PROPIEDAD|ESCRITURA','62300000','Notaría/Registro'],
+    ['ABOGADO|PROCURADOR|LETRADO|ASESOR|GESTORIA|GESTORÍA','62300000','Servicios profesionales'],
+    ['PARKING|APARCAMIENTO|\\bGARAJE\\b','62900000','Parking'],
+    ['CORREOS|\\bMRW\\b|\\bSEUR\\b|\\bGLS\\b|\\bDHL\\b|MENSAJER','62400000','Mensajería']
+  ];
+  for(var q=0;q<dict.length;q++){
+    try{if(new RegExp(dict[q][0],'i').test(hay)&&existe(dict[q][1]))return {cuenta:dict[q][1],motivo:'Concepto',motivoDet:dict[q][2]};}catch(e){}
+  }
   // 4) Sin acierto → pendiente de aplicación
   return {cuenta:'55500000',motivo:'Pendiente',motivoDet:''};
 }
