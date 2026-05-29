@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.16.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.17.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2712,6 +2712,26 @@ function _tokenConcepto(s){
   var w=_normConcepto(s).split(' ').filter(function(x){return x.length>=4&&!/^\d+$/.test(x);});
   return w.slice(0,2).join(' ');
 }
+// Índice del HISTÓRICO del cliente: token de concepto → {cuenta: nº de veces}. Se construye a
+// partir de los asientos ya contabilizados (la contrapartida = la línea que no es banco/555).
+// Cacheado por nº de asientos; se reconstruye al cambiar (tras importar/loadData).
+function _historialContrapartidas(){
+  var n=(state.entries||[]).length;
+  if(window._histIdx&&window._histIdxN===n)return window._histIdx;
+  var idx={};
+  (state.entries||[]).forEach(function(e){
+    if(!e||!e.lines||!e.concept)return;
+    var contra=null;
+    e.lines.forEach(function(l){var a=l.a||'';if(a.indexOf('572')===0||a.indexOf('570')===0||a==='55500000')return;contra=a;});
+    if(!contra)return;
+    var tok=_tokenConcepto(e.concept);
+    if(!tok||tok.length<4)return;
+    if(!idx[tok])idx[tok]={};
+    idx[tok][contra]=(idx[tok][contra]||0)+1;
+  });
+  window._histIdx=idx;window._histIdxN=n;
+  return idx;
+}
 
 // Motor de propuesta de contrapartida para un movimiento bancario.
 // Cascada (primer acierto gana): reglas usuario/aprendidas → maestros (CIF/nombre) → reglas
@@ -2727,6 +2747,14 @@ function proponerContrapartida(texto,beneficiario){
   // 1) Reglas del usuario / aprendidas (id que NO empieza por 'r_d') → confianza ALTA
   for(var i=0;i<rules.length;i++){var r=rules[i];if((''+r.id).indexOf('r_d')===0)continue;
     if(test(r.p)&&existe(r.a))return {cuenta:r.a,motivo:'Regla',motivoDet:r.d||r.p,score:'alta'};}
+  // 1.5) HISTÓRICO del propio cliente: ¿este mismo concepto ya se contabilizó antes? Es la
+  // señal que más sube el acierto. ALTA si se repitió ≥2 veces, MEDIA si solo 1.
+  var tok=_tokenConcepto((beneficiario||'')+' '+(texto||''));
+  if(tok&&tok.length>=4){
+    var cand=_historialContrapartidas()[tok];
+    if(cand){var best=null,bestN=0;for(var cc in cand){if(cand[cc]>bestN){bestN=cand[cc];best=cc;}}
+      if(best&&best!=='55500000'&&existe(best))return {cuenta:best,motivo:'Histórico',motivoDet:tok+' · usado '+bestN+'×',score:bestN>=2?'alta':'media'};}
+  }
   // 2) Maestros (proveedor/cliente): por CIF → ALTA, por nombre → MEDIA
   if(beneficiario){
     try{loadMasters();}catch(e){}
@@ -3694,7 +3722,7 @@ function showImportResults(txns){
   window._accIndex={};(state.accounts||[]).forEach(function(a){window._accIndex[a.code]=a.name;});
   var accName=function(c){return (window._accIndex[c]||'');};
   var datalist='<datalist id="impAcctList">'+(state.accounts||[]).map(function(a){return '<option value="'+a.code+'">'+a.code+' — '+h(a.name)+'</option>';}).join('')+'</datalist>';
-  var motivoBadge=function(m){var col=m==='Regla'?'badge-g':(m==='Proveedor'||m==='Cliente')?'badge-b':m==='Concepto'?'badge-b':'badge-a';return '<span class="badge '+col+'">'+m+'</span>';};
+  var motivoBadge=function(m){var col=(m==='Regla'||m==='Histórico')?'badge-g':(m==='Proveedor'||m==='Cliente')?'badge-b':m==='Concepto'?'badge-b':'badge-a';return '<span class="badge '+col+'">'+m+'</span>';};
   var scoreDot=function(sc){var c=sc==='alta'?'#16A34A':sc==='media'?'#F59E0B':'#9CA3AF';var tt=sc==='alta'?'Confianza alta (regla tuya o CIF)':sc==='media'?'Confianza media (diccionario/concepto) — revisa':'Sin propuesta (555) — asignar';return '<span title="'+tt+'" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+c+';margin-right:5px;vertical-align:middle"></span>';};
   var res=$('impResult');if(!res){toast('No se pudo mostrar el resultado','error');return;}
   var nNuevos=txns.length-nDup;
