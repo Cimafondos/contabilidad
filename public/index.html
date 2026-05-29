@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.17.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.17.1</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -3781,8 +3781,9 @@ function impReaplicar(){
   for(var i=0;i<txns.length;i++){
     var inp=document.getElementById('impAcct'+i);if(!inp)continue;
     var c=normAccountCode(inp.value);
-    if(!c||c==='55500000'||!window._accIndex[c])continue;
-    var pat=_normNombreTercero(txns[i].beneficiario||'');
+    if(!c||c==='55500000'||!window._accIndex[c])continue; // solo aprende de cuentas que existen
+    var bn=_normNombreTercero(txns[i].beneficiario||'');
+    var pat=(bn&&bn.length>=4)?bn:_tokenConcepto(txns[i].concept||''); // beneficiario o, si falta, token del concepto
     if(pat&&pat.length>=4){
       var re=pat.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
       if(!aprendidas.some(function(r){return r.re===re&&r.cuenta===c;}))aprendidas.push({re:re,cuenta:c});
@@ -3792,10 +3793,11 @@ function impReaplicar(){
   for(var j=0;j<txns.length;j++){
     var inj=document.getElementById('impAcct'+j);if(!inj)continue;
     var cj=normAccountCode(inj.value);
-    if(cj&&cj!=='55500000'&&window._accIndex[cj])continue; // ya tiene cuenta válida → respetar
+    if(cj&&cj!=='55500000')continue; // ya tiene cuenta asignada (aunque sea nueva) → no la pisamos
     var hay=((txns[j].beneficiario||'')+' '+(txns[j].concept||'')).trim();
+    var hayN=_normConcepto(hay);
     var dest='';
-    for(var k=0;k<aprendidas.length;k++){try{if(new RegExp(aprendidas[k].re,'i').test(hay)){dest=aprendidas[k].cuenta;break;}}catch(e){}}
+    for(var k=0;k<aprendidas.length;k++){try{var rk=new RegExp(aprendidas[k].re,'i');if(rk.test(hay)||rk.test(hayN)){dest=aprendidas[k].cuenta;break;}}catch(e){}}
     if(!dest){
       var prop=proponerContrapartida(txns[j].concept,txns[j].beneficiario);
       if(prop&&prop.cuenta&&prop.cuenta!=='55500000'&&window._accIndex[prop.cuenta])dest=prop.cuenta;
