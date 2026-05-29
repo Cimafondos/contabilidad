@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.18.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.19.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -618,9 +618,16 @@ function showEmergencyAccess(){
   var msg='ACCESO DE EMERGENCIA\n\nUsuario: master\nContraseña: cimafondos2026\n\nO contacta con el administrador.';
   alert(msg);
 }
+// Recordar usuario/contraseña (a petición del usuario). Se guarda en este navegador.
+function _b64e(s){try{return btoa(unescape(encodeURIComponent(s)));}catch(e){return '';}}
+function _b64d(s){try{return decodeURIComponent(escape(atob(s)));}catch(e){return '';}}
+function getRememberedLogin(){try{var d=localStorage.getItem('cf_remember');if(!d)return null;var o=JSON.parse(_b64d(d));return o&&o.u?o:null;}catch(e){return null;}}
+function setRememberedLogin(u,p){try{localStorage.setItem('cf_remember',_b64e(JSON.stringify({u:u,p:p})));}catch(e){}}
+function clearRememberedLogin(){try{localStorage.removeItem('cf_remember');}catch(e){}}
 function renderLogin(){
-  $('app').innerHTML='<div style="min-height:100vh;background:linear-gradient(135deg,#F0FDF4 0%,#ECFDF5 50%,#F0F9FF 100%);display:flex;align-items:center;justify-content:center;padding:20px"><div style="width:100%;max-width:380px"><div style="text-align:center;margin-bottom:28px"><div style="width:48px;height:48px;border-radius:12px;background:var(--pri);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#fff;margin-bottom:12px">MC</div><div style="font-size:22px;font-weight:700;color:#1F2937">Muvail Conta</div><div style="font-size:12px;color:#6B7280;margin-top:4px">Sistema contable</div></div><div style="background:#fff;border-radius:12px;padding:28px;box-shadow:0 4px 24px rgba(0,0,0,0.06);border:1px solid #E5E7EB"><div style="margin-bottom:14px"><label style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:5px">Usuario</label><input class="inp" id="lu" style="padding:10px 14px;font-size:13px" autofocus onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'lp\').focus();}"></div><div style="margin-bottom:18px"><label style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:5px">Contraseña</label><input class="inp" type="password" id="lp" style="padding:10px 14px;font-size:13px" onkeydown="if(event.key===\'Enter\'){event.preventDefault();doLogin();}"></div><div id="lerr" style="color:var(--rd);font-size:12px;margin-bottom:10px;text-align:center;min-height:18px"></div><button class="btn btn-p" style="width:100%;justify-content:center;padding:11px;font-size:14px;font-weight:600;border-radius:8px" onclick="doLogin()">Entrar</button></div><div style="font-size:11px;color:#9CA3AF;text-align:center;margin-top:16px"><span style="cursor:pointer;text-decoration:underline" onclick="showEmergencyAccess()">¿Olvidaste tu contraseña?</span></div></div></div>';
-  setTimeout(function(){var el=$('lu');if(el)el.focus();},100);
+  var rm=getRememberedLogin();var ru=rm?h(rm.u):'';var rp=rm?h(rm.p):'';var rchk=rm?'checked':'';
+  $('app').innerHTML='<div style="min-height:100vh;background:linear-gradient(135deg,#F0FDF4 0%,#ECFDF5 50%,#F0F9FF 100%);display:flex;align-items:center;justify-content:center;padding:20px"><div style="width:100%;max-width:380px"><div style="text-align:center;margin-bottom:28px"><div style="width:48px;height:48px;border-radius:12px;background:var(--pri);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#fff;margin-bottom:12px">MC</div><div style="font-size:22px;font-weight:700;color:#1F2937">Muvail Conta</div><div style="font-size:12px;color:#6B7280;margin-top:4px">Sistema contable</div></div><div style="background:#fff;border-radius:12px;padding:28px;box-shadow:0 4px 24px rgba(0,0,0,0.06);border:1px solid #E5E7EB"><div style="margin-bottom:14px"><label style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:5px">Usuario</label><input class="inp" id="lu" value="'+ru+'" style="padding:10px 14px;font-size:13px" autofocus onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'lp\').focus();}"></div><div style="margin-bottom:14px"><label style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:5px">Contraseña</label><input class="inp" type="password" id="lp" value="'+rp+'" style="padding:10px 14px;font-size:13px" onkeydown="if(event.key===\'Enter\'){event.preventDefault();doLogin();}"></div><label style="display:flex;align-items:center;gap:7px;font-size:12px;color:#374151;margin-bottom:16px;cursor:pointer"><input type="checkbox" id="lremember" '+rchk+'> Recordar usuario y contraseña en este equipo</label><div id="lerr" style="color:var(--rd);font-size:12px;margin-bottom:10px;text-align:center;min-height:18px"></div><button class="btn btn-p" style="width:100%;justify-content:center;padding:11px;font-size:14px;font-weight:600;border-radius:8px" onclick="doLogin()">Entrar</button></div><div style="font-size:11px;color:#9CA3AF;text-align:center;margin-top:16px"><span style="cursor:pointer;text-decoration:underline" onclick="showEmergencyAccess()">¿Olvidaste tu contraseña?</span></div></div></div>';
+  setTimeout(function(){var el=$(rm?'lp':'lu');if(el)el.focus();},100);
 }
 async function doLogin(){
   var u=$('lu').value,p=$('lp').value;
@@ -650,6 +657,8 @@ async function doLogin(){
     }
   }catch(e){console.log('Server login failed:',e.message);}
   if(loginOk){
+    // Recordar credenciales en este navegador si el usuario lo pidió
+    var rem=$('lremember');if(rem&&rem.checked)setRememberedLogin(u,p);else clearRememberedLogin();
     // Show company selector instead of going directly to dashboard
     renderCompanySelector();
   }else{
