@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.10.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.10.1</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -3671,12 +3671,25 @@ function impToggleAll(on){
 async function impNewAccount(i){
   var inp=document.getElementById('impAcct'+i);
   var pre=(inp&&inp.value&&inp.value!=='55500000')?inp.value:'';
-  var code=prompt('Código de la cuenta nueva (hasta 8 dígitos):',pre);
+  var code=prompt('Código de la cuenta nueva (8 dígitos · punto para subcuenta, p.ej. 555.1 → 55500001):',pre);
   if(code===null)return;
-  code=String(code).replace(/[^0-9]/g,'');
-  if(!code){toast('Código obligatorio','error');return;}
-  if(code.length>8)code=code.slice(0,8);
-  if(code.length<8)code=code+('00000000').slice(code.length);
+  var raw=String(code);var dot=raw.indexOf('.');
+  if(dot>=0){
+    // Notación prefijo.sufijo → 8 dígitos, sufijo rellenado con ceros a la IZQUIERDA (555.1 → 55500001)
+    var preD=raw.slice(0,dot).replace(/[^0-9]/g,'');
+    var sufD=raw.slice(dot+1).replace(/[^0-9]/g,'');
+    if(!preD){toast('Código obligatorio','error');return;}
+    if(preD.length>8)preD=preD.slice(0,8);
+    var rem=8-preD.length;
+    if(rem<=0){code=preD;}
+    else{if(sufD.length>rem)sufD=sufD.slice(sufD.length-rem);code=preD+('00000000'+sufD).slice(-rem);}
+  }else{
+    // Sin punto → rellena con ceros a la DERECHA hasta 8 (subcuenta base: 555 → 55500000)
+    code=raw.replace(/[^0-9]/g,'');
+    if(!code){toast('Código obligatorio','error');return;}
+    if(code.length>8)code=code.slice(0,8);
+    if(code.length<8)code=code+('00000000').slice(code.length);
+  }
   var exists=state.accounts.some(function(a){return a.code===code;});
   if(!exists){
     var name=prompt('Nombre de la cuenta '+code+':','');
