@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.8.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.8.1</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2571,17 +2571,29 @@ function processImportFile(file){
   if(!file){toast('Selecciona un archivo','error');return;}
   var ext=file.name.split('.').pop().toLowerCase();
   var reader=new FileReader();
+  // Sin try/catch las excepciones del parseo se perdían (FileReader.onload) y la
+  // importación "no hacía nada" sin aviso. Cada rama avisa ahora del error real.
+  reader.onerror=function(){toast('No se pudo leer el archivo','error');};
   if(ext==='csv'){
-    reader.onload=function(e){processImportCSV(e.target.result);};reader.readAsText(file);
+    reader.onload=function(e){try{processImportCSV(e.target.result);}catch(err){console.error('[import csv]',err);toast('Error procesando CSV: '+err.message,'error');}};
+    reader.readAsText(file);
   }else if(ext==='xlsx'||ext==='xls'){
     reader.onload=function(e){
-      var data=new Uint8Array(e.target.result);var wb=XLSX.read(data,{type:'array'});
-      var ws=wb.Sheets[wb.SheetNames[0]];var rows=XLSX.utils.sheet_to_json(ws,{header:1});
-      processImportRows(rows);
-    };reader.readAsArrayBuffer(file);
+      try{
+        if(typeof XLSX==='undefined')throw new Error('La librería de Excel (XLSX) no se ha cargado. Recarga con Ctrl+F5 y revisa la conexión.');
+        var data=new Uint8Array(e.target.result);
+        var wb=XLSX.read(data,{type:'array'});
+        if(!wb.SheetNames||!wb.SheetNames.length)throw new Error('El Excel no contiene hojas.');
+        var ws=wb.Sheets[wb.SheetNames[0]];
+        var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        processImportRows(rows);
+      }catch(err){console.error('[import xlsx]',err);toast('Error leyendo el Excel: '+err.message,'error');}
+    };
+    reader.readAsArrayBuffer(file);
   }else if(ext==='n43'){
-    reader.onload=function(e){processN43(e.target.result);};reader.readAsText(file,'ISO-8859-1');
-  }else{toast('Formato no soportado','error');}
+    reader.onload=function(e){try{processN43(e.target.result);}catch(err){console.error('[import n43]',err);toast('Error leyendo Norma 43: '+err.message,'error');}};
+    reader.readAsText(file,'ISO-8859-1');
+  }else{toast('Formato no soportado: .'+ext,'error');}
 }
 
 function processImportPaste(){
@@ -2596,24 +2608,63 @@ function processImportCSV(text){
   processImportRows(rows);
 }
 
-function processImportRows(rows){
-  if(rows.length<2){toast('Sin datos','error');return;}
-  var header=rows[0].map(function(c){return String(c||'').toLowerCase().trim();});
-  var dI=header.findIndex(function(h){return h.match(/fecha|date/i);});
-  var cI=header.findIndex(function(h){return h.match(/concepto|concept|desc/i);});
-  var aI=header.findIndex(function(h){return h.match(/importe|amount|import/i);});
-  if(dI<0)dI=0;if(cI<0)cI=1;if(aI<0)aI=header.length-1;
-
-  var txns=[];
-  for(var i=1;i<rows.length;i++){
-    var r=rows[i];if(!r[dI]&&!r[cI])continue;
-    var rawDate=String(r[dI]||'');
-    var dateStr=parseDate(rawDate);
-    var concept=String(r[cI]||'').trim();
-    var rawAmt=String(r[aI]||'0').replace(/[€$\s]/g,'').replace(/\./g,'').replace(',','.');
-    var amt=parseFloat(rawAmt)||0;
-    if(dateStr&&(concept||amt))txns.push({date:dateStr,concept:concept,amount:amt});
+// Importe bancario en formato español ("-20.000,00") o inglés, con signo. Devuelve número.
+function parseBankAmount(v){
+  if(v===null||v===undefined||v==='')return 0;
+  if(typeof v==='number')return v;
+  var s=String(v).replace(/[€$\s]/g,'');
+  var neg=/^\(.*\)$/.test(s); if(neg)s=s.replace(/[()]/g,'');
+  var lastComma=s.lastIndexOf(','),lastDot=s.lastIndexOf('.');
+  if(lastComma>=0&&lastDot>=0){
+    if(lastComma>lastDot)s=s.replace(/\./g,'').replace(',','.'); // español 1.234,56
+    else s=s.replace(/,/g,'');                                   // inglés 1,234.56
+  }else if(lastComma>=0){
+    var dec=s.substring(lastComma+1);
+    s=dec.length<=2?s.replace(',','.'):s.replace(/,/g,'');
   }
+  var n=parseFloat(s)||0; return neg?-Math.abs(n):n;
+}
+
+function processImportRows(rows){
+  if(!rows||rows.length<2){toast('Sin datos en el archivo','error');return;}
+  // 1) Localizar la fila de cabecera (los extractos de banco traen filas de preámbulo).
+  //    La cabecera es la primera fila que tiene a la vez una columna de fecha y una de importe.
+  var headerIdx=-1,header=null;
+  for(var hi=0;hi<Math.min(rows.length,25);hi++){
+    var cells=(rows[hi]||[]).map(function(c){return String(c==null?'':c).toLowerCase().trim();});
+    var hasAmount=cells.some(function(c){return /importe|import|^cargo|^abono|^haber|^debe|movimiento/.test(c);});
+    var hasDate=cells.some(function(c){return /fecha|contable|f\.?\s*valor|^f\.|date/.test(c);});
+    if(hasAmount&&hasDate){headerIdx=hi;header=cells;break;}
+  }
+  if(headerIdx<0){headerIdx=0;header=(rows[0]||[]).map(function(c){return String(c==null?'':c).toLowerCase().trim();});}
+  // 2) Mapear columnas por nombre
+  var find=function(re){for(var i=0;i<header.length;i++){if(re.test(header[i]))return i;}return -1;};
+  var dI=find(/contable|fecha\s*conta|fecha\s*oper/); if(dI<0)dI=find(/fecha|f\.?\s*valor|date/); if(dI<0)dI=0;
+  var impI=find(/importe|^import|movimiento/);
+  var cargoI=find(/^cargo|^debe|adeudo|d[eé]bito/);
+  var abonoI=find(/^abono|^haber|cr[eé]dito|^ingreso/);
+  var concI=find(/concepto|concept/);
+  var benefI=find(/benefic|ordenante/);
+  var obsI=find(/observ|detalle|descrip/);
+  // Columnas que forman el concepto legible (beneficiario + observaciones + concepto genérico)
+  var conceptCols=[benefI,obsI,concI].filter(function(x){return x>=0;});
+  if(!conceptCols.length){var cc=find(/concepto|concept|desc/);conceptCols=[cc>=0?cc:1];}
+
+  var txns=[],saltadas=0;
+  for(var i=headerIdx+1;i<rows.length;i++){
+    var r=rows[i];if(!r)continue;
+    var rawDate=r[dI];
+    var dateStr=parseDate(rawDate instanceof Date?rawDate.toISOString().slice(0,10):String(rawDate==null?'':rawDate));
+    if(!dateStr){saltadas++;continue;} // filas de preámbulo/totales sin fecha válida
+    var amt;
+    if(impI>=0){amt=parseBankAmount(r[impI]);}
+    else if(cargoI>=0||abonoI>=0){amt=(abonoI>=0?Math.abs(parseBankAmount(r[abonoI])):0)-(cargoI>=0?Math.abs(parseBankAmount(r[cargoI])):0);}
+    else{amt=parseBankAmount(r[header.length-1]);}
+    var concept=conceptCols.map(function(ci){return String(r[ci]==null?'':r[ci]).trim();}).filter(Boolean).join(' · ');
+    if(!concept)concept='Movimiento';
+    if(Math.abs(amt)>0.005||concept!=='Movimiento')txns.push({date:dateStr,concept:concept,amount:Math.round(amt*100)/100});
+  }
+  if(!txns.length&&saltadas>0){toast('No se reconocieron movimientos (revisa que el archivo tenga columnas de Fecha e Importe)','error');return;}
   showImportResults(txns);
 }
 
@@ -3613,6 +3664,14 @@ function processAsientosRows(rows){
     if(descI<0&&(hc.match(/desc|concepto|concept|detalle/)))descI=ci;
     if(debeI<0&&(hc.match(/^debe$|^debit$|^cargo$/)))debeI=ci;
     if(haberI<0&&(hc.match(/^haber$|^credit$|^abono$/)))haberI=ci;
+  }
+  // Salvavidas: si parece un EXTRACTO BANCARIO (tiene Importe/Saldo y NO columnas Debe+Haber
+  // ni Cuenta), no es un fichero de asientos → avisar y no crear un asiento gigante descuadrado.
+  var headerJoin=header.join(' ');
+  var pareceExtracto=(/importe/.test(headerJoin)||/saldo/.test(headerJoin))&&debeI<0&&haberI<0&&cI<0;
+  if(pareceExtracto){
+    toast('Esto parece un EXTRACTO BANCARIO, no asientos. Súbelo en la caja "Extracto bancario" para crear un asiento por movimiento.','error');
+    return;
   }
   if(nI<0)nI=0;if(dI<0)dI=1;if(cI<0)cI=2;if(descI<0)descI=3;
   if(debeI<0)debeI=4;if(haberI<0)haberI=5;
