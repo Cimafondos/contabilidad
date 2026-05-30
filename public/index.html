@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.21.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.22.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2817,8 +2817,10 @@ function proponerContrapartida(texto,beneficiario,amount){
   //    según el signo: PAGO → proveedor genérico (400/410); COBRO → cliente genérico (430/440).
   //    Es un punto de partida (🟡): luego asignas el proveedor/cliente concreto y se aprende.
   if(esPago){
-    var pg=existe('40000000')?'40000000':(existe('41000000')?'41000000':null);
-    if(pg)return {cuenta:pg,motivo:'Proveedor',motivoDet:'Proveedor (genérico) — asigna el concreto',score:'media'};
+    // Por defecto, servicios/suministros → ACREEDOR (410). El 400 (proveedor de mercadería) se
+    // reserva para los que identifiques como tal (maestro/histórico/regla).
+    var pg=existe('41000000')?'41000000':(existe('40000000')?'40000000':null);
+    if(pg)return {cuenta:pg,motivo:'Acreedor',motivoDet:'Acreedor/Proveedor (genérico) — asigna el concreto',score:'media'};
   }else if(typeof amount==='number'&&amount>0){
     var cg=existe('43000000')?'43000000':(existe('44000000')?'44000000':null);
     if(cg)return {cuenta:cg,motivo:'Cliente',motivoDet:'Cliente (genérico) — asigna el concreto',score:'media'};
@@ -3745,7 +3747,7 @@ function showImportResults(txns){
   window._accIndex={};(state.accounts||[]).forEach(function(a){window._accIndex[a.code]=a.name;});
   var accName=function(c){return (window._accIndex[c]||'');};
   var datalist='<datalist id="impAcctList">'+(state.accounts||[]).map(function(a){return '<option value="'+a.code+'">'+a.code+' — '+h(a.name)+'</option>';}).join('')+'</datalist>';
-  var motivoBadge=function(m){var col=(m==='Regla'||m==='Histórico')?'badge-g':(m==='Proveedor'||m==='Cliente'||m==='Socio')?'badge-b':m==='Concepto'?'badge-b':'badge-a';return '<span class="badge '+col+'">'+m+'</span>';};
+  var motivoBadge=function(m){var col=(m==='Regla'||m==='Histórico')?'badge-g':(m==='Proveedor'||m==='Acreedor'||m==='Cliente'||m==='Socio')?'badge-b':m==='Concepto'?'badge-b':'badge-a';return '<span class="badge '+col+'">'+m+'</span>';};
   var scoreDot=function(sc){var c=sc==='alta'?'#16A34A':sc==='media'?'#F59E0B':'#9CA3AF';var tt=sc==='alta'?'Confianza alta (regla tuya o CIF)':sc==='media'?'Confianza media (diccionario/concepto) — revisa':'Sin propuesta (555) — asignar';return '<span title="'+tt+'" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+c+';margin-right:5px;vertical-align:middle"></span>';};
   var res=$('impResult');if(!res){toast('No se pudo mostrar el resultado','error');return;}
   var nNuevos=txns.length-nDup;
@@ -3757,7 +3759,7 @@ function showImportResults(txns){
   txns.map(function(t,i){
     var ingreso=t.amount>=0;
     var cls=t.isDup?'background:#FFF3E0':'';
-    var needsNew=(!t.cuenta||t.cuenta==='55500000'||!window._accIndex[t.cuenta]);
+    var needsNew=(!t.cuenta||t.cuenta==='55500000'||!window._accIndex[t.cuenta]||esCuentaGenerica(t.cuenta));
     var inp='<input id="impAcct'+i+'" list="impAcctList" value="'+h(t.cuenta||'')+'" maxlength="8" inputmode="numeric" oninput="impAcctInput(this,'+i+')" onchange="impNormAcct(this,'+i+')" style="width:88px;font-family:monospace;font-size:10px;padding:2px 4px;border:1px solid #CBD5E1;border-radius:4px"><button type="button" onclick="impPickAccount('+i+')" title="Buscar/elegir cuenta (por código o nombre)" style="margin-left:3px;font-size:10px;line-height:1;padding:2px 5px;border:1px solid #CBD5E1;background:#fff;border-radius:4px;cursor:pointer">🔍</button> <span id="impAcctN'+i+'" style="font-size:9px;color:var(--txM)">'+h(accName(t.cuenta))+'</span><button type="button" id="impNew'+i+'" onclick="impNewAccount('+i+')" title="Crear cuenta nueva y asignarla a esta fila" style="display:'+(needsNew?'inline-block':'none')+';margin-left:4px;font-size:10px;line-height:1;padding:2px 5px;border:1px solid var(--pri);background:var(--priLt);color:var(--pri);border-radius:4px;cursor:pointer">➕</button>';
     return '<tr id="impRow'+i+'" style="'+cls+'"><td><input type="checkbox" id="impCk'+i+'" '+(t.isDup?'':'checked')+'></td><td style="font-size:10px">'+fmtD(t.date)+'</td><td style="font-size:10px">'+h(t.concept.substring(0,55))+'</td><td style="text-align:right;font-weight:600" class="'+(ingreso?'amt-pos':'amt-neg')+'">'+fmt(t.amount)+'€</td><td>'+inp+'</td><td style="font-size:9px" title="'+h(t.motivoDet||'')+'">'+scoreDot(t.score)+motivoBadge(t.motivo||'Pendiente')+'</td><td>'+(t.isDup?'<span class="badge badge-a" title="'+h(t.dupReason||'')+'">⚠ Duplicado</span>':'<span class="badge badge-b">Nuevo</span>')+'</td></tr>';
   }).join('')+'</tbody></table></div></div>';
@@ -3784,6 +3786,21 @@ function normAccountCode(raw){
   return d;
 }
 
+// Siguiente código LIBRE dentro de un grupo (prefijo: 400 proveedores, 410 acreedores, 430
+// clientes…). Ej: si existen 40000000 y 40000001 → devuelve 40000002.
+function nextFreeAccountCode(prefix){
+  prefix=String(prefix||'').replace(/[^0-9]/g,'').slice(0,7)||'400';
+  var width=8-prefix.length;if(width<1)return prefix.slice(0,8);
+  var max=0;
+  (state.accounts||[]).forEach(function(a){var c=String(a.code||'');if(c.length===8&&c.indexOf(prefix)===0){var n=parseInt(c.slice(prefix.length),10);if(!isNaN(n)&&n>max)max=n;}});
+  var nx=String(max+1);while(nx.length<width)nx='0'+nx;
+  return prefix+nx.slice(-width);
+}
+// ¿Es una cuenta de tercero GENÉRICA (no el tercero concreto)? Para invitar a crear el específico.
+function esCuentaGenerica(c){return c==='40000000'||c==='41000000'||c==='43000000'||c==='44000000';}
+// Nombre legible de un tercero a partir del concepto bancario.
+function _tituloTercero(s){var t=_normConcepto(s).replace(/\b\d+\b/g,' ').replace(/\s+/g,' ').trim();return t.slice(0,40);}
+
 // Mientras se teclea la contrapartida: solo dígitos, máx 8. Refresca nombre y botón ➕.
 function impAcctInput(inp,i){
   if(!inp)return;
@@ -3791,7 +3808,7 @@ function impAcctInput(inp,i){
   if(v.length>8)v=v.slice(0,8);
   if(v!==inp.value)inp.value=v;
   var s=document.getElementById('impAcctN'+i);if(s)s.textContent=(window._accIndex[v]||'');
-  var b=document.getElementById('impNew'+i);if(b)b.style.display=(!v||v==='55500000'||!window._accIndex[v])?'inline-block':'none';
+  var b=document.getElementById('impNew'+i);if(b)b.style.display=(!v||v==='55500000'||!window._accIndex[v]||esCuentaGenerica(v))?'inline-block':'none';
 }
 
 // Reaplica reglas a TODO lo importado (botón): aprende en memoria de las filas que ya tienen
@@ -3843,7 +3860,7 @@ function impNormAcct(inp,i){
   var code=normAccountCode(raw);
   if(code)inp.value=code;
   var sp=document.getElementById('impAcctN'+i);if(sp)sp.textContent=(window._accIndex[code]||'');
-  var b=document.getElementById('impNew'+i);if(b)b.style.display=(!code||code==='55500000'||!window._accIndex[code])?'inline-block':'none';
+  var b=document.getElementById('impNew'+i);if(b)b.style.display=(!code||code==='55500000'||!window._accIndex[code]||esCuentaGenerica(code))?'inline-block':'none';
   if(window._impTxns&&window._impTxns[i])window._impTxns[i].cuenta=code;
 }
 
@@ -3908,14 +3925,20 @@ function impFilterByDate(){
 // Crear una cuenta nueva sin salir del modal y asignarla a la fila i (botón ➕)
 async function impNewAccount(i){
   var inp=document.getElementById('impAcct'+i);
-  var pre=(inp&&inp.value&&inp.value!=='55500000')?inp.value:'';
-  var code=prompt('Código de la cuenta nueva (8 dígitos · punto para subcuenta, p.ej. 555.1 → 55500001):',pre);
+  var tx=(window._impTxns&&window._impTxns[i])||{};
+  var cur=inp&&inp.value?normAccountCode(inp.value):'';
+  // Grupo: 3 primeros dígitos de la cuenta actual; si es genérica/555/vacía, según el signo
+  // (pago → 410 acreedores; cobro → 430 clientes). Sugerimos el siguiente nº libre del grupo.
+  var pre3=(cur&&cur.length>=3&&cur!=='55500000')?cur.slice(0,3):((tx.amount<0)?'410':'430');
+  var sugCod=nextFreeAccountCode(pre3);
+  var sugNom=_tituloTercero(tx.beneficiario||tx.concept||'');
+  var code=prompt('Código de la cuenta nueva (8 dígitos · punto p.ej. 410.1 → 41000001).\nSiguiente nº libre en el grupo '+pre3+':',sugCod);
   if(code===null)return;
   code=normAccountCode(code);
   if(!code){toast('Código obligatorio','error');return;}
   var exists=state.accounts.some(function(a){return a.code===code;});
   if(!exists){
-    var name=prompt('Nombre de la cuenta '+code+':','');
+    var name=prompt('Nombre de la cuenta '+code+':',sugNom);
     if(name===null)return;
     name=String(name).trim();
     if(!name){toast('Nombre obligatorio','error');return;}
