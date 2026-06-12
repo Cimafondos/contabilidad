@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.22.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.23.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -2664,7 +2664,9 @@ function processImportRows(rows){
   var cargoI=find(/^cargo|^debe|adeudo|d[eé]bito/);
   var abonoI=find(/^abono|^haber|cr[eé]dito|^ingreso/);
   var concI=find(/concepto|concept/);
-  var benefI=find(/benefic|ordenante/);
+  var benefI=find(/benefic|ordenante/);                 // (compat) 1ª columna de parte → concepto/dedup
+  var ordenanteI=find(/ordenante|pagador/);              // columna específica de ordenante (quien paga)
+  var beneficiarioI=find(/beneficiario|destinatario/);   // columna específica de beneficiario (quien cobra)
   var obsI=find(/observ|detalle|descrip/);
   var saldoI=find(/saldo|balance/);
   // Columnas que forman el concepto legible (beneficiario + observaciones + concepto genérico)
@@ -2683,7 +2685,7 @@ function processImportRows(rows){
     else{amt=parseBankAmount(r[header.length-1]);}
     var concept=conceptCols.map(function(ci){return String(r[ci]==null?'':r[ci]).trim();}).filter(Boolean).join(' · ');
     if(!concept)concept='Movimiento';
-    var beneficiario=benefI>=0?String(r[benefI]==null?'':r[benefI]).trim():'';
+    var beneficiario=_terceroExtracto(r,amt,ordenanteI,beneficiarioI,benefI);
     var saldo=saldoI>=0?parseBankAmount(r[saldoI]):null;
     if(Math.abs(amt)>0.005||concept!=='Movimiento'){
       amt=Math.round(amt*100)/100;
@@ -2713,6 +2715,34 @@ function _normNombreTercero(s){
     .replace(/[.,'"]/g,' ')
     .replace(/\b(S\s?L\s?U|S\s?L\s?P|S\s?L|S\s?A\s?U|S\s?A|S\s?COOP|SC|CB)\b/g,' ')
     .replace(/\s+/g,' ').trim();
+}
+
+// ¿El nombre es el de la PROPIA empresa (titular de la cuenta bancaria)? En el extracto, el
+// titular nunca es el tercero: en un cobro aparece como beneficiario, en un pago como ordenante.
+// Se usa para NO bautizar un tercero (cliente 430 / proveedor 400) con el nombre de uno mismo.
+function _esEmpresaPropia(nombre){
+  var own=_normNombreTercero((state.company&&state.company.name)||'');
+  if(!own||own.length<3)return false;
+  var n=_normNombreTercero(nombre||'');
+  if(!n)return false;
+  return n===own||n.indexOf(own)>=0||own.indexOf(n)>=0;
+}
+
+// Tercero real de un movimiento del extracto SEGÚN EL SIGNO del importe:
+//  - COBRO (entra dinero, amt>=0): el tercero es el ORDENANTE (quien paga) → cliente.
+//  - PAGO  (sale dinero,  amt<0):  el tercero es el BENEFICIARIO (quien cobra) → proveedor.
+// El otro lado es SIEMPRE la propia empresa (titular), por eso se descarta si coincide con ella.
+// Si la columna correcta falta o resulta ser la propia empresa, se prueba la otra y la genérica.
+function _terceroExtracto(r,amt,ordenanteI,beneficiarioI,genericoI){
+  var val=function(idx){return idx>=0?String(r[idx]==null?'':r[idx]).trim():'';};
+  var vOrden=val(ordenanteI),vBenef=val(beneficiarioI),vGen=val(genericoI);
+  var primary=(amt<0)?vBenef:vOrden;     // pago→beneficiario · cobro→ordenante
+  var secondary=(amt<0)?vOrden:vBenef;
+  var cand=[primary,secondary,vGen];
+  for(var i=0;i<cand.length;i++){
+    if(cand[i]&&!_esEmpresaPropia(cand[i]))return cand[i];
+  }
+  return ''; // todo vacío o es la propia empresa → sin tercero claro (se resolverá por concepto)
 }
 
 // Normaliza el concepto bancario para comparar: MAYÚSCULAS sin acentos, quita prefijos de
@@ -2787,6 +2817,7 @@ function proponerContrapartida(texto,beneficiario,amount){
   for(var p=0;p<pools.length;p++){
     var byCif=false;
     var m=pools[p].arr.find(function(x){
+      if(_esEmpresaPropia(x.name))return false; // el titular de la cuenta nunca es el tercero
       if(cifM&&x.cif&&String(x.cif).toUpperCase()===cifM.toUpperCase()){byCif=true;return true;}
       var nx=_normNombreTercero(x.name);
       return nx&&nx.length>=4&&hayNorm.indexOf(nx)>=0;
@@ -3931,7 +3962,8 @@ async function impNewAccount(i){
   // (pago → 410 acreedores; cobro → 430 clientes). Sugerimos el siguiente nº libre del grupo.
   var pre3=(cur&&cur.length>=3&&cur!=='55500000')?cur.slice(0,3):((tx.amount<0)?'410':'430');
   var sugCod=nextFreeAccountCode(pre3);
-  var sugNom=_tituloTercero(tx.beneficiario||tx.concept||'');
+  var baseNom=(tx.beneficiario&&!_esEmpresaPropia(tx.beneficiario))?tx.beneficiario:(tx.concept||'');
+  var sugNom=_tituloTercero(baseNom);
   var code=prompt('Código de la cuenta nueva (8 dígitos · punto p.ej. 410.1 → 41000001).\nSiguiente nº libre en el grupo '+pre3+':',sugCod);
   if(code===null)return;
   code=normAccountCode(code);
