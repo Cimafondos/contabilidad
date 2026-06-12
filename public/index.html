@@ -542,7 +542,7 @@ function render(){
   '<button class="btn btn-d" style="font-size:10px" onclick="recalcularDatos()" title="Recargar datos">↻</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="doBackup()">💾</button>'+
   '<button class="btn btn-d" style="font-size:10px" onclick="logout()">Salir</button>'+
-  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.23.0</span>'+
+  '<span style="font-size:11px;color:var(--txS);font-weight:600;background:#F3F4F6;padding:2px 8px;border-radius:4px">v10.24.0</span>'+
   '</div></div>'+
   '<div class="main" id="content"></div></div>';
   renderView();
@@ -3780,20 +3780,52 @@ function showImportResults(txns){
   var datalist='<datalist id="impAcctList">'+(state.accounts||[]).map(function(a){return '<option value="'+a.code+'">'+a.code+' — '+h(a.name)+'</option>';}).join('')+'</datalist>';
   var motivoBadge=function(m){var col=(m==='Regla'||m==='Histórico')?'badge-g':(m==='Proveedor'||m==='Acreedor'||m==='Cliente'||m==='Socio')?'badge-b':m==='Concepto'?'badge-b':'badge-a';return '<span class="badge '+col+'">'+m+'</span>';};
   var scoreDot=function(sc){var c=sc==='alta'?'#16A34A':sc==='media'?'#F59E0B':'#9CA3AF';var tt=sc==='alta'?'Confianza alta (regla tuya o CIF)':sc==='media'?'Confianza media (diccionario/concepto) — revisa':'Sin propuesta (555) — asignar';return '<span title="'+tt+'" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+c+';margin-right:5px;vertical-align:middle"></span>';};
+  // CUENTAS DE 1ª VEZ: cuentas que aún NO tienen ningún apunte contabilizado (tercero nuevo).
+  // Esas filas hay que revisarlas antes de contabilizar; las de cuentas ya conocidas son de fiar.
+  window._impCuentasUsadas={};(state.entries||[]).forEach(function(e){((e&&e.lines)||[]).forEach(function(l){if(l&&l.a)window._impCuentasUsadas[l.a]=true;});});
+  txns.forEach(function(t){
+    var c=t.cuenta;
+    var sinAsignar=(!c||c==='55500000'||esCuentaGenerica(c)||!window._accIndex[c]);
+    t.firstUse=(!t.isDup&&!sinAsignar&&!window._impCuentasUsadas[c]);
+  });
+  var nFirst=txns.filter(function(t){return t.firstUse;}).length;
   var res=$('impResult');if(!res){toast('No se pudo mostrar el resultado','error');return;}
   var nNuevos=txns.length-nDup;
   var nProp=txns.filter(function(t){return !t.isDup&&t.cuenta&&t.cuenta!=='55500000';}).length;
-  res.innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:14px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 '+txns.length+' movimientos · '+nNuevos+' nuevos · '+nProp+' con propuesta'+(nDup?' · <span style="color:var(--am)">'+nDup+' duplicados</span>':'')+'</span><div><button class="btn btn-d" onclick="clearImpResult()" style="margin-right:6px">✕ Cancelar</button><button class="btn" onclick="impReaplicar()" title="Aplica las cuentas que ya has asignado al resto de filas que coincidan (mismo beneficiario/concepto) y que sigan en 555" style="margin-right:6px;background:#EEF2FF;color:var(--pri);border:1px solid var(--pri)">🔁 Reaplicar reglas</button><button class="btn btn-p" onclick="importAll()">✅ Contabilizar marcados</button></div></div>'+
-  '<div style="padding:7px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Asiento: <b>Banco (572)</b> ↔ <b>contrapartida</b> propuesta (sin IVA). Revisa/edita la cuenta de cada fila; lo que dejes sin reconocer va a <b>555</b>. Cuando corriges una cuenta nueva, el programa <b>aprende</b> y la próxima vez la propone sola. Duplicados desmarcados (no se duplican aunque los marques).<br><span style="color:#16A34A">●</span> alta · <span style="color:#F59E0B">●</span> media (revisar) · <span style="color:#9CA3AF">●</span> sin propuesta (555).</div>'+datalist+
+  res.innerHTML='<div class="card" style="border:2px solid var(--pri);margin-top:14px"><div class="card-h" style="background:var(--priLt)"><span style="color:var(--pri)">📋 '+txns.length+' movimientos · '+nNuevos+' nuevos · '+nProp+' con propuesta'+(nDup?' · <span style="color:var(--am)">'+nDup+' duplicados</span>':'')+'</span>'+(nFirst?'<span id="impRevisarCount" style="color:#B45309;font-weight:600;margin-left:8px">🔎 '+nFirst+' a revisar</span>':'<span id="impRevisarCount"></span>')+'<div><button class="btn btn-d" onclick="clearImpResult()" style="margin-right:6px">✕ Cancelar</button><button class="btn" onclick="impReaplicar()" title="Aplica las cuentas que ya has asignado al resto de filas que coincidan (mismo beneficiario/concepto) y que sigan en 555" style="margin-right:6px;background:#EEF2FF;color:var(--pri);border:1px solid var(--pri)">🔁 Reaplicar reglas</button><button class="btn btn-p" onclick="importAll()">✅ Contabilizar marcados</button></div></div>'+
+  '<div style="padding:7px 14px;font-size:11px;color:var(--txM);border-bottom:1px solid #EDF0F4">Asiento: <b>Banco (572)</b> ↔ <b>contrapartida</b> propuesta (sin IVA). Revisa/edita la cuenta de cada fila; lo que dejes sin reconocer va a <b>555</b>. Cuando corriges una cuenta nueva, el programa <b>aprende</b> y la próxima vez la propone sola. Duplicados desmarcados (no se duplican aunque los marques).<br><span style="color:#16A34A">●</span> alta · <span style="color:#F59E0B">●</span> media (revisar) · <span style="color:#9CA3AF">●</span> sin propuesta (555). <b style="color:#B45309">🔎 1ª vez</b> = cuenta sin usar antes: sale <b>desmarcada</b> para que la revises; se marca sola al asignarle una cuenta o aplicar una regla.</div>'+datalist+
   '<div style="padding:8px 14px;border-bottom:1px solid #EDF0F4;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px"><span style="color:var(--txM)">📅 Filtrar por fecha:</span> <span>Desde <input type="date" id="impFrom" onchange="impFilterByDate()" style="font-size:11px;padding:2px 4px;border:1px solid #CBD5E1;border-radius:4px"></span> <span>Hasta <input type="date" id="impTo" onchange="impFilterByDate()" style="font-size:11px;padding:2px 4px;border:1px solid #CBD5E1;border-radius:4px"></span> <button class="btn btn-p" style="font-size:10px;padding:2px 10px" onclick="impFilterByDate()">Aplicar rango</button> <button class="btn btn-d" style="font-size:10px;padding:2px 8px" onclick="var f=document.getElementById(\'impFrom\');var t=document.getElementById(\'impTo\');if(f)f.value=\'\';if(t)t.value=\'\';impFilterByDate();">Quitar filtro</button> <span id="impFilterCount" style="color:var(--txM);font-weight:600"></span></div>'+
   '<div class="scr"><table><thead><tr><th style="width:30px"><input type="checkbox" id="impCkAll" title="Marcar/desmarcar todo" onclick="impToggleAll(this.checked)"></th><th>Fecha</th><th>Concepto</th><th style="text-align:right">Importe</th><th>Contrapartida</th><th>Motivo</th><th>Estado</th></tr></thead><tbody>'+
   txns.map(function(t,i){
     var ingreso=t.amount>=0;
-    var cls=t.isDup?'background:#FFF3E0':'';
+    var cls=t.isDup?'background:#FFF3E0':(t.firstUse?'border-left:3px solid #F59E0B;background:#FFFBEB':'');
     var needsNew=(!t.cuenta||t.cuenta==='55500000'||!window._accIndex[t.cuenta]||esCuentaGenerica(t.cuenta));
     var inp='<input id="impAcct'+i+'" list="impAcctList" value="'+h(t.cuenta||'')+'" maxlength="8" inputmode="numeric" oninput="impAcctInput(this,'+i+')" onchange="impNormAcct(this,'+i+')" style="width:88px;font-family:monospace;font-size:10px;padding:2px 4px;border:1px solid #CBD5E1;border-radius:4px"><button type="button" onclick="impPickAccount('+i+')" title="Buscar/elegir cuenta (por código o nombre)" style="margin-left:3px;font-size:10px;line-height:1;padding:2px 5px;border:1px solid #CBD5E1;background:#fff;border-radius:4px;cursor:pointer">🔍</button> <span id="impAcctN'+i+'" style="font-size:9px;color:var(--txM)">'+h(accName(t.cuenta))+'</span><button type="button" id="impNew'+i+'" onclick="impNewAccount('+i+')" title="Crear cuenta nueva y asignarla a esta fila" style="display:'+(needsNew?'inline-block':'none')+';margin-left:4px;font-size:10px;line-height:1;padding:2px 5px;border:1px solid var(--pri);background:var(--priLt);color:var(--pri);border-radius:4px;cursor:pointer">➕</button>';
-    return '<tr id="impRow'+i+'" style="'+cls+'"><td><input type="checkbox" id="impCk'+i+'" '+(t.isDup?'':'checked')+'></td><td style="font-size:10px">'+fmtD(t.date)+'</td><td style="font-size:10px">'+h(t.concept.substring(0,55))+'</td><td style="text-align:right;font-weight:600" class="'+(ingreso?'amt-pos':'amt-neg')+'">'+fmt(t.amount)+'€</td><td>'+inp+'</td><td style="font-size:9px" title="'+h(t.motivoDet||'')+'">'+scoreDot(t.score)+motivoBadge(t.motivo||'Pendiente')+'</td><td>'+(t.isDup?'<span class="badge badge-a" title="'+h(t.dupReason||'')+'">⚠ Duplicado</span>':'<span class="badge badge-b">Nuevo</span>')+'</td></tr>';
+    return '<tr id="impRow'+i+'" style="'+cls+'"><td><input type="checkbox" id="impCk'+i+'" '+((t.isDup||t.firstUse)?'':'checked')+'></td><td style="font-size:10px">'+fmtD(t.date)+'</td><td style="font-size:10px">'+h(t.concept.substring(0,55))+'</td><td style="text-align:right;font-weight:600" class="'+(ingreso?'amt-pos':'amt-neg')+'">'+fmt(t.amount)+'€</td><td>'+inp+'</td><td style="font-size:9px" title="'+h(t.motivoDet||'')+'">'+scoreDot(t.score)+motivoBadge(t.motivo||'Pendiente')+'</td><td id="impEstado'+i+'">'+_impEstadoBadge(t)+'</td></tr>';
   }).join('')+'</tbody></table></div></div>';
+}
+
+// Badge de la columna Estado: Duplicado / Revisar (1ª vez, cuenta sin historial) / Nuevo (cuenta conocida).
+function _impEstadoBadge(t){
+  if(t.isDup)return '<span class="badge badge-a" title="'+h(t.dupReason||'')+'">⚠ Duplicado</span>';
+  if(t.firstUse)return '<span class="badge badge-a" title="Cuenta sin apuntes previos — revísala antes de contabilizar">🔎 Revisar (1ª vez)</span>';
+  return '<span class="badge badge-b">Nuevo</span>';
+}
+// Marca la fila i como REVISADA: deja de ser "1ª vez", la marca (check) y quita el resaltado ámbar.
+// Se llama cuando una regla resuelve la fila o cuando tú asignas/creas una cuenta concreta.
+function _impMarcarRevisado(i){
+  var t=(window._impTxns||[])[i];if(!t||t.isDup)return;
+  t.firstUse=false;
+  var ck=document.getElementById('impCk'+i);if(ck)ck.checked=true;
+  var row=document.getElementById('impRow'+i);if(row){row.style.borderLeft='';row.style.background='';}
+  var est=document.getElementById('impEstado'+i);if(est)est.innerHTML=_impEstadoBadge(t);
+  _impActualizarContador();
+}
+// Recalcula el contador "🔎 N a revisar" de la cabecera tras marcar/asignar filas.
+function _impActualizarContador(){
+  var n=(window._impTxns||[]).filter(function(t){return t.firstUse;}).length;
+  var el=document.getElementById('impRevisarCount');
+  if(el)el.innerHTML=n?('🔎 '+n+' a revisar'):'';
 }
 
 // Normaliza un código de cuenta a 8 dígitos. Con punto (prefijo.sufijo) rellena el sufijo
@@ -3877,7 +3909,7 @@ function impReaplicar(){
       inj.value=dest;
       var sp=document.getElementById('impAcctN'+j);if(sp)sp.textContent=(window._accIndex[dest]||'');
       var b=document.getElementById('impNew'+j);if(b)b.style.display='none';
-      txns[j].cuenta=dest;cambn++;
+      txns[j].cuenta=dest;cambn++;_impMarcarRevisado(j);
     }
   }
   toast(cambn?('🔁 Reaplicado: '+cambn+' filas actualizadas'):'No hay más filas donde aplicar esas reglas');
@@ -3893,6 +3925,7 @@ function impNormAcct(inp,i){
   var sp=document.getElementById('impAcctN'+i);if(sp)sp.textContent=(window._accIndex[code]||'');
   var b=document.getElementById('impNew'+i);if(b)b.style.display=(!code||code==='55500000'||!window._accIndex[code]||esCuentaGenerica(code))?'inline-block':'none';
   if(window._impTxns&&window._impTxns[i])window._impTxns[i].cuenta=code;
+  if(code&&code!=='55500000'&&window._accIndex[code]&&!esCuentaGenerica(code))_impMarcarRevisado(i);
 }
 
 // Selector de cuenta tipo "cuadro de cuentas": modal con buscador por código O nombre.
@@ -3922,6 +3955,7 @@ function impPickChoose(i,code){
   var sp=document.getElementById('impAcctN'+i);if(sp)sp.textContent=(window._accIndex[code]||'');
   var b=document.getElementById('impNew'+i);if(b)b.style.display=(!code||code==='55500000'||!window._accIndex[code])?'inline-block':'none';
   if(window._impTxns&&window._impTxns[i])window._impTxns[i].cuenta=code;
+  if(code&&code!=='55500000'&&window._accIndex[code]&&!esCuentaGenerica(code))_impMarcarRevisado(i);
   var bg=document.getElementById('impPickBg');if(bg)bg.remove();
 }
 
@@ -3946,7 +3980,7 @@ function impFilterByDate(){
     var d=txns[i].date||'';
     var inRange=(!from||d>=from)&&(!to||d<=to);
     var row=document.getElementById('impRow'+i);if(row)row.style.display=inRange?'':'none';
-    var ck=document.getElementById('impCk'+i);if(ck)ck.checked=inRange?!txns[i].isDup:false;
+    var ck=document.getElementById('impCk'+i);if(ck)ck.checked=inRange?(!txns[i].isDup&&!txns[i].firstUse):false;
     if(inRange)shown++;
   }
   var c=document.getElementById('impFilterCount');if(c)c.textContent=(from||to)?(shown+' de '+txns.length+' en el rango'):'';
@@ -3988,6 +4022,8 @@ async function impNewAccount(i){
   if(inp)inp.value=code;
   var sp=document.getElementById('impAcctN'+i);if(sp)sp.textContent=(window._accIndex[code]||'');
   var b=document.getElementById('impNew'+i);if(b)b.style.display='none';
+  if(window._impTxns&&window._impTxns[i])window._impTxns[i].cuenta=code;
+  _impMarcarRevisado(i);
   toast(exists?('Cuenta '+code+' asignada'):('Cuenta '+code+' creada y asignada'));
 }
 
