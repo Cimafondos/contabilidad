@@ -894,7 +894,7 @@ app.get('/api/backups/download/:name', authRequired, superadminRequired, (req, r
   res.download(fp, name);
 });
 // — OCR via Claude API —
-app.post('/api/ocr', async (req, res) => {
+app.post('/api/ocr', authRequired, async (req, res) => {
     try {
           const { imageBase64, mediaType } = req.body;
           if (!imageBase64 || !mediaType) {
