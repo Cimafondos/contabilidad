@@ -415,7 +415,24 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(cors({ origin: true, credentials: true }));
+// CORS endurecido: la auth es por Bearer (cabecera), no por cookies, asi que NO se
+// necesitan credenciales (quitar credentials:true elimina el riesgo de origin-reflejado
+// + cookies). Si se define ALLOWED_ORIGINS, se restringe a esa lista; si no, comportamiento
+// actual (origen reflejado) pero sin credenciales.
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : true,
+  credentials: false,
+}));
+// Cabeceras de seguridad (sin dependencia nueva): anti-MIME-sniffing, anti-clickjacking,
+// HSTS, politica de referer y de permisos. App financiera -> conviene.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  next();
+});
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
